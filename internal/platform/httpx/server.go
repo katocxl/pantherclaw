@@ -141,8 +141,16 @@ func Recover(log *slog.Logger, next http.Handler) http.Handler {
 			if v == http.ErrAbortHandler { //nolint:errorlint // sentinel compared by identity, as net/http does
 				panic(v)
 			}
-			log.ErrorContext(ctx, "http.panic",
-				slog.String("path", r.URL.Path), slog.Any("panic", fmt.Sprint(v)), slog.String("stack", string(debug.Stack())))
+			// The route pattern when a ServeMux route ran (it sets the
+			// pattern on the request it calls the route with), never that
+			// route's path: a path can carry a secret, such as the
+			// admission webhook's (G0 M32 D1218 L5). Without a pattern
+			// (a middleware passed on a copy of the request), the path.
+			where := slog.String("route", r.Pattern)
+			if r.Pattern == "" {
+				where = slog.String("path", r.URL.Path)
+			}
+			log.ErrorContext(ctx, "http.panic", where, slog.Any("panic", fmt.Sprint(v)), slog.String("stack", string(debug.Stack())))
 			http.Error(w, "internal error", http.StatusInternalServerError)
 		}()
 		next.ServeHTTP(w, r)

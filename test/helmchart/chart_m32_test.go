@@ -156,9 +156,14 @@ func TestHR730_EveryWebhookTheChartRendersFailsClosed(t *testing.T) {
 	}
 	var rules []string
 	for _, r := range l(h["rules"]) {
-		rules = append(rules, strings.Join([]string{l(m(r)["operations"])[0].(string), l(m(r)["resources"])[0].(string)}, " "))
+		var ops []string
+		for _, op := range l(m(r)["operations"]) {
+			ops = append(ops, op.(string))
+		}
+		rules = append(rules, strings.Join([]string{strings.Join(ops, ","), l(m(r)["resources"])[0].(string)}, " "))
 	}
-	if !slices.Equal(rules, []string{"CREATE pods", "UPDATE pods/ephemeralcontainers"}) {
+	// D1218 H1: pod UPDATE too, so an admitted pod's images stay fixed.
+	if !slices.Equal(rules, []string{"CREATE,UPDATE pods", "UPDATE pods/ephemeralcontainers"}) {
 		t.Errorf("rules %v", rules)
 	}
 	svc := m(get(h, "clientConfig", "service"))
@@ -191,17 +196,36 @@ func TestHR731_TheAdmissionListenerIsOffByDefault(t *testing.T) {
 			Listen           string   `json:"listen"`
 			TLSCertFile      string   `json:"tls_cert_file"`
 			EdgeImageDigests []string `json:"edge_image_digests"`
+			ReleaseNamespace string   `json:"release_namespace"`
+			GatewayPort      int      `json:"gateway_port"`
+			APIPort          int      `json:"api_port"`
+			APIEgressCIDRs   []string `json:"api_egress_cidrs"`
+			APIEgressPort    int      `json:"api_egress_port"`
 		} `json:"admission"`
 	}
-	for _, d := range mustRender(t, m32Values) {
-		if name(d) == "ConfigMap/pc-pantherclaw-api" {
-			if err := json.Unmarshal([]byte(get(d, "data", "server.json").(string)), &cfg); err != nil {
-				t.Fatal(err)
+	read := func(docs []map[string]any) {
+		cfg.Admission.APIEgressCIDRs = nil
+		for _, d := range docs {
+			if name(d) == "ConfigMap/pc-pantherclaw-api" {
+				if err := json.Unmarshal([]byte(get(d, "data", "server.json").(string)), &cfg); err != nil {
+					t.Fatal(err)
+				}
 			}
 		}
 	}
+	read(mustRender(t, m32Values))
 	if cfg.Admission.Listen != "0.0.0.0:8444" || cfg.Admission.TLSCertFile == "" || !slices.Equal(cfg.Admission.EdgeImageDigests, []string{edgeDigest}) {
 		t.Errorf("admission %+v", cfg.Admission)
+	}
+	// D1218 M1: what the agent NetworkPolicy may name, as the chart
+	// renders it.
+	a := cfg.Admission
+	if a.ReleaseNamespace != "pantherclaw" || a.GatewayPort == 0 || a.APIPort != 8080 || a.APIEgressPort == 0 || len(a.APIEgressCIDRs) != 0 {
+		t.Errorf("admission release namespace and ports %+v", a)
+	}
+	read(mustRender(t, m32Values, "agentNamespaces[0].apiEgressCIDRs[0]=203.0.113.10/32"))
+	if !slices.Equal(cfg.Admission.APIEgressCIDRs, []string{"203.0.113.10/32"}) {
+		t.Errorf("admission api_egress_cidrs %v", cfg.Admission.APIEgressCIDRs)
 	}
 }
 
@@ -341,7 +365,7 @@ func TestHR733_TheChartsProbePodsAreAdmitted(t *testing.T) {
 			t.Fatal(err)
 		}
 		e := issuers.KubernetesBinding{Cluster: "home", Namespace: get(d, "metadata", "namespace").(string), ServiceAccountName: decision.ServiceAccount(pod)}
-		if code := decision.Pod(decision.Input{Org: org, Pod: pod, Entries: []issuers.KubernetesBinding{e}, EdgeDigests: []string{edgeDigest}}); code != "" {
+		if code := decision.Pod(decision.Input{Org: org, Pod: pod, Entries: []issuers.KubernetesBinding{e}, EdgeDigests: []string{edgeDigest}, ProbeDigests: []string{probeDigest}}); code != "" {
 			t.Errorf("%s: the chart's probe pod is refused with %s", name(d), code)
 		}
 		found++

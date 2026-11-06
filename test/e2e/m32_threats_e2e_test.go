@@ -110,7 +110,7 @@ func TestT338_AForgedOrReplayedKubeClosureRecordsNothing(t *testing.T) {
 		"report_other_key": "K8S_CLOSURE_REJECTED", "report_nonce_replayed": "K8S_CLOSURE_REJECTED",
 		"nonce_other_namespace": "K8S_NAMESPACE", "probe_image_off_list": "K8S_CLOSURE_REJECTED",
 	} {
-		obs, err := f.forgeAttack(attack)
+		obs, err := f.forgeAttack(t, attack)
 		wantRefused(t, attack, obs, err, reason)
 	}
 	// Only the replay's first, honest report was recorded.
@@ -130,5 +130,49 @@ func TestT339_AKubeClosureThatOverstatesContainmentFails(t *testing.T) {
 	}
 	if n := f.count(t, "SELECT count(*)::int FROM pc.kube_closures WHERE org_id = $1 AND kind = 'sandbox' AND result = 'FAILED'"); n != 3 {
 		t.Errorf("%d failed kube closures recorded, want 3", n)
+	}
+}
+
+// TestHR741_AClosureIsTheSignerPodsOwnOfItsKind: an edge sidecar image
+// off the list attests nothing; a non-kubernetes instance takes no nonce;
+// a report naming another pod, on an expired nonce, a ninth outstanding
+// nonce and a control report from the agent pod are refused and record
+// nothing (D1218 H1, L2, item 5).
+func TestHR741_AClosureIsTheSignerPodsOwnOfItsKind(t *testing.T) {
+	f := startKube(t)
+	const closures = "SELECT count(*)::int FROM pc.kube_closures WHERE org_id = $1"
+	before := f.count(t, closures)
+	obs, err := f.forgeAttack(t, "edge_image_off_list")
+	wantRefused(t, "edge_image_off_list", obs, err, "attestation_insufficient")
+	for attack, reason := range map[string]string{
+		"closure_not_kubernetes": "K8S_NOT_KUBERNETES_INSTANCE", "report_other_pod": "K8S_CLOSURE_REJECTED",
+		"nonce_expired": "K8S_CLOSURE_REJECTED", "nonce_flood": "K8S_CLOSURE_REJECTED", "control_from_agent_pod": "K8S_CLOSURE_REJECTED",
+		"sandbox_from_release_namespace": "K8S_CLOSURE_REJECTED",
+	} {
+		obs, err := f.forgeAttack(t, attack)
+		wantRefused(t, attack, obs, err, reason)
+	}
+	if n := f.count(t, closures); n != before {
+		t.Errorf("%d kube closures recorded by the refused reports", n-before)
+	}
+	// The release namespace's control probe passes as the control.
+	if err := f.passControl(t); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestHR742_AClosureWithAForgedProbeTargetRecordsNothing: a passing
+// probe whose target is not the control's or the pod's node is refused
+// (D1218 M2; T-339, RT-219); the same report with the cluster's targets
+// passes.
+func TestHR742_AClosureWithAForgedProbeTargetRecordsNothing(t *testing.T) {
+	f := startKube(t)
+	obs, err := f.forgedTarget(t)
+	wantRefused(t, "probe_target_forged", obs, err, "K8S_CLOSURE_REJECTED")
+	if n := f.count(t, "SELECT count(*)::int FROM pc.kube_closures WHERE org_id = $1 AND kind = 'sandbox'"); n != 0 {
+		t.Errorf("%d sandbox closures recorded by forged targets", n)
+	}
+	if obs, err := f.overstateAttack(t, "none"); err != nil || obs.Outcome != domain.OutcomeAllow {
+		t.Errorf("the cluster's own targets: %+v %v", obs, err)
 	}
 }

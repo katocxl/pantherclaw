@@ -1,6 +1,6 @@
 apiVersion: pantherclaw.range/v1
 id: RT-218
-title: A kube closure signed by another key, on a used nonce, for another namespace or from an unlisted probe image is refused
+title: A kube closure signed by another key, on a used or expired nonce, for another namespace or pod, of the wrong kind or from an unlisted probe image is refused
 category: boundary
 suite: platform
 tier: business
@@ -37,6 +37,27 @@ steps:
   - id: probe-image-off-the-list
     do: kube.probe
     with: {attack: probe_image_off_list}
+    expect:
+      outcome: REFUSED
+      reason: K8S_CLOSURE_REJECTED
+      decisive_control: HR-741
+  - id: report-for-another-pod
+    do: kube.probe
+    with: {attack: report_other_pod}
+    expect:
+      outcome: REFUSED
+      reason: K8S_CLOSURE_REJECTED
+      decisive_control: HR-741
+  - id: nonce-expired
+    do: kube.probe
+    with: {attack: nonce_expired}
+    expect:
+      outcome: REFUSED
+      reason: K8S_CLOSURE_REJECTED
+      decisive_control: HR-741
+  - id: control-report-from-the-agent-pod
+    do: kube.probe
+    with: {attack: control_from_agent_pod}
     expect:
       outcome: REFUSED
       reason: K8S_CLOSURE_REJECTED

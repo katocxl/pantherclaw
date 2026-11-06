@@ -33,6 +33,11 @@ const (
 	EdgeCAMount = "/pc-edge"
 )
 
+// ProbeControlServiceAccount is the service account of the chart's control
+// probe in the release namespace: the only one a control closure is
+// accepted from (G0 M32 D1218 M2).
+const ProbeControlServiceAccount = "pantherclaw-probe-control"
+
 // Token audience prefixes; the org id follows.
 const (
 	// GatewayAudiencePrefix is the projected-token audience a gateway pod

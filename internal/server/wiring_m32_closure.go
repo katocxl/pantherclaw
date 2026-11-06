@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net"
 	"net/netip"
 	"regexp"
 	"slices"
@@ -172,6 +173,22 @@ func (s *kubeClosures) IssueClosureNonce(ctx context.Context, req *pantherclawv1
 		if req.GetNamespace() != sg.binding.Namespace {
 			return errKubeNamespace
 		}
+		// Only a probe pod gets a nonce (D1218 L2): its edge and probe
+		// images are checked first, and it holds at most
+		// maxOutstandingNonces unused ones.
+		if _, err := s.podDigests(ctx, sg); err != nil {
+			return err
+		}
+		if err := q.LockKubeClosureNonces(ctx, in.Org.UUID(), in.Instance); err != nil {
+			return err
+		}
+		n, err := q.CountOutstandingKubeClosureNonces(ctx, in.Org, in.Instance)
+		if err != nil {
+			return err
+		}
+		if n >= maxOutstandingNonces {
+			return rejectReport(fmt.Sprintf("the pod already holds %d unused nonces", n))
+		}
 		nonce := make([]byte, 32)
 		if _, err := rand.Read(nonce); err != nil {
 			return err
@@ -255,10 +272,14 @@ func (s *kubeClosures) submit(ctx context.Context, tx db.TenantTx, in pap.Instan
 	if err != nil {
 		return nil, err
 	}
-	digests, err := s.podDigests(ctx, sg)
+	if err := s.kindAllowed(ctx, q, sg, r.Kind); err != nil {
+		return nil, err
+	}
+	pod, err := s.podDigests(ctx, sg)
 	if err != nil {
 		return nil, err
 	}
+	digests := pod.Digests
 	results := probeResults(r.Results)
 	own, err := json.Marshal(results)
 	if err != nil {
@@ -284,6 +305,9 @@ func (s *kubeClosures) submit(ctx context.Context, tx db.TenantTx, in pap.Instan
 		}
 		twins, err := s.twins(ctx, q, in.Org, sg.binding.Cluster)
 		if err != nil {
+			return nil, err
+		}
+		if err := targetsMatch(results, pod.HostIP, twins); err != nil {
 			return nil, err
 		}
 		probes = append(probes, twins...)
@@ -377,17 +401,29 @@ func digestOf(imageID string) string {
 	return imageID[i:]
 }
 
+// maxOutstandingNonces is how many unused, unexpired nonces one pod may
+// hold (D1218 L2).
+const maxOutstandingNonces = 8
+
+// signerPod is what podDigests read from the signer's pod.
+type signerPod struct {
+	// Digests are the edge's and the probe's image digests.
+	Digests []string
+	// HostIP is the pod's status.hostIP.
+	HostIP string
+}
+
 // podDigests reads the signer's pod, never the report's Images (D970b):
 // exactly one edge native sidecar whose digest is on the edge list, and
 // exactly one app container, the probe, whose digest is on the probe list.
-// It returns the edge and probe digests.
-func (s *kubeClosures) podDigests(ctx context.Context, sg kubeSigner) ([]string, error) {
+// It returns the edge and probe digests and the pod's node IP.
+func (s *kubeClosures) podDigests(ctx context.Context, sg kubeSigner) (signerPod, error) {
 	p, err := s.kube.PodImages(ctx, sg.binding.Cluster, sg.binding.Namespace, sg.pod)
 	if err != nil {
-		return nil, err
+		return signerPod{}, err
 	}
 	if !p.Found {
-		return nil, rejectReport("the signer's pod is not found")
+		return signerPod{}, rejectReport("the signer's pod is not found")
 	}
 	var edges []string
 	for name, ic := range p.Inits {
@@ -396,19 +432,103 @@ func (s *kubeClosures) podDigests(ctx context.Context, sg kubeSigner) ([]string,
 		}
 	}
 	if len(edges) != 1 || !slices.Contains(s.admission.EdgeImageDigests, edges[0]) {
-		return nil, rejectReport("the pod's edge image is not on admission.edge_image_digests")
+		return signerPod{}, rejectReport("the pod's edge image is not on admission.edge_image_digests")
 	}
 	if len(p.Apps) != 1 {
-		return nil, rejectReport("the pod has more than one app container")
+		return signerPod{}, rejectReport("the pod has more than one app container")
 	}
 	var probe string
 	for _, id := range p.Apps {
 		probe = digestOf(id)
 	}
 	if probe == "" || !slices.Contains(s.admission.ProbeImageDigests, probe) {
-		return nil, rejectReport("the pod's probe image is not on admission.probe_image_digests")
+		return signerPod{}, rejectReport("the pod's probe image is not on admission.probe_image_digests")
 	}
-	return []string{edges[0], probe}, nil
+	return signerPod{Digests: []string{edges[0], probe}, HostIP: p.HostIP}, nil
+}
+
+// kindAllowed binds a report's kind to where the signer runs (D1218 M2,
+// item 5): a control report only from the chart's control probe, under
+// its own service account's entry, in the configured release namespace,
+// which the admission webhook does not enforce; a sandbox report never
+// from the release namespace.
+func (s *kubeClosures) kindAllowed(ctx context.Context, q *dbq.Queries, sg kubeSigner, kind string) error {
+	rel := s.admission.ReleaseNamespace
+	if kind == report.KindSandbox {
+		if rel != "" && sg.binding.Namespace == rel {
+			return rejectReport("a sandbox report from the release namespace")
+		}
+		return nil
+	}
+	if rel == "" || sg.binding.Namespace != rel || sg.binding.ServiceAccountName != labels.ProbeControlServiceAccount {
+		return rejectReport("a control report from a pod other than the release namespace's control probe")
+	}
+	_, err := q.GetKubeAdmissionSeen(ctx, sg.inst.Org, sg.binding.Cluster, rel)
+	switch {
+	case err == nil:
+		return rejectReport("a control report from an enforced namespace")
+	case !db.IsNoRows(err):
+		return err
+	}
+	return nil
+}
+
+// Fixed targets of the kubernetes catalog (internal/sandbox/probe).
+var kubeFixedTargets = map[string][]string{
+	covdomain.ProbeDirectHTTPS: {"1.1.1.1:443"},
+	covdomain.ProbeDNSExternal: {"udp 8.8.8.8:53", "tcp 8.8.8.8:53"},
+	covdomain.ProbeMetadata:    {"169.254.169.254:80", "[fd00:ec2::254]:80"},
+	covdomain.ProbeIPv6:        {"an IPv6 address or default route"},
+}
+
+// Probes whose targets are the control twin's (same cluster, same chart
+// values), and those on the pod's own node.
+var (
+	kubeTwinTargets = []string{covdomain.ProbeKubeAPI, covdomain.ProbeServiceOther, covdomain.ProbeDNSCluster}
+	kubeNodePorts   = map[string][]string{covdomain.ProbeKubelet: {"10250", "10255"}, covdomain.ProbeNodeIP: {"22", "443"}}
+)
+
+// targetsMatch checks the target of every passing probe result of a
+// sandbox report against what the server knows (D1218 M2): kubelet and
+// node_ip against the signer pod's status.hostIP, kube_api, service_other
+// and dns_cluster against the targets of the same probe in the cluster's
+// newest PASSED control closure, and the catalog's fixed targets. A result
+// that did not pass overstates nothing and is not checked. Without a
+// control closure the twin-checked probes close nothing, so their targets
+// are not checked.
+func targetsMatch(results []covdomain.ProbeResult, hostIP string, twins []covdomain.ProbeResult) error {
+	control := map[string][]string{}
+	for _, t := range twins {
+		control[t.Name] = append(control[t.Name], t.Detail)
+	}
+	for _, r := range results {
+		if r.Role != covdomain.RoleProbe || !r.Passed() {
+			continue
+		}
+		var allowed []string
+		switch {
+		case kubeNodePorts[r.Name] != nil:
+			if net.ParseIP(hostIP) == nil {
+				return rejectReport("the signer pod's node IP is not known")
+			}
+			for _, p := range kubeNodePorts[r.Name] {
+				allowed = append(allowed, net.JoinHostPort(hostIP, p))
+			}
+		case slices.Contains(kubeTwinTargets, r.Name):
+			if len(twins) == 0 {
+				continue
+			}
+			allowed = control[r.Name]
+		case kubeFixedTargets[r.Name] != nil:
+			allowed = kubeFixedTargets[r.Name]
+		default:
+			continue
+		}
+		if !slices.Contains(allowed, r.Detail) {
+			return rejectReport("the " + r.Name + " probe's target is not the pod's node, the control's or the catalog's")
+		}
+	}
+	return nil
 }
 
 func probeResults(rs []report.Result) []covdomain.ProbeResult {
@@ -460,7 +580,7 @@ func (s *kubeClosures) checks(ctx context.Context, q *dbq.Queries, sg kubeSigner
 	nps, err := s.kube.NetworkPolicies(ctx, sg.binding.Cluster, sg.binding.Namespace)
 	if err != nil {
 		np.Detail = "the NetworkPolicies could not be read"
-	} else if why := netpolGatewayOnly(nps); why != "" {
+	} else if why := netpolGatewayOnly(nps, s.admission); why != "" {
 		np.Detail = why
 	} else {
 		np.OK = true
@@ -475,12 +595,18 @@ const (
 )
 
 // netpolGatewayOnly checks the D965 shape of a namespace's NetworkPolicies
-// and returns why it does not hold, or "". At least one policy selects
-// every pod for Egress; every Egress rule names peers and numbered TCP
-// ports only, never 53; every peer is one namespace by name with the
-// gateway or api component, or an ipBlock of at most /24 (IPv4) or /64
-// (IPv6) with no except. Anything else fails closed.
-func netpolGatewayOnly(nps []kube.NetworkPolicy) string {
+// against the chart's configuration and returns why it does not hold, or
+// "" (D1218 M1). At least one policy selects every pod for Egress; every
+// Egress rule names peers and numbered TCP ports only; and every
+// combination of a rule's peers and ports is one the chart renders: the
+// gateway pods of the release namespace on the gateway port, its api pods
+// on the api port, or one of the configured apiEgressCIDRs, exactly, with
+// no except, on the API Service port. Anything else fails closed,
+// including a configuration that names no release namespace or ports.
+func netpolGatewayOnly(nps []kube.NetworkPolicy, a AdmissionConfig) string {
+	if a.ReleaseNamespace == "" || a.GatewayPort == 0 || a.APIPort == 0 {
+		return "admission.release_namespace, gateway_port and api_port are not configured"
+	}
 	egress := func(np kube.NetworkPolicy) bool {
 		if len(np.PolicyTypes) == 0 {
 			return len(np.Egress) > 0
@@ -499,15 +625,21 @@ func netpolGatewayOnly(nps []kube.NetworkPolicy) string {
 			if len(r.To) == 0 || len(r.Ports) == 0 {
 				return where + " allows every peer or every port"
 			}
+			ports := make([]int, 0, len(r.Ports))
 			for _, p := range r.Ports {
 				n, err := strconv.Atoi(p.Port)
-				if (p.Protocol != "" && p.Protocol != "TCP") || err != nil || n < 1 || n > 65535 || n == 53 || p.EndPort != 0 {
+				if (p.Protocol != "" && p.Protocol != "TCP") || err != nil || n < 1 || n > 65535 || p.EndPort != 0 {
 					return where + " allows a port other than one numbered TCP port"
 				}
+				ports = append(ports, n)
 			}
 			for _, peer := range r.To {
-				if !gatewayPeer(peer) {
-					return where + " allows a peer other than the gateway or the api"
+				want, ok := peerPort(peer, a)
+				if !ok {
+					return where + " allows a peer other than the release namespace's gateway or api pods or a configured apiEgressCIDR"
+				}
+				if slices.ContainsFunc(ports, func(n int) bool { return n != want }) {
+					return where + " allows a port other than the gateway port, the api port or the API Service port for its peer"
 				}
 			}
 		}
@@ -515,20 +647,34 @@ func netpolGatewayOnly(nps []kube.NetworkPolicy) string {
 	return ""
 }
 
-func gatewayPeer(p kube.Peer) bool {
+// peerPort returns the one port the chart renders for peer, and false for
+// a peer the chart never renders.
+func peerPort(p kube.Peer, a AdmissionConfig) (int, bool) {
 	if p.CIDR != "" {
 		pr, err := netip.ParsePrefix(p.CIDR)
-		if err != nil || len(p.Except) > 0 || p.PodSelector != nil || p.NamespaceSelector != nil {
-			return false
+		if err != nil || len(p.Except) > 0 || p.PodSelector != nil || p.NamespaceSelector != nil || a.APIEgressPort == 0 {
+			return 0, false
 		}
-		return (pr.Addr().Is4() && pr.Bits() >= 24) || (pr.Addr().Is6() && !pr.Addr().Is4In6() && pr.Bits() >= 64)
+		if !slices.ContainsFunc(a.APIEgressCIDRs, func(c string) bool {
+			cp, err := netip.ParsePrefix(c)
+			return err == nil && cp == pr
+		}) {
+			return 0, false
+		}
+		return a.APIEgressPort, true
 	}
 	ns, pod := p.NamespaceSelector, p.PodSelector
-	if ns == nil || pod == nil || ns.Expressions > 0 || pod.Expressions > 0 || len(ns.MatchLabels) != 1 || ns.MatchLabels[nsNameLabel] == "" {
-		return false
+	if ns == nil || pod == nil || ns.Expressions > 0 || pod.Expressions > 0 || len(ns.MatchLabels) != 1 ||
+		ns.MatchLabels[nsNameLabel] != a.ReleaseNamespace || len(pod.MatchLabels) != 1 {
+		return 0, false
 	}
-	c := pod.MatchLabels[componentLabel]
-	return c == "gateway" || c == "api"
+	switch pod.MatchLabels[componentLabel] {
+	case "gateway":
+		return a.GatewayPort, true
+	case "api":
+		return a.APIPort, true
+	}
+	return 0, false
 }
 
 // kubeEngine stands in for the container engine on a kube closure: the
@@ -547,8 +693,9 @@ func mappedHosts(rs []report.Result) []string {
 		}
 		rest, ok := strings.CutPrefix(r.Detail, "https://")
 		host, _, _ := strings.Cut(rest, " ")
+		host = strings.ToLower(host)
 		if ok && host != "" && !strings.ContainsAny(host, "/:@") && !slices.Contains(out, host) {
-			out = append(out, strings.ToLower(host))
+			out = append(out, host)
 		}
 	}
 	return out

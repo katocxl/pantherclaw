@@ -95,9 +95,14 @@ stage-secrets init container (G0 M13 D42).
 {{- end -}}
 {{- /* G0 M32 D967, D969: the admission listener, on the API only. */ -}}
 {{- if and $v.admission.enabled (ne .role "worker") (ne .role "migrate") -}}
+{{- /* D1218 M1, M2: what the agent NetworkPolicy may name (the release namespace, the gateway and api ports, the apiEgressCIDRs on the API Service port) and where control reports come from. */ -}}
+{{- $cidrs := list -}}
+{{- range $v.agentNamespaces -}}{{- range .apiEgressCIDRs -}}{{- $cidrs = append $cidrs . -}}{{- end -}}{{- end -}}
 {{- $_ := set $cfg "admission" (dict "listen" (printf "0.0.0.0:%d" (int $v.admission.port))
       "tls_cert_file" (printf "%s/admission-tls.crt" $s) "tls_key_file" (printf "%s/admission-tls.key" $s)
-      "edge_image_digests" $v.admission.edgeImageDigests "probe_image_digests" $v.admission.probeImageDigests) -}}
+      "edge_image_digests" $v.admission.edgeImageDigests "probe_image_digests" $v.admission.probeImageDigests
+      "release_namespace" .root.Release.Namespace "gateway_port" (int $v.gateway.port) "api_port" 8080
+      "api_egress_cidrs" ($cidrs | uniq) "api_egress_port" (int $v.api.service.port)) -}}
 {{- end -}}
 {{- toPrettyJson $cfg -}}
 {{- end -}}

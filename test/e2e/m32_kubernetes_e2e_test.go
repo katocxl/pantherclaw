@@ -64,6 +64,17 @@ var (
 	m32GWDigest    = "sha256:" + strings.Repeat("c", 64)
 )
 
+// m32NodeIP is the fake cluster's node, every pod's status.hostIP;
+// m32Targets are the probes' targets as the probe reports them (the
+// cluster's own from the control twin, the node's, the catalog's).
+const m32NodeIP = "10.0.0.5"
+
+var m32Targets = map[string]string{
+	covdomain.ProbeKubeAPI: "10.96.0.1:443", covdomain.ProbeKubelet: m32NodeIP + ":10250", covdomain.ProbeNodeIP: m32NodeIP + ":22",
+	covdomain.ProbeMetadata: "169.254.169.254:80", covdomain.ProbeDNSCluster: "udp 10.96.0.10:53", covdomain.ProbeDNSExternal: "udp 8.8.8.8:53",
+	covdomain.ProbeDirectHTTPS: "1.1.1.1:443", covdomain.ProbeServiceOther: "10.96.200.12:8080", covdomain.ProbeIPv6: "an IPv6 address or default route",
+}
+
 // kubePod is one pod of the fake cluster: the service account its
 // projected token authenticates as, and its containers.
 type kubePod struct {
@@ -134,7 +145,7 @@ func newKubeCluster(t *testing.T) *kubeCluster {
 		}
 		p := *found
 		spec := map[string]any{"containers": []any{map[string]any{"name": p.app}}}
-		status := map[string]any{"phase": "Running", "containerStatuses": []any{map[string]any{"name": p.app, "imageID": p.appImage}}}
+		status := map[string]any{"phase": "Running", "hostIP": m32NodeIP, "containerStatuses": []any{map[string]any{"name": p.app, "imageID": p.appImage}}}
 		if p.edgeImage != "" {
 			spec["initContainers"] = []any{map[string]any{"name": labels.EdgeContainer, "restartPolicy": "Always"}}
 			status["initContainerStatuses"] = []any{map[string]any{"name": labels.EdgeContainer, "imageID": p.edgeImage}}
@@ -276,6 +287,7 @@ func setupKube(t *testing.T, s *stack) *kubeFixture {
 	}
 	f.ctlPod = f.agentPod
 	f.ctlPod.namespace, f.ctlPod.name, f.ctlPod.uid, f.ctlPod.saUID = "pantherclaw", "probe-control-1", ids.NewV7().String(), ids.NewV7().String()
+	f.ctlPod.sa = labels.ProbeControlServiceAccount
 	f.gwPod = kubePod{
 		namespace: "pantherclaw", name: "gw-0", uid: ids.NewV7().String(), sa: "pantherclaw-gateway", saUID: ids.NewV7().String(),
 		app: "gateway", appImage: "ghcr.io/katocxl/pantherclaw-gateway@" + m32GWDigest,
@@ -303,6 +315,7 @@ func setupKube(t *testing.T, s *stack) *kubeFixture {
 		"admission": map[string]any{
 			"listen": addr, "tls_cert_file": cert, "tls_key_file": key,
 			"edge_image_digests": []string{m32EdgeDigest}, "probe_image_digests": []string{m32ProbeDigest},
+			"release_namespace": "pantherclaw", "gateway_port": 8090, "api_port": 8080,
 		},
 	})
 	f.entries(t)
@@ -452,7 +465,8 @@ func (f *kubeFixture) probePod(edgeImage string) map[string]any {
 		"metadata": map[string]any{"name": "probe-1", "namespace": "agents"},
 		"spec": map[string]any{
 			"serviceAccountName": f.agentPod.sa, "automountServiceAccountToken": false, "initContainers": inits,
-			"containers": []any{map[string]any{"name": "probe", "image": f.agentPod.appImage}},
+			"securityContext": map[string]any{"runAsUser": 65532},
+			"containers":      []any{map[string]any{"name": "probe", "image": f.agentPod.appImage}},
 			"volumes": []any{map[string]any{"name": "edge-token", "projected": map[string]any{"sources": []any{map[string]any{
 				"serviceAccountToken": map[string]any{"path": "token", "audience": labels.AgentAudience(f.s.org), "expirationSeconds": 3600},
 			}}}}},
@@ -545,7 +559,7 @@ var (
 func sandboxResults(observed string) []report.Result {
 	var rs []report.Result
 	for _, n := range m32Blocked {
-		rs = append(rs, report.Result{Name: n, Role: report.RoleProbe, Expect: report.Blocked, Observed: observed})
+		rs = append(rs, report.Result{Name: n, Role: report.RoleProbe, Expect: report.Blocked, Observed: observed, Detail: m32Targets[n]})
 	}
 	return append(rs,
 		report.Result{Name: covdomain.ProbeEdgeMediated, Role: report.RolePositive, Expect: report.Reachable, Observed: report.Reachable, Detail: "https://payments.example through the edge"},
@@ -556,7 +570,7 @@ func sandboxResults(observed string) []report.Result {
 func controlResults() []report.Result {
 	var rs []report.Result
 	for _, n := range m32Twins {
-		rs = append(rs, report.Result{Name: n, Role: report.RolePositive, Expect: report.Reachable, Observed: report.Reachable})
+		rs = append(rs, report.Result{Name: n, Role: report.RolePositive, Expect: report.Reachable, Observed: report.Reachable, Detail: m32Targets[n]})
 	}
 	return rs
 }

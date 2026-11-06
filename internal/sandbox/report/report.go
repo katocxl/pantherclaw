@@ -65,6 +65,10 @@ const (
 	MaxDetail  = 512
 	MaxHits    = 256
 	MaxChecks  = 64
+	// MaxSession bounds the session: a sandbox session id, or a pod name
+	// (a DNS-1123 subdomain, up to 253 characters; CronJob pod names pass
+	// 64, G0 M32 D1217).
+	MaxSession = 253
 )
 
 // ErrInvalid reports a report that is malformed, unsigned or signed with
@@ -167,7 +171,7 @@ func (r Report) Validate() error {
 		return bad("format")
 	case r.Kind != KindSandbox && r.Kind != KindControl && r.Kind != KindCanary:
 		return bad("kind")
-	case r.Session == "" || len(r.Session) > 64 || !markerRE.MatchString(r.Nonce):
+	case r.Session == "" || len(r.Session) > MaxSession || !markerRE.MatchString(r.Nonce):
 		return bad("session or nonce")
 	case r.StartedAt.IsZero() || r.FinishedAt.Before(r.StartedAt):
 		return bad("times")

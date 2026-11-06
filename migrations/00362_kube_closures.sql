@@ -68,7 +68,10 @@ ALTER TABLE pc.coverage_closures
     DROP CONSTRAINT coverage_closures_check,
     -- squawk-ignore constraint-missing-not-valid
     ADD CONSTRAINT coverage_closures_check CHECK (result = 'FAILED'
-        OR (positive_controls_passed AND negative_controls_passed AND (canary_passed OR runtime = 'kubernetes')));
+        OR (positive_controls_passed AND negative_controls_passed AND (canary_passed OR runtime = 'kubernetes'))),
+    -- Runtime kubernetes is a kube closure's and only its (D1218 L1).
+    -- squawk-ignore constraint-missing-not-valid
+    ADD CONSTRAINT coverage_closures_kube_runtime CHECK ((runtime = 'kubernetes') = (kube_closure_id IS NOT NULL));
 -- squawk-ignore adding-foreign-key-constraint
 ALTER TABLE pc.coverage_closures
     -- squawk-ignore constraint-missing-not-valid, adding-foreign-key-constraint
@@ -77,6 +80,7 @@ ALTER TABLE pc.coverage_closures
 
 -- +goose Down
 ALTER TABLE pc.coverage_closures
+    DROP CONSTRAINT coverage_closures_kube_runtime,
     DROP CONSTRAINT coverage_closures_check,
     ADD CONSTRAINT coverage_closures_check CHECK (result = 'FAILED'
         OR (positive_controls_passed AND negative_controls_passed AND canary_passed)),

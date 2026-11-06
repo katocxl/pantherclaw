@@ -36,15 +36,16 @@ The listener is off by default (HR-731) and fails closed (HR-730): with the serv
 
 ### Read a deny
 
-`kubectl` shows the reason in the event: `admission webhook … denied the request: <code>`. Each deny is audited once a minute per cluster, namespace and code as `kubernetes.admission_denied`, with the pod name and service account (HR-735). Dry runs write nothing; allows only count in `pc_kubernetes_admission_total`.
+`kubectl` shows the reason in the event: `admission webhook … denied the request: <code>`. Each deny is audited once a minute per cluster, namespace and code as `kubernetes.admission_denied`, with the pod name and service account (HR-735). Dry runs write nothing; allows only count in `pc_kubernetes_admission_total`. Pod updates are decided too: one that changes an image is denied, others are allowed. The once-a-minute memory holds at most 10,000 keys per minute; past that every deny is still audited, and `pc_kubernetes_admission_throttle_overflow_total` counts the audits and seen rows written without the throttle. A rising overflow count means a flood of distinct denies: find the namespace in the audit records.
 
 | Code | Cause | Fix |
 | --- | --- | --- |
 | `K8S_NO_ISSUER` | No ACTIVE kubernetes issuer entry for the org, cluster, namespace and service account | Propose and activate one |
 | `K8S_APP_CONTAINERS` | Not exactly one app container | One agent container per pod |
-| `K8S_IMAGE_NOT_PINNED` | The entry pins images and the container's is not `repo@sha256:…` on its list | Pin the digest |
+| `K8S_IMAGE_NOT_PINNED` | The entry pins images and the app container's, or a regular init container's, is not `repo@sha256:…` on its list | Pin the digest; add init container images to the entry's digests |
+| `K8S_IMAGE_CHANGED` | A pod UPDATE changed the image of a container, init container or ephemeral container | Roll a new pod instead; images are fixed once admitted |
 | `K8S_EDGE_MISSING` | No single `pantherclaw-edge` native sidecar with a listed digest | Use the example pod; update `admission.edgeImageDigests` after an edge upgrade |
-| `K8S_POD_ESCAPE` | Host network, PID or IPC, a privileged container or a hostPath | Remove them |
+| `K8S_POD_ESCAPE` | Host network, PID or IPC, `shareProcessNamespace`, a privileged container or a hostPath; an edge without a non-root `runAsUser`; or another container with `allowPrivilegeEscalation: true`, an added capability other than `NET_BIND_SERVICE`, a `procMount` other than `Default`, or no `runAsUser` or the edge's | Remove them; run the agent as its own user (the example pod's agent runs as 10001, the edge as 65532) |
 | `K8S_TOKEN_EXPOSED` | Token automount on, or a projected token mounted outside the edge, with another audience or over 3600 s | `automountServiceAccountToken: false`; mount the token only into the edge |
 | `K8S_EPHEMERAL` | An ephemeral container (`kubectl debug`) | Not allowed in an enforced namespace; debug a copy elsewhere |
 | `K8S_UNAVAILABLE` | Anything the webhook could not decide, including a database error | Check the API pods' logs (`kubeadmission.*`) |
@@ -79,7 +80,7 @@ The `checksum/admission-webhook` annotation covers the webhook secrets, not the 
 An in-cluster gateway enrols from its own projected token (audience `pantherclaw-gateway:<org>`) instead of a `pcg_` token (HR-739, F1024).
 
 1. Create the gateway (`pclaw gateway create`) and note its id and the CA pin from its enrollment page (`gateway.caSHA256`).
-2. Bind it to the gateway's service account: `GatewayService.SetGatewayKubernetesBinding` with the cluster, namespace, service-account name and UID, and optionally the gateway image digests. It needs `gateways.manage` and writes `gateway.kubernetes_binding_set`.
+2. Bind it to the gateway's service account: `GatewayService.SetGatewayKubernetesBinding` with the cluster, namespace, service-account name and UID, and optionally the gateway image digests. It needs `gateway.manage` and writes `gateway.kubernetes_binding_set`.
 3. Set `gateway.enabled`, `gateway.org`, `gateway.caSHA256`, `gateway.tls.existingSecret` and `gateway.service.clusterIP`, and `helm upgrade`. Each replica enrols at start through TokenReview against the bound cluster; its identity directory is an emptyDir, so a restarted replica enrols again with a fresh token.
 
 Each projected token enrols once (single-use jti, D968a). Enrolment is refused, with one generic `GATEWAY_ENROLLMENT_REFUSED`, when the binding is missing or ambiguous (two gateways bound to the same service account), TokenReview does not return the bound username and UID, the pod is not Running with exactly one app container, or its image is not a bound digest. To stop in-cluster enrolment, clear the binding (`ClearGatewayKubernetesBinding`, audited `gateway.kubernetes_binding_cleared`); only `pcg_` tokens enrol that gateway afterwards. Revoking the gateway revokes its replicas' certificates as usual ([gateway.md](gateway.md)).
@@ -91,10 +92,12 @@ The chart runs a daily probe CronJob in each agent namespace and a control twin 
 - The **control** run, outside every enforced namespace, checks that each probe's target answers (the positive twins).
 - The **probe pod** in the agent namespace tries the API server, the kubelet, the node, metadata, cluster and external DNS, direct HTTPS, another Service and IPv6, each expected unreachable, plus the edge's two controls (a mapped host through the edge, an unmapped one refused). It posts its report to its edge's loopback `/__pc/report`, which signs it with the pod's workload key and submits it with `KubernetesService.SubmitClosure` (HR-738).
 
-The server accepts a report only from an L2 instance enrolled by Kubernetes attestation, for the namespace it was attested in, with a fresh single-use nonce and the pod's edge and probe digests on the admission lists, read from the cluster, not from the report (HR-741). It adds its own two checks (HR-742):
+The server accepts a report only from an L2 instance enrolled by Kubernetes attestation, for the namespace and pod it was attested in, with a fresh single-use nonce and the pod's edge and probe digests on the admission lists, read from the cluster, not from the report (HR-741). A pod holds at most 8 outstanding nonces, and the identity janitor deletes expired ones. A `control` report comes only from the `pantherclaw-probe-control` service account in the release namespace, which admission never enforces; a `sandbox` report never comes from there.
+
+It checks each passing probe's target: `kubelet` and `node_ip` must be the probe pod's own node (`status.hostIP`), `kube_api`, `service_other` and `dns_cluster` must be targets the newest PASSED control closure reached, and the rest the probe catalog's. A forged target is refused with `K8S_CLOSURE_REJECTED`. It adds its own two checks (HR-742):
 
 - `admission_enforced`: this server decided a pod of the namespace within 24 hours;
-- `netpol_egress_gateway_only`: the namespace's NetworkPolicies, read with the reviewer token, allow egress only to the gateway and the api on numbered TCP ports, never port 53.
+- `netpol_egress_gateway_only`: the namespace's NetworkPolicies, read with the reviewer token, allow egress only to the gateway pods in the release namespace on the gateway port and the api pods there on the api port, or to the configured `apiEgressCIDRs` on the api service port, each exactly, never port 53. The chart renders these into the server's `admission` config (`release_namespace`, `gateway_port`, `api_port`, `api_egress_cidrs`, `api_egress_port`); without them the check fails.
 
 A kind closes only when every probe was unreachable with its twin reachable, the edge's controls passed and both checks are ok. A passing closure is recorded per connection whose agent hosts the edge mediated, and expires after 24 hours (HR-743).
 
@@ -108,11 +111,19 @@ The submit answer and the coverage record list the failed probes and checks.
 | `netpol_egress_gateway_only` | A policy allows every peer, a port range, DNS, another component, or a wide ipBlock | Keep only the chart's policy shape (`apiEgressCIDRs` of at most /24 or /64 for an external server) |
 | `admission_enforced` | The webhook decided no pod of the namespace for a day: it is not configured, or the namespace labels changed | Check the namespace labels and the ValidatingWebhookConfiguration |
 | no twin | No passing control closure for the cluster | Check the control CronJob's logs in the release namespace |
-| `K8S_CLOSURE_REJECTED` on submit | The probe or edge digest is not on the lists, the nonce was used or expired, or the signer's pod is gone | Update `admission.probeImageDigests` after a probe upgrade; rerun the job |
+| `K8S_CLOSURE_REJECTED` on submit | The probe or edge digest is not on the lists, the nonce was used or expired, the pod holds 8 outstanding nonces, the report names another pod, a probe target is not the node's, the control's or the catalog's, a control report came from outside the release namespace's control probe, or the signer's pod is gone | Update `admission.probeImageDigests` after a probe upgrade; check that the control CronJob passed; rerun the job |
 | `K8S_NOT_KUBERNETES_INSTANCE` | The probe pod's instance is not an admitted L2 Kubernetes instance, or its entry is no longer active | Check the probe service account's issuer entry |
 
 To rerun the probe now: `kubectl -n <agent ns> create job --from=cronjob/pantherclaw-probe probe-manual-1`.
 
+### Check the namespace labels
+
+The webhook sees only namespaces labelled `pantherclaw.dev/protect=enforce` and `pantherclaw.dev/org=<org id>`. A removed or wrong label takes the namespace out of admission at once, but `admission_enforced` stays ok until 24 hours pass without a decision (R-96). Check the labels daily, and after any change to the namespaces:
+
+`kubectl get ns -L pantherclaw.dev/protect,pantherclaw.dev/org`
+
+Every agent namespace must show `enforce` and your org id. Restrict who may label namespaces (RBAC on `namespaces` `patch`/`update`).
+
 ### Pod runs
 
-At start the edge asks for its pod's run with `KubernetesService.StartPodRun` (HR-744, D973a). The run starts only under the issuer entry's run grant, for the pod name the instance was attested with, with the instance as launcher through the entry. An entry without a run grant gives `K8S_NO_RUN_GRANT`, and the edge then forwards nothing. The run's principal is the grant's (a user or service account). Set the grant with `pclaw issuer propose-kubernetes --run-grant`, which an Identity Publisher activates like any other change to the entry.
+At start the edge asks for its pod's run with `KubernetesService.StartPodRun` (HR-744, D973a). The run starts only under the issuer entry's run grant, for the pod name the instance was attested with, with the instance as launcher through the entry. An entry without a run grant gives `K8S_NO_RUN_GRANT`, and the edge then forwards nothing. The run's principal is the grant's (a user or service account); a grant naming any other principal gives `K8S_RUN_GRANT_PRINCIPAL`. The run records `principal_source = trusted_issuer` and the attesting issuer revision as `launcher_issuer_id`. Set the grant with `pclaw issuer propose-kubernetes --run-grant`, which an Identity Publisher activates like any other change to the entry.

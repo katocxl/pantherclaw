@@ -128,15 +128,36 @@ type Pod struct {
 
 // PodSpec is the part of a pod spec the webhook reads.
 type PodSpec struct {
-	ServiceAccountName           string      `json:"serviceAccountName"`
-	AutomountServiceAccountToken *bool       `json:"automountServiceAccountToken"`
-	HostNetwork                  bool        `json:"hostNetwork"`
-	HostPID                      bool        `json:"hostPID"`
-	HostIPC                      bool        `json:"hostIPC"`
-	Containers                   []Container `json:"containers"`
-	InitContainers               []Container `json:"initContainers"`
-	EphemeralContainers          []Container `json:"ephemeralContainers"`
-	Volumes                      []Volume    `json:"volumes"`
+	ServiceAccountName           string `json:"serviceAccountName"`
+	AutomountServiceAccountToken *bool  `json:"automountServiceAccountToken"`
+	HostNetwork                  bool   `json:"hostNetwork"`
+	HostPID                      bool   `json:"hostPID"`
+	HostIPC                      bool   `json:"hostIPC"`
+	// ShareProcessNamespace puts every container in one PID namespace.
+	ShareProcessNamespace *bool               `json:"shareProcessNamespace"`
+	SecurityContext       *PodSecurityContext `json:"securityContext"`
+	Containers            []Container         `json:"containers"`
+	InitContainers        []Container         `json:"initContainers"`
+	EphemeralContainers   []Container         `json:"ephemeralContainers"`
+	Volumes               []Volume            `json:"volumes"`
+}
+
+// PodSecurityContext is the part of a pod's security context the webhook
+// reads: the user its containers run as unless they set their own.
+type PodSecurityContext struct {
+	RunAsUser *int64 `json:"runAsUser"`
+}
+
+// RunAsUser is the user c runs as: its own runAsUser, else the pod's; nil
+// when neither sets one (the image's user, which the webhook cannot see).
+func (p *Pod) RunAsUser(c Container) *int64 {
+	if c.SecurityContext != nil && c.SecurityContext.RunAsUser != nil {
+		return c.SecurityContext.RunAsUser
+	}
+	if p.Spec.SecurityContext != nil {
+		return p.Spec.SecurityContext.RunAsUser
+	}
+	return nil
 }
 
 // RestartPolicyAlways on an init container makes it a native sidecar.
@@ -159,7 +180,17 @@ func (c Container) IsSidecar() bool {
 // SecurityContext is the part of a container's security context the
 // webhook reads.
 type SecurityContext struct {
-	Privileged *bool `json:"privileged"`
+	Privileged               *bool         `json:"privileged"`
+	AllowPrivilegeEscalation *bool         `json:"allowPrivilegeEscalation"`
+	Capabilities             *Capabilities `json:"capabilities"`
+	ProcMount                *string       `json:"procMount"`
+	RunAsUser                *int64        `json:"runAsUser"`
+}
+
+// Capabilities are a container's added and dropped Linux capabilities.
+type Capabilities struct {
+	Add  []string `json:"add"`
+	Drop []string `json:"drop"`
 }
 
 // VolumeMount mounts a volume into a container.

@@ -19,17 +19,20 @@ var (
 	edgeDigest  = "sha256:" + strings.Repeat("e", 64)
 	agentDigest = "sha256:" + strings.Repeat("a", 64)
 	otherDigest = "sha256:" + strings.Repeat("b", 64)
+	probeDigest = "sha256:" + strings.Repeat("d", 64)
 )
 
 // agentPod is the examples/agent-pod.yaml shape as the API server sends it:
 // one app container, the edge as the native sidecar holding the only
-// projected token, automount off.
+// projected token, automount off, the edge as the pod's user and the agent
+// as its own.
 func agentPod(org ids.OrgID) map[string]any {
 	return map[string]any{
 		"metadata": map[string]any{"name": "coder-1", "namespace": "agents"},
 		"spec": map[string]any{
 			"serviceAccountName":           "coder",
 			"automountServiceAccountToken": false,
+			"securityContext":              map[string]any{"runAsUser": 65532},
 			"initContainers": []any{map[string]any{
 				"name": labels.EdgeContainer, "image": "ghcr.io/katocxl/pantherclaw-edge@" + edgeDigest, "restartPolicy": "Always",
 				"volumeMounts": []any{
@@ -39,7 +42,8 @@ func agentPod(org ids.OrgID) map[string]any {
 			}},
 			"containers": []any{map[string]any{
 				"name": "agent", "image": "ghcr.io/acme/agent@" + agentDigest,
-				"volumeMounts": []any{map[string]any{"name": "pc-edge", "mountPath": "/pc-edge"}},
+				"securityContext": map[string]any{"runAsUser": 10001, "allowPrivilegeEscalation": false, "capabilities": map[string]any{"drop": []any{"ALL"}}},
+				"volumeMounts":    []any{map[string]any{"name": "pc-edge", "mountPath": "/pc-edge"}},
 			}},
 			"volumes": []any{
 				map[string]any{"name": "edge-token", "projected": map[string]any{"sources": []any{map[string]any{
@@ -68,7 +72,21 @@ func decide(t *testing.T, org ids.OrgID, p map[string]any, entries []issuers.Kub
 	if err != nil {
 		t.Fatal(err)
 	}
-	return decision.Pod(decision.Input{Org: org, Pod: pod, Entries: entries, EdgeDigests: []string{edgeDigest}})
+	return decision.Pod(decision.Input{Org: org, Pod: pod, Entries: entries, EdgeDigests: []string{edgeDigest}, ProbeDigests: []string{probeDigest}})
+}
+
+// parse is p as the webhook reads it.
+func parse(t *testing.T, p map[string]any) *review.Pod {
+	t.Helper()
+	raw, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pod, err := review.ParsePod(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pod
 }
 
 func entry() issuers.KubernetesBinding {
@@ -118,6 +136,20 @@ func TestHR732_APodNeedsAnIssuerEntryOneAppContainerAndPinnedImages(t *testing.T
 	want(t, "another digest", decide(t, org, otherDig, []issuers.KubernetesBinding{pinned}), decision.CodeImageNotPinned)
 	// With two entries, one unpinned entry admits any image.
 	want(t, "an unpinned entry beside a pinned one", decide(t, org, otherDig, []issuers.KubernetesBinding{pinned, e}), "")
+
+	// D1218 L8: an entry that pins digests pins every plain init container
+	// too; the edge sidecar is checked against the edge list instead.
+	initOf := func(image string) map[string]any {
+		p := agentPod(org)
+		spec(p)["initContainers"] = append(spec(p)["initContainers"].([]any), map[string]any{
+			"name": "setup", "image": image, "securityContext": map[string]any{"runAsUser": 10002},
+		})
+		return p
+	}
+	want(t, "a plain init container on the pinned digests", decide(t, org, initOf("ghcr.io/acme/agent@"+agentDigest), []issuers.KubernetesBinding{pinned}), "")
+	want(t, "a plain init container off the pinned digests", decide(t, org, initOf("busybox@"+otherDigest), []issuers.KubernetesBinding{pinned}), decision.CodeImageNotPinned)
+	want(t, "a plain init container by tag", decide(t, org, initOf("busybox:latest"), []issuers.KubernetesBinding{pinned}), decision.CodeImageNotPinned)
+	want(t, "a plain init container under an unpinned entry", decide(t, org, initOf("busybox:latest"), []issuers.KubernetesBinding{e}), "")
 }
 
 // TestHR733_APodNeedsExactlyOneEdgeSidecarWithAnAllowedDigest: the edge as
@@ -130,7 +162,9 @@ func TestHR733_APodNeedsExactlyOneEdgeSidecarWithAnAllowedDigest(t *testing.T) {
 	want(t, "the example pod", decide(t, org, agentPod(org), es), "")
 	// A plain init container besides the edge is not a sidecar.
 	withInit := agentPod(org)
-	spec(withInit)["initContainers"] = append(spec(withInit)["initContainers"].([]any), map[string]any{"name": "setup", "image": "busybox@" + otherDigest})
+	spec(withInit)["initContainers"] = append(spec(withInit)["initContainers"].([]any), map[string]any{
+		"name": "setup", "image": "busybox@" + otherDigest, "securityContext": map[string]any{"runAsUser": 10002},
+	})
 	want(t, "a plain init container beside the edge", decide(t, org, withInit, es), "")
 
 	cases := map[string]func(p map[string]any){
@@ -191,6 +225,69 @@ func TestHR734_HostAccessAndExposedTokensAreRefused(t *testing.T) {
 		want(t, name, decide(t, org, p, es), decision.CodePodEscape)
 	}
 
+	// D1218 H2: nothing else in the pod can reach the edge's token or key.
+	agentSC := func(p map[string]any) map[string]any {
+		return container(p, "containers", 0)["securityContext"].(map[string]any)
+	}
+	reach := map[string]func(p map[string]any){
+		"a shared process namespace":   func(p map[string]any) { spec(p)["shareProcessNamespace"] = true },
+		"the agent as the edge's user": func(p map[string]any) { agentSC(p)["runAsUser"] = 65532 },
+		"the agent as the pod's user":  func(p map[string]any) { delete(agentSC(p), "runAsUser") },
+		"the agent with the image's user": func(p map[string]any) {
+			delete(spec(p), "securityContext")
+			container(p, "initContainers", 0)["securityContext"] = map[string]any{"runAsUser": 65532}
+			delete(agentSC(p), "runAsUser")
+		},
+		"an edge with no fixed user": func(p map[string]any) { delete(spec(p), "securityContext") },
+		"an edge as root":            func(p map[string]any) { spec(p)["securityContext"] = map[string]any{"runAsUser": 0} },
+		"privilege escalation":       func(p map[string]any) { agentSC(p)["allowPrivilegeEscalation"] = true },
+		"SYS_PTRACE":                 func(p map[string]any) { agentSC(p)["capabilities"] = map[string]any{"add": []any{"SYS_PTRACE"}} },
+		"CAP_SYS_ADMIN":              func(p map[string]any) { agentSC(p)["capabilities"] = map[string]any{"add": []any{"CAP_SYS_ADMIN"}} },
+		"NET_ADMIN beside NET_BIND_SERVICE": func(p map[string]any) {
+			agentSC(p)["capabilities"] = map[string]any{"add": []any{"NET_BIND_SERVICE", "NET_ADMIN"}}
+		},
+		"an unmasked /proc": func(p map[string]any) { agentSC(p)["procMount"] = "Unmasked" },
+		"a plain init container as the edge's user": func(p map[string]any) {
+			spec(p)["initContainers"] = append(spec(p)["initContainers"].([]any), map[string]any{"name": "setup", "image": "busybox@" + otherDigest})
+		},
+		"the probe image beside another container's capabilities": func(p map[string]any) {
+			container(p, "containers", 0)["image"] = "ghcr.io/katocxl/pantherclaw-probe@" + probeDigest
+			spec(p)["initContainers"] = append(spec(p)["initContainers"].([]any), map[string]any{
+				"name": "setup", "image": "busybox@" + otherDigest,
+				"securityContext": map[string]any{"runAsUser": 10002, "capabilities": map[string]any{"add": []any{"SYS_PTRACE"}}},
+			})
+		},
+	}
+	for name, edit := range reach {
+		p := agentPod(org)
+		edit(p)
+		want(t, name, decide(t, org, p, es), decision.CodePodEscape)
+	}
+	allowed := map[string]func(p map[string]any){
+		"NET_BIND_SERVICE":            func(p map[string]any) { agentSC(p)["capabilities"] = map[string]any{"add": []any{"NET_BIND_SERVICE"}} },
+		"procMount Default":           func(p map[string]any) { agentSC(p)["procMount"] = "Default" },
+		"shareProcessNamespace false": func(p map[string]any) { spec(p)["shareProcessNamespace"] = false },
+		"the edge's own fixed user": func(p map[string]any) {
+			delete(spec(p), "securityContext")
+			container(p, "initContainers", 0)["securityContext"] = map[string]any{"runAsUser": 65533}
+		},
+		// The chart's probe runs as the edge's user: a pinned probe app
+		// container is the chart's own.
+		"the pinned probe as the edge's user": func(p map[string]any) {
+			container(p, "containers", 0)["image"] = "ghcr.io/katocxl/pantherclaw-probe@" + probeDigest
+			delete(agentSC(p), "runAsUser")
+		},
+	}
+	for name, edit := range allowed {
+		p := agentPod(org)
+		edit(p)
+		want(t, name, decide(t, org, p, es), "")
+	}
+	unpinnedProbe := agentPod(org)
+	container(unpinnedProbe, "containers", 0)["image"] = "ghcr.io/katocxl/pantherclaw-probe@" + otherDigest
+	delete(agentSC(unpinnedProbe), "runAsUser")
+	want(t, "a probe image off the list as the edge's user", decide(t, org, unpinnedProbe, es), decision.CodePodEscape)
+
 	sat := func(p map[string]any) map[string]any {
 		return spec(p)["volumes"].([]any)[0].(map[string]any)["projected"].(map[string]any)["sources"].([]any)[0].(map[string]any)["serviceAccountToken"].(map[string]any)
 	}
@@ -203,7 +300,7 @@ func TestHR734_HostAccessAndExposedTokensAreRefused(t *testing.T) {
 		},
 		"the token in a plain init container": func(p map[string]any) {
 			spec(p)["initContainers"] = append(spec(p)["initContainers"].([]any), map[string]any{
-				"name": "copy", "image": "busybox@" + otherDigest,
+				"name": "copy", "image": "busybox@" + otherDigest, "securityContext": map[string]any{"runAsUser": 10002},
 				"volumeMounts": []any{map[string]any{"name": "edge-token", "mountPath": "/token"}},
 			})
 		},
@@ -221,9 +318,49 @@ func TestHR734_HostAccessAndExposedTokensAreRefused(t *testing.T) {
 	for _, code := range []string{
 		decision.CodeNoIssuer, decision.CodeAppContainers, decision.CodeImageNotPinned, decision.CodeEdgeMissing,
 		decision.CodePodEscape, decision.CodeTokenExposed, decision.CodeEphemeral, decision.CodeUnavailable,
+		decision.CodeImageChanged,
 	} {
 		if decision.Message(code) == "" {
 			t.Errorf("%s has no message", code)
+		}
+	}
+}
+
+// TestHR733_AnUpdateThatChangesAnImageIsRefused: an UPDATE that changes
+// the edge's, the agent's, an init container's or an ephemeral
+// container's image, or adds or renames one, changes the pod's images
+// (K8S_IMAGE_CHANGED, D1218 H1); one that changes labels, annotations or
+// other fields does not.
+func TestHR733_AnUpdateThatChangesAnImageIsRefused(t *testing.T) {
+	org := ids.New[ids.Org]()
+	old := parse(t, agentPod(org))
+	same := agentPod(org)
+	same["metadata"].(map[string]any)["labels"] = map[string]any{"team": "x"}
+	same["metadata"].(map[string]any)["annotations"] = map[string]any{"a": "b"}
+	spec(same)["activeDeadlineSeconds"] = 60
+	if decision.ImageChanged(old, parse(t, same)) {
+		t.Error("a label, annotation and deadline update changes an image")
+	}
+	changes := map[string]func(p map[string]any){
+		"the edge's image": func(p map[string]any) {
+			container(p, "initContainers", 0)["image"] = "evil.example/edge@" + otherDigest
+		},
+		"the agent's image": func(p map[string]any) {
+			container(p, "containers", 0)["image"] = "ghcr.io/acme/agent@" + otherDigest
+		},
+		"the agent's tag": func(p map[string]any) {
+			container(p, "containers", 0)["image"] = "ghcr.io/acme/agent:v2@" + agentDigest
+		},
+		"an ephemeral container": func(p map[string]any) {
+			spec(p)["ephemeralContainers"] = []any{map[string]any{"name": "debug", "image": "busybox@" + otherDigest}}
+		},
+		"a renamed container": func(p map[string]any) { container(p, "containers", 0)["name"] = "other" },
+	}
+	for name, edit := range changes {
+		p := agentPod(org)
+		edit(p)
+		if !decision.ImageChanged(old, parse(t, p)) {
+			t.Errorf("%s: not an image change", name)
 		}
 	}
 }

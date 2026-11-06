@@ -210,6 +210,47 @@ func TestHR731_RequestsAreLimitedPerAddressAndBodiesBounded(t *testing.T) {
 	}
 }
 
+// TestHR733_APodUpdateCannotChangeAnImage: a pod UPDATE that swaps the
+// edge's or the agent's image is denied with K8S_IMAGE_CHANGED (D1218 H1);
+// one that only changes labels is allowed; one without the old object is
+// undecidable.
+func TestHR733_APodUpdateCannotChangeAnImage(t *testing.T) {
+	w := newWebhook(t, 1000)
+	path := w.path("prod", w.org.String(), secret)
+	pod := func(edge, agent string, labels map[string]any) map[string]any {
+		return map[string]any{
+			"metadata": map[string]any{"name": "coder-1", "namespace": "agents", "labels": labels},
+			"spec": map[string]any{
+				"initContainers": []any{map[string]any{"name": "pantherclaw-edge", "image": edge, "restartPolicy": "Always"}},
+				"containers":     []any{map[string]any{"name": "agent", "image": agent}},
+			},
+		}
+	}
+	edge, agent := "ghcr.io/katocxl/pantherclaw-edge@sha256:"+strings.Repeat("e", 64), "ghcr.io/acme/agent@sha256:"+strings.Repeat("a", 64)
+	evil := "evil.example/x@sha256:" + strings.Repeat("b", 64)
+	update := func(old, updated map[string]any) []byte {
+		var rv map[string]any
+		if err := json.Unmarshal(reviewBody(t, review.OperationUpdate, "", updated), &rv); err != nil {
+			t.Fatal(err)
+		}
+		if old != nil {
+			rv["request"].(map[string]any)["oldObject"] = old
+		}
+		b, err := json.Marshal(rv)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	before := pod(edge, agent, nil)
+	wantDenied(t, "the edge's image swapped", answer(t, "edge swap", w.post(path, update(before, pod(evil, agent, nil)))), decision.CodeImageChanged)
+	wantDenied(t, "the agent's image swapped", answer(t, "agent swap", w.post(path, update(before, pod(edge, evil, nil)))), decision.CodeImageChanged)
+	if res := answer(t, "labels", w.post(path, update(before, pod(edge, agent, map[string]any{"team": "x"})))); !res.Allowed {
+		t.Errorf("a label update: denied %+v", res.Result)
+	}
+	wantDenied(t, "an UPDATE without the old pod", answer(t, "no old", w.post(path, update(nil, pod(edge, agent, nil)))), decision.CodeUnavailable)
+}
+
 // TestHR730_WhatTheWebhookCannotDecideIsDenied: ephemeral containers are
 // always denied; a pod object it cannot read, another resource or
 // operation, or a namespace that is not a DNS label is denied with

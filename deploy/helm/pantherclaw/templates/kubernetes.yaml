@@ -300,9 +300,10 @@ webhooks:
         {{ include "pantherclaw.protectLabel" $ }}: enforce
         {{ include "pantherclaw.orgLabel" $ }}: {{ $org | quote }}
     rules:
+      # UPDATE too: an admitted pod's images cannot change (D1218 H1).
       - apiGroups: [""]
         apiVersions: [v1]
-        operations: [CREATE]
+        operations: [CREATE, UPDATE]
         resources: [pods]
         scope: Namespaced
       - apiGroups: [""]

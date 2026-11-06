@@ -1,6 +1,6 @@
 apiVersion: pantherclaw.range/v1
 id: RT-219
-title: A kube closure does not pass with an open NetworkPolicy, no recent admission decision or a probe that got through
+title: A kube closure does not pass with an open NetworkPolicy, no recent admission decision, a probe that got through or a forged probe target
 category: boundary
 suite: platform
 tier: business
@@ -31,4 +31,11 @@ steps:
     expect:
       outcome: REFUSED
       reason: NOT_ENFORCED
+      decisive_control: HR-742
+  - id: a-forged-probe-target
+    do: kube.probe
+    with: {attack: probe_target_forged}
+    expect:
+      outcome: REFUSED
+      reason: K8S_CLOSURE_REJECTED
       decisive_control: HR-742

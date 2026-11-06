@@ -31,7 +31,9 @@ CREATE POLICY tenant_isolation ON pc.kube_closure_nonces
 CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.kube_closure_nonces
     FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
 
-GRANT SELECT, INSERT ON pc.kube_closure_nonces TO pc_app;
+-- DELETE for the identity janitor, which sweeps nonces expired a minute
+-- ago, used or not (D1218 L2), as it sweeps PAP/1 nonces.
+GRANT SELECT, INSERT, DELETE ON pc.kube_closure_nonces TO pc_app;
 GRANT UPDATE (used_at) ON pc.kube_closure_nonces TO pc_app;
 GRANT SELECT ON pc.kube_closure_nonces TO pc_audit_ro;
 -- +goose StatementBegin

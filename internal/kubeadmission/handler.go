@@ -16,6 +16,7 @@ import (
 	"crypto/subtle"
 	json "encoding/json/v2"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -67,6 +68,8 @@ type Config struct {
 	Clusters    *kube.Directory
 	Pool        *db.Pool
 	EdgeDigests []string
+	// ProbeDigests are admission.probe_image_digests.
+	ProbeDigests []string
 	// Limiter bounds each client address; nil: PerMinute per address.
 	Limiter *httpx.Limiter
 	Clock   clock.Clock
@@ -75,15 +78,16 @@ type Config struct {
 
 // Handler serves the webhook.
 type Handler struct {
-	clusters    *kube.Directory
-	pool        *db.Pool
-	edgeDigests []string
-	limiter     *httpx.Limiter
-	clk         clock.Clock
-	log         *slog.Logger
-	secrets     *secretCache
-	audits      *throttle
-	seen        *throttle
+	clusters     *kube.Directory
+	pool         *db.Pool
+	edgeDigests  []string
+	probeDigests []string
+	limiter      *httpx.Limiter
+	clk          clock.Clock
+	log          *slog.Logger
+	secrets      *secretCache
+	audits       *throttle
+	seen         *throttle
 }
 
 // New returns the webhook handler.
@@ -101,15 +105,35 @@ func New(cfg Config) *Handler {
 		log = slog.New(slog.DiscardHandler)
 	}
 	return &Handler{
-		clusters: cfg.Clusters, pool: cfg.Pool, edgeDigests: cfg.EdgeDigests, limiter: lim, clk: clk, log: log,
+		clusters: cfg.Clusters, pool: cfg.Pool, edgeDigests: cfg.EdgeDigests, probeDigests: cfg.ProbeDigests,
+		limiter: lim, clk: clk, log: log,
 		secrets: &secretCache{entries: map[string]secretEntry{}},
-		audits:  newThrottle(Throttle), seen: newThrottle(Throttle),
+		audits:  newThrottle(Throttle, maxThrottleKeys), seen: newThrottle(Throttle, maxThrottleKeys),
 	}
 }
 
 // Mount adds the route to mux.
 func (h *Handler) Mount(mux *http.ServeMux) {
-	mux.HandleFunc("POST "+Path+"{cluster}/{org}/{secret}", h.serve)
+	mux.HandleFunc("POST "+Path+"{cluster}/{org}/{secret}", h.recovered)
+}
+
+// recovered serves a review and turns a panic into a 500 that logs the
+// route pattern, never the path, which holds the webhook secret (D1218
+// L5). The listener's httpx.Recover does the same; this keeps it so if a
+// middleware ever passes on a copy of the request.
+func (h *Handler) recovered(w http.ResponseWriter, r *http.Request) {
+	defer func(ctx context.Context) {
+		v := recover()
+		if v == nil {
+			return
+		}
+		if v == http.ErrAbortHandler { //nolint:errorlint // sentinel compared by identity, as net/http does
+			panic(v)
+		}
+		h.log.ErrorContext(ctx, "kubeadmission.panic", slog.String("route", r.Pattern), slog.Any("panic", fmt.Sprint(v)))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}(r.Context())
+	h.serve(w, r)
 }
 
 // notFound is every refusal of the path: 404 with an empty body.
@@ -197,7 +221,7 @@ func (h *Handler) evaluate(ctx context.Context, cluster string, org ids.OrgID, r
 	switch {
 	case req.SubResource == "ephemeralcontainers" && req.Operation == review.OperationUpdate:
 		return decision.CodeEphemeral, namespace
-	case req.SubResource != "" || req.Operation != review.OperationCreate:
+	case req.SubResource != "" || (req.Operation != review.OperationCreate && req.Operation != review.OperationUpdate):
 		return decision.CodeUnavailable, namespace
 	}
 	pod, err := review.ParsePod(req.Object)
@@ -211,13 +235,29 @@ func (h *Handler) evaluate(ctx context.Context, cluster string, org ids.OrgID, r
 	if !dnsLabel.MatchString(namespace) {
 		return decision.CodeUnavailable, namespace
 	}
+	if req.Operation == review.OperationUpdate {
+		// An admitted pod's images are fixed (H1): an UPDATE that changes
+		// one is denied; any other UPDATE (labels, annotations,
+		// finalizers, other mutable fields) is allowed and recorded like
+		// an allow.
+		old, err := review.ParsePod(req.OldObject)
+		if err != nil {
+			return decision.CodeUnavailable, namespace
+		}
+		if decision.ImageChanged(old, pod) {
+			return decision.CodeImageChanged, namespace
+		}
+		return "", namespace
+	}
 	entries, err := h.entries(ctx, cluster, org, namespace, decision.ServiceAccount(pod))
 	if err != nil {
 		h.log.WarnContext(ctx, "kubeadmission.lookup_failed", slog.String("cluster", cluster),
 			slog.String("org", org.String()), slog.Any("error", err))
 		return decision.CodeUnavailable, namespace
 	}
-	return decision.Pod(decision.Input{Org: org, Pod: pod, Entries: entries, EdgeDigests: h.edgeDigests}), namespace
+	return decision.Pod(decision.Input{
+		Org: org, Pod: pod, Entries: entries, EdgeDigests: h.edgeDigests, ProbeDigests: h.probeDigests,
+	}), namespace
 }
 
 // entries are the bindings of the active kubernetes entries for the
@@ -259,8 +299,18 @@ func (h *Handler) record(ctx context.Context, cluster string, org ids.OrgID, nam
 	}
 	seenKey := org.String() + "|" + cluster + "|" + namespace + "|" + outcome
 	auditKey := org.String() + "|" + cluster + "|" + namespace + "|" + code
-	writeSeen := h.seen.take(seenKey, now)
-	writeAudit := !allowed && h.audits.take(auditKey, now)
+	writeSeen, seenOver := h.seen.take(seenKey, now)
+	if seenOver {
+		telemetry.KubernetesAdmissionThrottleOverflow(ctx, "seen")
+	}
+	writeAudit := false
+	if !allowed {
+		var auditOver bool
+		writeAudit, auditOver = h.audits.take(auditKey, now)
+		if auditOver {
+			telemetry.KubernetesAdmissionThrottleOverflow(ctx, "audit")
+		}
+	}
 	if !writeSeen && !writeAudit {
 		return nil
 	}
@@ -356,43 +406,64 @@ func (s *secretCache) matches(ctx context.Context, log *slog.Logger, cc kube.Clu
 	return subtle.ConstantTimeCompare(got[:], e.digest[:]) == 1 && e.ok
 }
 
-// throttle lets one key through at most once per every.
+// throttle lets one key through at most once per every. It keeps two
+// generations of keys, rotated once every `every` with no scan: a key is
+// held back while cur or prev saw it within every. cur holds at most limit
+// keys; a new key past that passes without being remembered (an extra
+// write, never a dropped one), so memory stays within twice the limit.
 type throttle struct {
-	mu    sync.Mutex
-	every time.Duration
-	last  map[string]time.Time
+	mu        sync.Mutex
+	every     time.Duration
+	limit     int
+	cur, prev map[string]time.Time
+	rotated   time.Time
 }
 
-// maxThrottleKeys bounds the map; older keys are pruned past it.
+// maxThrottleKeys bounds each generation of a throttle.
 const maxThrottleKeys = 10000
 
-func newThrottle(every time.Duration) *throttle {
-	return &throttle{every: every, last: map[string]time.Time{}}
+func newThrottle(every time.Duration, limit int) *throttle {
+	return &throttle{every: every, limit: limit, cur: map[string]time.Time{}, prev: map[string]time.Time{}}
 }
 
-// take reports whether key may pass at now, and if so records it.
-func (t *throttle) take(key string, now time.Time) bool {
+// take reports whether key may pass at now, and whether it passed without
+// being remembered because the current generation is full.
+func (t *throttle) take(key string, now time.Time) (pass, overflow bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if at, ok := t.last[key]; ok && now.Sub(at) < t.every && !now.Before(at) {
-		return false
+	switch {
+	case t.rotated.IsZero():
+		t.rotated = now
+	case now.Before(t.rotated) || now.Sub(t.rotated) >= 2*t.every:
+		// The clock went back, or both generations are older than every.
+		t.prev, t.cur, t.rotated = map[string]time.Time{}, map[string]time.Time{}, now
+	case now.Sub(t.rotated) >= t.every:
+		t.prev, t.cur, t.rotated = t.cur, map[string]time.Time{}, now
 	}
-	if len(t.last) >= maxThrottleKeys {
-		for k, at := range t.last {
-			if now.Sub(at) >= t.every || now.Before(at) {
-				delete(t.last, k)
-			}
+	for _, m := range []map[string]time.Time{t.cur, t.prev} {
+		if at, ok := m[key]; ok && now.Sub(at) < t.every && !now.Before(at) {
+			return false, false
 		}
 	}
-	t.last[key] = now
-	return true
+	if len(t.cur) >= t.limit {
+		return true, true
+	}
+	t.cur[key] = now
+	return true, false
+}
+
+// size is how many keys the throttle holds.
+func (t *throttle) size() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return len(t.cur) + len(t.prev)
 }
 
 // release forgets a take at now that did not complete.
 func (t *throttle) release(key string, at time.Time) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.last[key].Equal(at) {
-		delete(t.last, key)
+	if t.cur[key].Equal(at) {
+		delete(t.cur, key)
 	}
 }

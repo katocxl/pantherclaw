@@ -109,7 +109,28 @@ type Pod struct {
 	// ImageIDs are status.containerStatuses[].imageID of the app
 	// containers (init containers excluded).
 	ImageIDs []string
+	// Edge is set when the pod runs a native sidecar (an init container
+	// with restartPolicy Always) named pantherclaw-edge: the image id its
+	// status.initContainerStatuses entry reports, empty until it runs.
+	Edge *PodEdge
 }
+
+// PodEdge is a pod's pantherclaw-edge native sidecar.
+type PodEdge struct {
+	ImageID string
+}
+
+// edgeDigest is the sha256 digest an image id names ("sha256:…",
+// "repo@sha256:…" or "docker-pullable://repo@sha256:…"), or "".
+func edgeDigest(imageID string) string {
+	i := strings.LastIndex(imageID, "sha256:")
+	if i < 0 || !digestOnly.MatchString(imageID[i:]) {
+		return ""
+	}
+	return imageID[i:]
+}
+
+var digestOnly = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 // MatchKubernetes applies the Kubernetes preset (HR-144): TokenReview must
 // authenticate the token for the org's audience as the pinned namespace,
@@ -117,8 +138,11 @@ type Pod struct {
 // still reports with the same UID. The release digest comes from that
 // pod's status, never from the workload; an M3 pod has exactly one app
 // container, so the digest is unambiguous (a multi-container pod is
-// refused rather than guessed).
-func MatchKubernetes(b KubernetesBinding, org ids.OrgID, r TokenReview, p Pod) (Match, error) {
+// refused rather than guessed). A pod that runs the pantherclaw-edge native
+// sidecar matches only while the sidecar's running image digest is on
+// edgeDigests (admission.edge_image_digests, G0 M32 D1218 H1): an image
+// swapped in after admission does not attest.
+func MatchKubernetes(b KubernetesBinding, org ids.OrgID, r TokenReview, p Pod, edgeDigests []string) (Match, error) {
 	if err := b.Validate(); err != nil {
 		return Match{}, err
 	}
@@ -139,6 +163,8 @@ func MatchKubernetes(b KubernetesBinding, org ids.OrgID, r TokenReview, p Pod) (
 		return Match{}, rejected("pod phase %q", p.Phase)
 	case len(p.ImageIDs) != 1:
 		return Match{}, rejected("pod has %d app containers; exactly one is required", len(p.ImageIDs))
+	case p.Edge != nil && !slices.Contains(edgeDigests, edgeDigest(p.Edge.ImageID)):
+		return Match{}, rejected("the pod's edge image is not an admitted edge image")
 	}
 	m := imageIDRef.FindStringSubmatch(p.ImageIDs[0])
 	if m == nil {

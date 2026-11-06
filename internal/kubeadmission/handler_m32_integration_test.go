@@ -93,11 +93,15 @@ func agentPod(org ids.OrgID) map[string]any {
 		"metadata": map[string]any{"name": "coder-1", "namespace": "agents"},
 		"spec": map[string]any{
 			"serviceAccountName": "coder", "automountServiceAccountToken": false,
+			"securityContext": map[string]any{"runAsUser": 65532},
 			"initContainers": []any{map[string]any{
 				"name": labels.EdgeContainer, "image": edgeImage, "restartPolicy": "Always",
 				"volumeMounts": []any{map[string]any{"name": "edge-token", "mountPath": "/var/run/pantherclaw/edge"}},
 			}},
-			"containers": []any{map[string]any{"name": "agent", "image": "ghcr.io/acme/agent@sha256:" + strings.Repeat("a", 64)}},
+			"containers": []any{map[string]any{
+				"name": "agent", "image": "ghcr.io/acme/agent@sha256:" + strings.Repeat("a", 64),
+				"securityContext": map[string]any{"runAsUser": 10001},
+			}},
 			"volumes": []any{map[string]any{"name": "edge-token", "projected": map[string]any{"sources": []any{map[string]any{
 				"serviceAccountToken": map[string]any{"path": "token", "audience": labels.AgentAudience(org), "expirationSeconds": 3600},
 			}}}}},
@@ -151,6 +155,16 @@ func TestHR735_DeniesAreAuditedOnceAMinuteAndAllowsOnlySeen(t *testing.T) {
 	}
 	if n, s := w.count(t, allAudits), w.count(t, seenAllowed); n != before || s != 1 {
 		t.Errorf("allows wrote %d ledger entries and %d allowed rows, want none and 1", n-before, s)
+	}
+	// A second code in the same minute is audited on its own (D1218 item 3).
+	escape := agentPod(w.org)
+	escape["spec"].(map[string]any)["hostPID"] = true
+	audits := w.count(t, deniedAudits)
+	for range 2 {
+		wantDenied(t, "a second code", answer(t, "deny", w.post(path, wet(reviewBody(t, review.OperationCreate, "", escape)))), decision.CodePodEscape)
+	}
+	if n := w.count(t, deniedAudits); n != audits+1 {
+		t.Errorf("a second code in the same minute: %d audits, want 1", n-audits)
 	}
 }
 

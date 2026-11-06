@@ -1073,7 +1073,7 @@
     }
   },
   "RT-218": {
-    "digest": "f8d78b3b12db90697a1f3df33251aa9f5a2e194bafe3d3a472dc325e78de6d98",
+    "digest": "af1c5fb368f47df7c9b219b8c68213543fa19fc6e4632acbf907c704f4567a85",
     "tier": "business",
     "attack": [
       "T1562.001"
@@ -1083,7 +1083,7 @@
     }
   },
   "RT-219": {
-    "digest": "51998e0651abbca27af4cb4ba01a19a83342a56ee9f7fdd416d5de76fc9f1217",
+    "digest": "fcbd4e1ffd1e5eb6d4583cb426cc1e446aeb51d6a92024b98e72616b61c290a6",
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own verdict: the server's checks decide a kube closure, not the probe's say-so."
   }
