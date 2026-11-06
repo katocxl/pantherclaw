@@ -4,6 +4,7 @@
 package broker
 
 import (
+	"crypto/fips140"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -146,19 +147,20 @@ func TestHR721_AServiceAccountMintsOnlyAtABoundGoogleEndpoint(t *testing.T) {
 	if n := w.sim.Stats().Calls["token"]; n != 0 {
 		t.Fatalf("the token endpoint was called %d times", n)
 	}
-	_, short := func() (*rsa.PrivateKey, []byte) {
-		k, err := rsa.GenerateKey(rand.Reader, 1024)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return k, pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(k)})
-	}()
-	for name, mut := range map[string]func(*domain.GoogleServiceAccount){
+	bad := map[string]func(*domain.GoogleServiceAccount){
 		"another endpoint": func(g *domain.GoogleServiceAccount) { g.TokenURI = "https://oauth2.attacker.example/token" },
 		"no scope":         func(g *domain.GoogleServiceAccount) { g.Scopes = nil },
 		"foreign scope":    func(g *domain.GoogleServiceAccount) { g.Scopes = []string{"https://attacker.example/auth/all"} },
-		"short key":        func(g *domain.GoogleServiceAccount) { g.PrivateKey = short },
-	} {
+	}
+	// A 1024-bit key cannot even be generated in FIPS 140-only mode (task
+	// test:fips); everywhere else the short key must be refused.
+	if k, err := rsa.GenerateKey(rand.Reader, 1024); err == nil {
+		short := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(k)})
+		bad["short key"] = func(g *domain.GoogleServiceAccount) { g.PrivateKey = short }
+	} else if !fips140.Enabled() {
+		t.Fatal(err)
+	}
+	for name, mut := range bad {
 		sa := w.sa
 		mut(&sa)
 		if _, err := MintServiceAccountToken(t.Context(), w.client, w.hosts, sa, time.Now()); !errors.Is(err, domain.ErrGoogleServiceAccount) {
