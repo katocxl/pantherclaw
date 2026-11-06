@@ -29,8 +29,8 @@ const KindSnowflakeKeypair = "snowflake_keypair"
 const (
 	SnowflakeKeypairHeader    = "Authorization"
 	SnowflakeKeypairScheme    = "Bearer"
-	SnowflakeTokenTypeHeader  = "X-Snowflake-Authorization-Token-Type"
-	SnowflakeTokenTypeKeypair = "KEYPAIR_JWT"
+	SnowflakeTokenTypeHeader  = "X-Snowflake-Authorization-Token-Type" //nolint:gosec // G101: a header name, not a credential
+	SnowflakeTokenTypeKeypair = "KEYPAIR_JWT"                          //nolint:gosec // G101: a token type, not a credential
 )
 
 // ErrSnowflakeKeypair reports a key-pair credential that cannot be used.

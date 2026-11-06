@@ -17,7 +17,7 @@ const (
 	ProtectLabel = "pantherclaw.dev/protect"
 	// ProtectEnforce is ProtectLabel's only value.
 	ProtectEnforce = "enforce"
-	// OrgLabel names the org (its UUID) a protected namespace belongs to.
+	// OrgLabel names the org (its UUID) an enforced namespace belongs to.
 	OrgLabel = "pantherclaw.dev/org"
 )
 
@@ -32,6 +32,11 @@ const (
 	// certificate to (ca.crt) and the app container reads it from.
 	EdgeCAMount = "/pc-edge"
 )
+
+// ProbeControlServiceAccount is the service account of the chart's control
+// probe in the release namespace: the only one a control closure is
+// accepted from (G0 M32 D1218 M2).
+const ProbeControlServiceAccount = "pantherclaw-probe-control"
 
 // Token audience prefixes; the org id follows.
 const (

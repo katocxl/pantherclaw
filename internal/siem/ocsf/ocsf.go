@@ -10,7 +10,15 @@
 // Class map (D36): decisions → API Activity (6003) with authorizations[];
 // alerts → Detection Finding (2004); incidents and cases → Incident
 // Finding (2005); audit of a person's account → Account Change (3001),
-// other audit → API Activity (6003); everything else → Base Event (0).
+// signing in → Authentication (3002); audit of agent identity protection
+// (D1205: the lifecycle of an agent's and an instance's identity, its
+// tokens, refused token or code reuse, and the trusted issuers, identity
+// providers and clients that vouch for who an agent is or acts for) →
+// Account Change (3001), Authentication (3002) or Entity Management
+// (3004), all in the Identity & Access Management category; other audit →
+// API Activity (6003); everything else → Base Event (0). Runtime firewall
+// decisions stay API Activity: identity protection says which agent is
+// acting and for whom, the firewall decides what it may do.
 // Each event carries its actor, the decision and reason, the policy
 // version, effects, coverage and uncertainty when the feed has them, and
 // never a payload or a secret: the feed carries none (D2).
@@ -120,6 +128,7 @@ const (
 	classIncident        = 2005
 	classAccountChange   = 3001
 	classAuthentication  = 3002
+	classEntityMgmt      = 3004
 	classAPIActivity     = 6003
 	categoryFindings     = 2
 	categoryIAM          = 3
@@ -131,6 +140,7 @@ const (
 	activityOther        = 99
 	accountEnable        = 2
 	accountDisable       = 5
+	accountDelete        = 6
 	accountAttach        = 7
 	accountDetach        = 8
 	accountMFAEnable     = 10
@@ -138,6 +148,12 @@ const (
 	authnLogon           = 1
 	authnLogoff          = 2
 	authnTicket          = 3
+	entityCreate         = 1
+	entityUpdate         = 3
+	entityDelete         = 4
+	entityDisable        = 9
+	entityActivate       = 10
+	entityDeactivate     = 11
 	findingUpdate        = 2
 	findingClose         = 3
 	findingStatusNew     = 1
@@ -182,6 +198,7 @@ type Record struct {
 	SrcEndpoint    *Endpoint       `json:"src_endpoint,omitzero"`
 	Authorizations []Authorization `json:"authorizations,omitzero"`
 	User           *User           `json:"user,omitzero"`
+	Entity         *Entity         `json:"entity,omitzero"`
 	FindingInfo    *FindingInfo    `json:"finding_info,omitzero"`
 	FindingList    []FindingInfo   `json:"finding_info_list,omitzero"`
 	Resources      []Resource      `json:"resources,omitzero"`
@@ -215,6 +232,13 @@ type Actor struct {
 type User struct {
 	UID    string `json:"uid"`
 	Type   string `json:"type,omitzero"`
+	TypeID int    `json:"type_id"`
+}
+
+// Entity is the OCSF managed entity object of an Entity Management event.
+type Entity struct {
+	UID    string `json:"uid"`
+	Type   string `json:"type"`
 	TypeID int    `json:"type_id"`
 }
 
@@ -364,6 +388,8 @@ func Map(e Event, productVersion string) Record {
 		mapDetection(&r, e)
 	case class == ClassIncidents:
 		mapIncident(&r, e)
+	case class == ClassAudit && isAgentIdentity(e.Kind):
+		mapAgentIdentity(&r, e)
 	case class == ClassAudit && hasAnyPrefix(e.Kind, accountKinds):
 		mapAccountChange(&r, e)
 	case class == ClassAudit && hasAnyPrefix(e.Kind, authnKinds):
@@ -429,6 +455,105 @@ func mapAuthentication(r *Record, e Event) {
 	r.StatusID, r.Status = statusOf(e.Outcome)
 	r.User = subjectUser(e)
 	r.Message = e.Kind
+}
+
+// identityEvent is how one audit kind of agent identity protection maps
+// to an Identity & Access Management class (D1205).
+type identityEvent struct {
+	class, activity int
+	activityName    string
+	// entity is the managed entity's type, for Entity Management.
+	entity string
+	// refused: the entry records a refused use (a reused code, refresh
+	// token or enrolment token, a key no admitted instance holds), so its
+	// status is Failure.
+	refused bool
+}
+
+// agentIdentityKinds are the audit kinds of agent identity protection
+// (Badge; D1205), keyed without the "audit." prefix: the lifecycle of an
+// agent's and an instance's identity (Account Change), its tokens and
+// refused reuse (Authentication), and the trusted issuers, identity
+// providers and clients that vouch for who an agent is or acts for (Entity
+// Management). Runtime firewall audit (grants, guardrails, policies,
+// connections) is not here: it stays API Activity.
+var agentIdentityKinds = map[string]identityEvent{
+	auditkind.AgentsAgentCreated:             {class: classAccountChange, activity: activityCreate, activityName: "Create"},
+	auditkind.AgentsAgentSuspended:           {class: classAccountChange, activity: accountDisable, activityName: "Disable"},
+	auditkind.AgentsAgentRetired:             {class: classAccountChange, activity: accountDelete, activityName: "Delete"},
+	auditkind.IdentityEnrollmentTokenCreated: {class: classAccountChange, activity: activityOther, activityName: "Other"},
+	auditkind.IdentityInstanceEnrolled:       {class: classAccountChange, activity: activityCreate, activityName: "Create"},
+	auditkind.IdentityInstanceAdmitted:       {class: classAccountChange, activity: accountEnable, activityName: "Enable"},
+	auditkind.IdentityInstanceAutoAdmitted:   {class: classAccountChange, activity: accountEnable, activityName: "Enable"},
+	auditkind.IdentityInstanceRejected:       {class: classAccountChange, activity: accountDisable, activityName: "Disable"},
+	auditkind.IdentityInstanceRevoked:        {class: classAccountChange, activity: accountDelete, activityName: "Delete"},
+
+	auditkind.IdaccessTokenIssued:            {class: classAuthentication, activity: authnTicket, activityName: "Authentication Ticket"},
+	auditkind.IdaccessCodeReuse:              {class: classAuthentication, activity: activityOther, activityName: "Other", refused: true},
+	auditkind.IdaccessRefreshReuse:           {class: classAuthentication, activity: activityOther, activityName: "Other", refused: true},
+	auditkind.SecurityEnrollmentTokenReused:  {class: classAuthentication, activity: activityOther, activityName: "Other", refused: true},
+	auditkind.IdentityWorkloadDiscovered:     {class: classAuthentication, activity: activityOther, activityName: "Other", refused: true},
+	auditkind.SecurityWorkloadProofRefused:   {class: classAuthentication, activity: activityOther, activityName: "Other", refused: true},
+	auditkind.SecurityInstanceNetworkChanged: {class: classAuthentication, activity: activityOther, activityName: "Other"},
+
+	auditkind.IdentityIssuerProposed:        {class: classEntityMgmt, activity: entityCreate, activityName: "Create", entity: "trusted_issuer"},
+	auditkind.IdentityIssuerActivated:       {class: classEntityMgmt, activity: entityActivate, activityName: "Activate", entity: "trusted_issuer"},
+	auditkind.IdentityIssuerNarrowed:        {class: classEntityMgmt, activity: entityUpdate, activityName: "Update", entity: "trusted_issuer"},
+	auditkind.IdentityIssuerDisabled:        {class: classEntityMgmt, activity: entityDisable, activityName: "Disable", entity: "trusted_issuer"},
+	auditkind.IdentityIssuerWithdrawn:       {class: classEntityMgmt, activity: entityDelete, activityName: "Delete", entity: "trusted_issuer"},
+	auditkind.IdentityProviderCreated:       {class: classEntityMgmt, activity: entityCreate, activityName: "Create", entity: "identity_provider"},
+	auditkind.IdentityProviderActivated:     {class: classEntityMgmt, activity: entityActivate, activityName: "Activate", entity: "identity_provider"},
+	auditkind.IdentityProviderDisabled:      {class: classEntityMgmt, activity: entityDisable, activityName: "Disable", entity: "identity_provider"},
+	auditkind.IdentityProviderLapsed:        {class: classEntityMgmt, activity: entityDeactivate, activityName: "Deactivate", entity: "identity_provider"},
+	auditkind.IdentityProviderOwnOnlySet:    {class: classEntityMgmt, activity: entityUpdate, activityName: "Update", entity: "identity_provider"},
+	auditkind.IdaccessIssuerDisabled:        {class: classEntityMgmt, activity: entityDisable, activityName: "Disable", entity: "assertion_issuer"},
+	auditkind.IdaccessClientDocumentChanged: {class: classEntityMgmt, activity: entityUpdate, activityName: "Update", entity: "oauth_client"},
+	auditkind.IdaccessClientRemoved:         {class: classEntityMgmt, activity: entityDelete, activityName: "Delete", entity: "oauth_client"},
+	auditkind.IdaccessMcpClientRemoved:      {class: classEntityMgmt, activity: entityDelete, activityName: "Delete", entity: "mcp_client"},
+	auditkind.IdaccessMcpAccessDisabled:     {class: classEntityMgmt, activity: entityDisable, activityName: "Disable", entity: "mcp_access"},
+	auditkind.IdaccessConsentGiven:          {class: classEntityMgmt, activity: entityCreate, activityName: "Create", entity: "consent"},
+	auditkind.IdaccessLapsed:                {class: classEntityMgmt, activity: entityDeactivate, activityName: "Deactivate", entity: "idp_access"},
+	// A gateway's kubernetes binding is the TokenReview trust its replicas
+	// enroll by (G0 M32 D968; D1206 M32-1).
+	auditkind.GatewayKubernetesBindingSet:     {class: classEntityMgmt, activity: entityCreate, activityName: "Create", entity: "kubernetes_binding"},
+	auditkind.GatewayKubernetesBindingCleared: {class: classEntityMgmt, activity: entityDelete, activityName: "Delete", entity: "kubernetes_binding"},
+}
+
+func isAgentIdentity(kind string) bool {
+	_, ok := agentIdentityKinds[strings.TrimPrefix(kind, "audit.")]
+	return ok
+}
+
+// mapAgentIdentity maps an audit entry of agent identity protection.
+func mapAgentIdentity(r *Record, e Event) {
+	m := agentIdentityKinds[strings.TrimPrefix(e.Kind, "audit.")]
+	r.ClassUID, r.CategoryUID, r.CategoryName = m.class, categoryIAM, "Identity & Access Management"
+	r.ActivityID, r.ActivityName = m.activity, m.activityName
+	r.StatusID, r.Status = statusOf(e.Outcome)
+	if m.refused {
+		r.StatusID, r.Status = statusFailure, "Failure"
+	}
+	switch m.class {
+	case classAccountChange:
+		r.ClassName, r.User = "Account Change", identityUser(e)
+	case classAuthentication:
+		r.ClassName, r.User = "Authentication", identityUser(e)
+	default:
+		r.ClassName = "Entity Management"
+		r.Entity = &Entity{UID: nonEmpty(e.Attrs["object_id"], "unknown"), Type: m.entity, TypeID: 99}
+	}
+	r.Message = e.Kind
+}
+
+// identityUser is whose identity the entry is about: the agent instance,
+// else the agent, else the person or service account.
+func identityUser(e Event) *User {
+	for _, t := range []reflexdomain.SubjectType{reflexdomain.SubjectInstance, reflexdomain.SubjectAgent} {
+		if id, ok := e.Subject(t); ok {
+			return userOf(string(t), id)
+		}
+	}
+	return subjectUser(e)
 }
 
 // subjectUser is the person or service account the entry is about.

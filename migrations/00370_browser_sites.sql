@@ -21,7 +21,7 @@ $$;
 -- +goose StatementEnd
 
 CREATE TABLE pc.browser_sites (
-    id                 uuid        NOT NULL PRIMARY KEY,
+    id                 uuid        NOT NULL,
     org_id             uuid        NOT NULL REFERENCES pc.orgs (id),
     -- A lower-case DNS name of at least two labels: no IP, no port.
     host               text        NOT NULL CHECK (char_length(host) <= 253
@@ -33,6 +33,7 @@ CREATE TABLE pc.browser_sites (
     note               text        NOT NULL DEFAULT '' CHECK (char_length(note) <= 256),
     created_at         timestamptz NOT NULL DEFAULT now(),
     created_by         text        NOT NULL,
+    PRIMARY KEY (org_id, id),
     UNIQUE (org_id, host, include_subdomains)
 );
 

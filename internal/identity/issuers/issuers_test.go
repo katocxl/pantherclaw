@@ -240,13 +240,13 @@ func pod() issuers.Pod {
 // TestHR144_KubernetesPresetRules: the token must be for this org, this
 // service account (by UID) and a live pod; the digest comes from the pod.
 func TestHR144_KubernetesPresetRules(t *testing.T) {
-	m, err := issuers.MatchKubernetes(k8sBinding(), org, review(), pod())
+	m, err := issuers.MatchKubernetes(k8sBinding(), org, review(), pod(), nil)
 	if err != nil || m.ReleaseDigest != digest || m.Binding["service_account_uid"] == "" {
 		t.Fatalf("match = %+v, %v", m, err)
 	}
 	pinned := k8sBinding()
 	pinned.ImageRepositories, pinned.ImageDigests = []string{"ghcr.io/acme/agent"}, []string{digest}
-	if _, err := issuers.MatchKubernetes(pinned, org, review(), pod()); err != nil {
+	if _, err := issuers.MatchKubernetes(pinned, org, review(), pod(), nil); err != nil {
 		t.Fatalf("pinned image: %v", err)
 	}
 	for name, tc := range map[string]struct {
@@ -275,7 +275,40 @@ func TestHR144_KubernetesPresetRules(t *testing.T) {
 		if tc.p != nil {
 			tc.p(&p)
 		}
-		if _, err := issuers.MatchKubernetes(tc.b, org, r, p); !errors.Is(err, issuers.ErrRejected) {
+		if _, err := issuers.MatchKubernetes(tc.b, org, r, p, nil); !errors.Is(err, issuers.ErrRejected) {
+			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+}
+
+// TestHR733_APodRunningTheEdgeAttestsOnlyWithAnAdmittedEdgeImage: a pod
+// with the pantherclaw-edge native sidecar matches while the sidecar's
+// running image is on the admitted edge digests; a swapped image, one not
+// yet running, or no admitted list refuses it (G0 M32 D1218 H1). A pod
+// without the edge attests as before.
+func TestHR733_APodRunningTheEdgeAttestsOnlyWithAnAdmittedEdgeImage(t *testing.T) {
+	edge := "sha256:" + strings.Repeat("e", 64)
+	admitted := []string{edge}
+	withEdge := func(imageID string) issuers.Pod {
+		p := pod()
+		p.Edge = &issuers.PodEdge{ImageID: imageID}
+		return p
+	}
+	if _, err := issuers.MatchKubernetes(k8sBinding(), org, review(), withEdge("ghcr.io/katocxl/pantherclaw-edge@"+edge), admitted); err != nil {
+		t.Fatalf("the admitted edge: %v", err)
+	}
+	if _, err := issuers.MatchKubernetes(k8sBinding(), org, review(), pod(), admitted); err != nil {
+		t.Fatalf("a pod without the edge: %v", err)
+	}
+	for name, tc := range map[string]struct {
+		p    issuers.Pod
+		list []string
+	}{
+		"a swapped edge image":    {withEdge("evil.example/edge@sha256:" + strings.Repeat("b", 64)), admitted},
+		"an edge not yet running": {withEdge(""), admitted},
+		"no admitted edge list":   {withEdge("ghcr.io/katocxl/pantherclaw-edge@" + edge), nil},
+	} {
+		if _, err := issuers.MatchKubernetes(k8sBinding(), org, review(), tc.p, tc.list); !errors.Is(err, issuers.ErrRejected) {
 			t.Errorf("%s: err = %v", name, err)
 		}
 	}

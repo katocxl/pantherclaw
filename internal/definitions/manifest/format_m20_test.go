@@ -104,9 +104,10 @@ func TestHR523_ACoverageDeclarationWidensNothing(t *testing.T) {
 }
 
 // TestHR526_JSONBodyKeysFollowTheBracketGrammar: a JSON body's bracket keys
-// nest objects only: a [] list, a digit-only name, more than three levels,
-// an unpaired bracket or a key that is both a value and a parent refuses
-// the package; MCP arguments stay flat (G0 M20 D260).
+// follow the grammar: a [] list, an index beside a member name (an object
+// and an array at once), more than eight names (G0 M31 D950 widened the
+// three levels of G0 M20 D260), an unpaired bracket or a key that is both
+// a value and a parent refuses the package; MCP arguments stay flat.
 //
 // Covers: F756
 func TestHR526_JSONBodyKeysFollowTheBracketGrammar(t *testing.T) {
@@ -121,7 +122,7 @@ func TestHR526_JSONBodyKeysFollowTheBracketGrammar(t *testing.T) {
 	for name, extra := range map[string]string{
 		"list":             "          fields[labels][]: params.issue_type\n",
 		"digits":           "          fields[0]: params.issue_type\n",
-		"too deep":         "          fields[a][b][c]: params.issue_type\n",
+		"too deep":         "          fields[a][b][c][d][e][f][g][h]: params.issue_type\n",
 		"unpaired":         "          fields[a: params.issue_type\n",
 		"value and parent": "          fields: params.issue_type\n",
 		"bad name":         "          fields[a b]: params.issue_type\n",

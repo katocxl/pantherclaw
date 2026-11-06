@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/identity/issuers"
+	"github.com/katocxl/pantherclaw/internal/kube/labels"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 )
@@ -171,11 +172,21 @@ func (c *Client) Pod(ctx context.Context, clusterName, namespace, name string) (
 			Name      string `json:"name"`
 			UID       string `json:"uid"`
 		} `json:"metadata"`
+		Spec struct {
+			InitContainers []struct {
+				Name          string `json:"name"`
+				RestartPolicy string `json:"restartPolicy"`
+			} `json:"initContainers"`
+		} `json:"spec"`
 		Status struct {
 			Phase             string `json:"phase"`
 			ContainerStatuses []struct {
 				ImageID string `json:"imageID"`
 			} `json:"containerStatuses"`
+			InitContainerStatuses []struct {
+				Name    string `json:"name"`
+				ImageID string `json:"imageID"`
+			} `json:"initContainerStatuses"`
 		} `json:"status"`
 	}
 	path := "/api/v1/namespaces/" + url.PathEscape(namespace) + "/pods/" + url.PathEscape(name)
@@ -187,6 +198,17 @@ func (c *Client) Pod(ctx context.Context, clusterName, namespace, name string) (
 	p := issuers.Pod{Namespace: out.Metadata.Namespace, Name: out.Metadata.Name, UID: out.Metadata.UID, Phase: out.Status.Phase}
 	for _, cs := range out.Status.ContainerStatuses {
 		p.ImageIDs = append(p.ImageIDs, cs.ImageID)
+	}
+	// The edge's native sidecar, if the pod runs one (G0 M32 D1218 H1).
+	for _, ic := range out.Spec.InitContainers {
+		if ic.Name == labels.EdgeContainer && ic.RestartPolicy == "Always" {
+			p.Edge = &issuers.PodEdge{}
+			for _, s := range out.Status.InitContainerStatuses {
+				if s.Name == ic.Name {
+					p.Edge.ImageID = s.ImageID
+				}
+			}
+		}
 	}
 	return p, nil
 }

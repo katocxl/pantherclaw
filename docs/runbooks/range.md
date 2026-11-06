@@ -50,6 +50,9 @@ pclaw redteam run --suite coding-agent \
   [--grant <grant id>] [--interactive] [--baseline <pack.zip>] [--out <dir>]
 ```
 
+- `--role ROLE=CONNECTION` binds a scenario role to a range connection, and each bound role is a capability. `--provides` names the other capabilities the range has set up, comma-separated (default: the bound roles). A scenario whose `requires` names a capability the range does not provide is `SKIPPED` ("driver lacks capability X"). Besides the simulators (`github`, `payments`, `mcp`):
+  - `share`: the range grant names `github.repo.visibility.update` and `github.repo.transfer` (RT-201).
+  - `agent_config`: the range has the agent-configuration hook connection, `pc.shell` and its hook connection (RT-203).
 - `--provides browser_agent` (M33, RT-220..RT-224): the range has the hook connections for the roles `pc-browser` (`pc.browser`) and `pc-computer` (`pc.computer`) on its gateway (bind them with `--role pc-browser=CONNECTION --role pc-computer=CONNECTION`; a role named `browser` would also turn on the console capability `browser`), the range grant names every `pc.browser` and `pc.computer` operation, and the range's browser site list has `docs.example.com` and `shop.example.com` with its subdomains, marked for the cloaking compare. Without it those scenarios are `SKIPPED` ("driver lacks capability browser_agent").
 
 - `--suite` is `coding-agent`, `platform` or `all`. The platform suite needs Business (`EDITION_REQUIRED` otherwise).

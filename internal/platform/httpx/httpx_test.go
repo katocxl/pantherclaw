@@ -240,3 +240,21 @@ func TestServerTLSConfigIsTLS13WithPQ(t *testing.T) {
 		t.Fatalf("TLS profile = %+v", c)
 	}
 }
+
+// TestHR731_APanicLogsTheRouteNotThePath: a panic in a route whose path
+// holds a secret, like the admission webhook's, logs the route pattern and
+// never the path (G0 M32 D1218 L5).
+func TestHR731_APanicLogsTheRouteNotThePath(t *testing.T) {
+	var logs bytes.Buffer
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /admission/v1/{cluster}/{org}/{secret}", func(http.ResponseWriter, *http.Request) { panic("boom") })
+	h := Recover(pclog.New(&logs, pclog.Options{}), mux)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/admission/v1/prod/org/the-webhook-secret-value", nil))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status %d", rec.Code)
+	}
+	if strings.Contains(logs.String(), "the-webhook-secret-value") || !strings.Contains(logs.String(), "/admission/v1/{cluster}/{org}/{secret}") {
+		t.Errorf("panic log %q", logs.String())
+	}
+}

@@ -315,7 +315,7 @@ func validateGraphQL(at string, h *HTTPDispatch) error {
 }
 
 // mailAddressUnsafe are the bytes a mail address in an rfc5322-raw message
-// never holds: line breaks (a header injection, PARAM_INVALID) and the
+// never holds: line breaks (a header injection) and the
 // separators that would add a recipient the list does not name.
 const mailAddressUnsafe = "\r\n,;<>()\"\\ \t"
 
@@ -337,12 +337,12 @@ func (d *Definition) CheckMailHeaders(vals Values) error {
 		case slices.Contains(mailLists, k):
 			for _, a := range v.List {
 				if a == "" || strings.ContainsAny(a, mailAddressUnsafe) {
-					return ambiguous("%s: a mail address holds a line break or a separator (PARAM_INVALID)", name)
+					return ambiguous("%s: a mail address holds a line break or a separator", name)
 				}
 			}
 		case k == MailSubject:
 			if strings.ContainsAny(v.Str, "\r\n") {
-				return ambiguous("%s: a line break in the subject (PARAM_INVALID)", name)
+				return ambiguous("%s: a line break in the subject", name)
 			}
 		}
 	}

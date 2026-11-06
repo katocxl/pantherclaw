@@ -475,6 +475,7 @@ var all = []string{
 	SecurityKillSwitchRestored,
 	SecurityStripeLivemode,
 	SecurityVariantSuspected,
+	SecurityWorkloadProofRefused,
 	SecurityLogAcknowledged,
 	SelfMcpRead,
 	SiemDestinationActivated,

@@ -13,7 +13,8 @@ ALTER TABLE pc.trusted_issuers ADD COLUMN run_grant_id uuid;
 -- table, so the foreign key holds at once and its lock is short.
 -- squawk-ignore adding-foreign-key-constraint
 ALTER TABLE pc.trusted_issuers
-    ADD CONSTRAINT trusted_issuers_run_grant_fkey FOREIGN KEY (org_id, run_grant_id) REFERENCES pc.grants (org_id, id);
+    -- squawk-ignore constraint-missing-not-valid, adding-foreign-key-constraint
+    ADD CONSTRAINT trusted_issuers_run_grant_fkey FOREIGN KEY (org_id, run_grant_id) REFERENCES pc.grants (org_id, id) DEFERRABLE INITIALLY IMMEDIATE;
 
 -- +goose Down
 ALTER TABLE pc.trusted_issuers DROP CONSTRAINT trusted_issuers_run_grant_fkey;

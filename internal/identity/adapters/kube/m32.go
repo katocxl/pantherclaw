@@ -18,6 +18,8 @@ type PodImages struct {
 	// Found is false for a missing pod.
 	Found bool
 	Phase string
+	// HostIP is status.hostIP, the node the pod runs on (D1218 M2).
+	HostIP string
 	// Apps are the app containers by name, Inits the init containers.
 	Apps  map[string]string
 	Inits map[string]InitImage
@@ -51,6 +53,7 @@ func (c *Client) PodImages(ctx context.Context, clusterName, namespace, name str
 		} `json:"spec"`
 		Status struct {
 			Phase                 string   `json:"phase"`
+			HostIP                string   `json:"hostIP"`
 			ContainerStatuses     []status `json:"containerStatuses"`
 			InitContainerStatuses []status `json:"initContainerStatuses"`
 		} `json:"status"`
@@ -61,7 +64,7 @@ func (c *Client) PodImages(ctx context.Context, clusterName, namespace, name str
 	} else if err != nil {
 		return PodImages{}, err
 	}
-	p := PodImages{Found: true, Phase: out.Status.Phase, Apps: map[string]string{}, Inits: map[string]InitImage{}}
+	p := PodImages{Found: true, Phase: out.Status.Phase, HostIP: out.Status.HostIP, Apps: map[string]string{}, Inits: map[string]InitImage{}}
 	for _, s := range out.Status.ContainerStatuses {
 		p.Apps[s.Name] = s.ImageID
 	}

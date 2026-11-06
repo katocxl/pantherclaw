@@ -8,7 +8,8 @@
 package review
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 )
 
@@ -63,8 +64,8 @@ type Request struct {
 	Namespace   string               `json:"namespace"`
 	Operation   string               `json:"operation"`
 	UserInfo    UserInfo             `json:"userInfo"`
-	Object      json.RawMessage      `json:"object"`
-	OldObject   json.RawMessage      `json:"oldObject"`
+	Object      jsontext.Value       `json:"object"`
+	OldObject   jsontext.Value       `json:"oldObject"`
 	DryRun      *bool                `json:"dryRun"`
 }
 
@@ -74,7 +75,7 @@ func (r *Request) IsDryRun() bool { return r.DryRun != nil && *r.DryRun }
 
 // Status is the reason a request was denied (a metav1.Status subset).
 type Status struct {
-	Code    int32  `json:"code,omitempty"`
+	Code    int32  `json:"code,omitzero"`
 	Message string `json:"message,omitempty"`
 	// Reason carries the webhook's refusal code (K8S_*).
 	Reason string `json:"reason,omitempty"`
@@ -127,15 +128,36 @@ type Pod struct {
 
 // PodSpec is the part of a pod spec the webhook reads.
 type PodSpec struct {
-	ServiceAccountName           string      `json:"serviceAccountName"`
-	AutomountServiceAccountToken *bool       `json:"automountServiceAccountToken"`
-	HostNetwork                  bool        `json:"hostNetwork"`
-	HostPID                      bool        `json:"hostPID"`
-	HostIPC                      bool        `json:"hostIPC"`
-	Containers                   []Container `json:"containers"`
-	InitContainers               []Container `json:"initContainers"`
-	EphemeralContainers          []Container `json:"ephemeralContainers"`
-	Volumes                      []Volume    `json:"volumes"`
+	ServiceAccountName           string `json:"serviceAccountName"`
+	AutomountServiceAccountToken *bool  `json:"automountServiceAccountToken"`
+	HostNetwork                  bool   `json:"hostNetwork"`
+	HostPID                      bool   `json:"hostPID"`
+	HostIPC                      bool   `json:"hostIPC"`
+	// ShareProcessNamespace puts every container in one PID namespace.
+	ShareProcessNamespace *bool               `json:"shareProcessNamespace"`
+	SecurityContext       *PodSecurityContext `json:"securityContext"`
+	Containers            []Container         `json:"containers"`
+	InitContainers        []Container         `json:"initContainers"`
+	EphemeralContainers   []Container         `json:"ephemeralContainers"`
+	Volumes               []Volume            `json:"volumes"`
+}
+
+// PodSecurityContext is the part of a pod's security context the webhook
+// reads: the user its containers run as unless they set their own.
+type PodSecurityContext struct {
+	RunAsUser *int64 `json:"runAsUser"`
+}
+
+// RunAsUser is the user c runs as: its own runAsUser, else the pod's; nil
+// when neither sets one (the image's user, which the webhook cannot see).
+func (p *Pod) RunAsUser(c Container) *int64 {
+	if c.SecurityContext != nil && c.SecurityContext.RunAsUser != nil {
+		return c.SecurityContext.RunAsUser
+	}
+	if p.Spec.SecurityContext != nil {
+		return p.Spec.SecurityContext.RunAsUser
+	}
+	return nil
 }
 
 // RestartPolicyAlways on an init container makes it a native sidecar.
@@ -158,7 +180,17 @@ func (c Container) IsSidecar() bool {
 // SecurityContext is the part of a container's security context the
 // webhook reads.
 type SecurityContext struct {
-	Privileged *bool `json:"privileged"`
+	Privileged               *bool         `json:"privileged"`
+	AllowPrivilegeEscalation *bool         `json:"allowPrivilegeEscalation"`
+	Capabilities             *Capabilities `json:"capabilities"`
+	ProcMount                *string       `json:"procMount"`
+	RunAsUser                *int64        `json:"runAsUser"`
+}
+
+// Capabilities are a container's added and dropped Linux capabilities.
+type Capabilities struct {
+	Add  []string `json:"add"`
+	Drop []string `json:"drop"`
 }
 
 // VolumeMount mounts a volume into a container.
@@ -197,7 +229,7 @@ type ServiceAccountTokenProjection struct {
 }
 
 // ParsePod decodes a review's object as a pod.
-func ParsePod(raw json.RawMessage) (*Pod, error) {
+func ParsePod(raw jsontext.Value) (*Pod, error) {
 	if len(raw) == 0 {
 		return nil, ErrMalformed
 	}

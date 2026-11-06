@@ -30,7 +30,9 @@ type ProbeResult struct {
 	Role     string `json:"role"`
 	Expect   string `json:"expect"`
 	Observed string `json:"observed"`
-	Detail   string `json:"detail,omitempty"`
+	// Target is the probe's catalog target (D1218a N1).
+	Target string `json:"target,omitempty"`
+	Detail string `json:"detail,omitempty"`
 }
 
 // Passed reports whether the result is the expected one.

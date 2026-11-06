@@ -32,6 +32,21 @@ VALUES (sqlc.arg(org_id), sqlc.arg(nonce), sqlc.arg(cluster), sqlc.arg(namespace
     now() + interval '15 minutes')
 RETURNING *;
 
+-- Serialises nonce issuance for one instance, so the outstanding-nonce cap
+-- holds under concurrent requests (D1218 L2).
+-- name: LockKubeClosureNonces :exec
+SELECT pg_advisory_xact_lock(hashtextextended(
+    (sqlc.arg(org_id)::uuid)::text || '/' || (sqlc.arg(instance_id)::uuid)::text, 365));
+
+-- The instance's unused, unexpired nonces (D1218 L2: at most 8).
+-- name: CountOutstandingKubeClosureNonces :one
+SELECT count(*)::int FROM pc.kube_closure_nonces
+WHERE org_id = sqlc.arg(org_id) AND instance_id = sqlc.arg(instance_id) AND used_at IS NULL AND expires_at > now();
+
+-- Janitor: nonces expired more than a minute ago, used or not (D1218 L2).
+-- name: DeleteExpiredKubeClosureNonces :execrows
+DELETE FROM pc.kube_closure_nonces WHERE org_id = sqlc.arg(org_id) AND expires_at < now() - interval '1 minute';
+
 -- Consumes a nonce: the row comes back only when it was unused, is
 -- unexpired, and names the same instance and namespace.
 -- name: ConsumeKubeClosureNonce :one

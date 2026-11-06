@@ -49,6 +49,10 @@ type Attestors struct {
 	// Kube calls the clusters that Clusters allows for an org.
 	Kube     ClusterReviewer
 	Clusters Clusters
+	// EdgeImageDigests are admission.edge_image_digests: a pod that runs
+	// the pantherclaw-edge native sidecar attests only while the sidecar's
+	// running image is one of them (G0 M32 D1218 H1).
+	EdgeImageDigests []string
 	// GitLab is the operator-configured GitLab instances (D119).
 	GitLab IssuerDirectory
 	// SPIFFE is the operator-configured trust domains, keyed by name (D120).
@@ -615,7 +619,7 @@ func (s *Service) attestKubernetes(ctx context.Context, org ids.OrgID, token str
 			return nil, attErr(err)
 		}
 		for _, e := range entries {
-			m, err := issuers.MatchKubernetes(e.b, org, rv, pod)
+			m, err := issuers.MatchKubernetes(e.b, org, rv, pod, s.att.EdgeImageDigests)
 			if err != nil {
 				last = err
 				continue

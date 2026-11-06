@@ -260,7 +260,9 @@ func TestScanAllUsers(t *testing.T) {
 		}
 	}
 	slices.Sort(names)
-	if want := []string{"hook:guard.sh", "mcp_server:tickets"}; !slices.Equal(names, want) {
+	// ann's mcp.json and bob's settings.json are also reported by their
+	// digests (agent_config, G0 M30 D941); mal's link outside is not.
+	if want := []string{"agent_config:", "agent_config:", "hook:guard.sh", "mcp_server:tickets"}; !slices.Equal(names, want) {
 		t.Fatalf("findings %v, want %v", names, want)
 	}
 }

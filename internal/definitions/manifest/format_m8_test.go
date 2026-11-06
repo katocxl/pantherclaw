@@ -58,7 +58,9 @@ func TestHR203_EveryGitHubOperationDeclaresItsLeastPermissions(t *testing.T) {
 		"github.installation.repositories": {"metadata": "read"},
 		"github.deployment.list":           {"deployments": "read"},
 		"github.deployment.statuses":       {"deployments": "read"},
-		"github.deployment.trigger":        nil, // virtual: never dispatched
+		"github.deployment.trigger":        nil,                         // virtual: never dispatched
+		"github.repo.visibility.update":    {"administration": "write"}, // G0 M30 D934
+		"github.repo.transfer":             {"administration": "write"}, // G0 M30 D934
 	}
 	if len(p.Definitions) != len(want) {
 		t.Fatalf("%d definitions, want %d", len(p.Definitions), len(want))

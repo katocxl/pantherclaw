@@ -18,4 +18,7 @@ const (
 	SecurityKillSwitchRestored        = "security.kill_switch_restored"
 	SecurityStripeLivemode            = "security.stripe_livemode"
 	SecurityVariantSuspected          = "security.variant_suspected"
+	// SecurityWorkloadProofRefused: the Authority refused a workload's
+	// PAP/1 credentials (HR-850).
+	SecurityWorkloadProofRefused = "security.workload_proof_refused"
 )

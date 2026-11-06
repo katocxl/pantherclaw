@@ -190,7 +190,7 @@ automountServiceAccountToken: false
 {{- $first := first $v.agentNamespaces }}
 ---
 # The control twin (D970, D970a) runs in the release namespace, which is
-# not protected: the same pod shape, with its own service account and
+# not under enforcement: the same pod shape, with its own service account and
 # issuer entry. Its edge configuration is the first agent namespace's.
 apiVersion: v1
 kind: ConfigMap
@@ -277,7 +277,7 @@ spec:
       protocol: TCP
 {{- range $org := $orgs }}
 ---
-# Admission for the org's protected namespaces (D967, D969): fails closed.
+# Admission for the org's enforced namespaces (D967, D969): fails closed.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
@@ -300,9 +300,10 @@ webhooks:
         {{ include "pantherclaw.protectLabel" $ }}: enforce
         {{ include "pantherclaw.orgLabel" $ }}: {{ $org | quote }}
     rules:
+      # UPDATE too: an admitted pod's images cannot change (D1218 H1).
       - apiGroups: [""]
         apiVersions: [v1]
-        operations: [CREATE]
+        operations: [CREATE, UPDATE]
         resources: [pods]
         scope: Namespaced
       - apiGroups: [""]

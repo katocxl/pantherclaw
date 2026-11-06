@@ -23,6 +23,7 @@ import (
 	"maps"
 	"net/http"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -73,6 +74,10 @@ type compiled struct {
 	// other field in a request is ambiguous rather than silently dropped.
 	inputs  []string
 	queries []string
+	// floats are the top-level input fields extracted as is into a
+	// float_array param, the only places a list of numbers is read (G0 M30
+	// D1211).
+	floats map[string]bool
 }
 
 func newEnv(limits celenv.Limits) (*celenv.Env, error) {
@@ -139,7 +144,8 @@ func paramType(t domain.ParamType) *types.Type {
 	case domain.TypeQueryFilter:
 		return cel.ListType(cel.DynType)
 	case domain.TypeFloatArray:
-		return cel.ListType(cel.DoubleType)
+		// DecodeInput gives a float_array as its canonical string (G0 M30 D1211).
+		return cel.StringType
 	case domain.TypeStringMap:
 		return cel.MapType(cel.StringType, cel.StringType)
 	case domain.TypeEnum, domain.TypeIdentifier, domain.TypeText, domain.TypeCommand, domain.TypeContent, domain.TypePath, domain.TypeURL:
@@ -221,8 +227,24 @@ func compile(env *celenv.Env, d *domain.Definition, mp domain.Mapping) (*compile
 	c.inputs = slices.Compact(c.inputs)
 	slices.Sort(c.queries)
 	c.queries = slices.Compact(c.queries)
+	for name, src := range mp.Extract.Params {
+		if d.Params[name].Type != domain.TypeFloatArray {
+			continue
+		}
+		if m := floatFieldRe.FindStringSubmatch(src); m != nil {
+			if c.floats == nil {
+				c.floats = map[string]bool{}
+			}
+			c.floats[m[1]] = true
+		}
+	}
 	return c, nil
 }
+
+// floatFieldRe is an extract expression that reads one top-level input
+// field as is: only such a field may carry a float_array's numbers (G0 M30
+// D1211).
+var floatFieldRe = regexp.MustCompile(`^\s*input\.\??([A-Za-z_][A-Za-z0-9_]*)\s*$`)
 
 func (c *compiled) hasPathVar(v string) bool {
 	if slices.Contains(c.resource.Vars, v) {
@@ -279,7 +301,7 @@ func (m *Mapper) byName(ctx context.Context, tc Context, by map[string]*compiled
 	if !ok {
 		return actionir.Parsed{}, fmt.Errorf("%w: tool %q", ErrUnmapped, tool)
 	}
-	input, err := DecodeInput(args)
+	input, err := decodeInput(args, c.floats)
 	if err != nil {
 		return actionir.Parsed{}, err
 	}
@@ -338,7 +360,7 @@ func (m *Mapper) HTTPRequestHeader(ctx context.Context, tc Context, method, rawP
 	case domain.EncodingAWSJSON:
 		input, err = decodeAWSJSON(contentType, body)
 	default:
-		input, err = DecodeInput(body)
+		input, err = decodeInput(body, match.floats)
 	}
 	if err != nil {
 		return actionir.Parsed{}, err
@@ -504,7 +526,12 @@ func evalParam(ctx context.Context, p *celenv.Program, t domain.ParamType, vars 
 	case domain.TypeIdentifierList:
 		out.List, ok = stringList(v)
 	case domain.TypeFloatArray:
-		out.Floats, ok = floatList(v)
+		var s types.String
+		if s, ok = v.(types.String); ok {
+			var err error
+			out.Floats, err = domain.DecodeFloat32s(string(s))
+			ok = err == nil
+		}
 	case domain.TypeStringMap:
 		out.Map, ok = stringMap(v)
 	case domain.TypeQueryFilter:
@@ -530,17 +557,6 @@ func stringList(v ref.Val) ([]string, bool) {
 }
 
 var reflectStrings = reflect.TypeOf([]string(nil))
-
-func floatList(v ref.Val) ([]float64, bool) {
-	native, err := v.ConvertToNative(reflectFloats)
-	if err != nil {
-		return nil, false
-	}
-	l, ok := native.([]float64)
-	return l, ok
-}
-
-var reflectFloats = reflect.TypeOf([]float64(nil))
 
 func stringMap(v ref.Val) (map[string]string, bool) {
 	native, err := v.ConvertToNative(reflectStringMap)

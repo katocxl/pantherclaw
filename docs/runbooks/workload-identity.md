@@ -324,3 +324,10 @@ Agent identities get Entra access tokens like managed identities, so the same `e
 - **Revoke an instance**: `pclaw instance revoke INSTANCE --reason …`. Outstanding permits fail at `BeginDispatch`.
 - **Unknown keys** reaching the gateway appear as discovered agents (`pclaw agent list --state discovered`); claim, merge or retire them. A `security.discovery_flood` audit event means the per-gateway rate or the per-org cap was reached.
 - **Network change alerts** (`security.instance_network_changed`) mean the same key was used from a new network: check whether the key was copied.
+- **Refused proof alerts** (`pc.identity.workload_proof_refused`, from `security.workload_proof_refused`) mean the Authority refused a workload's credentials for a reason other than time. `pap_code` says why:
+  - `proof_replay`: a used proof came back.
+  - `key_mismatch`: the token was sent with another key.
+  - `invalid_proof` or `invalid_token`: a bad signature or token.
+  - `instance_not_admitted`: a key no admitted instance holds.
+
+  A record names the instance and agent only when the token itself verified. `suppressed` counts the refusals for the same key and code since the last record. When it names an instance, treat its token and key as copied: revoke the instance (`pclaw instance revoke`) and enrol it again. Expired tokens, clock skew and stale nonces are only logged (HR-850).

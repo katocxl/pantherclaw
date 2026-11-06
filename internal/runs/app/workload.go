@@ -94,6 +94,8 @@ func (s *Service) StartForWorkloadTx(ctx context.Context, tx db.TenantTx, in Wor
 		p.PrincipalUserID = &principal
 	case gdomain.PrincipalServiceAccount:
 		p.PrincipalSaID = &principal
+	case gdomain.PrincipalInstance:
+		return Run{}, ErrRunGrantPrincipal
 	default:
 		return Run{}, ErrRunGrantPrincipal
 	}

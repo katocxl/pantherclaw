@@ -38,7 +38,7 @@ definitions:
       embedding:
         type: float_array
         required: true
-        max_items: 16000
+        max_items: 12288
       top_k:
         type: integer
         material: true
@@ -98,8 +98,7 @@ definitions:
             embedding:
               type: array
               description: The query embedding
-              minItems: 1
-              maxItems: 16000
+              maxItems: 12288
               items:
                 type: number
             top_k:
@@ -145,7 +144,7 @@ definitions:
       embedding:
         type: float_array
         required: true
-        max_items: 16000
+        max_items: 12288
       metadata:
         type: string_map
         max_keys: 32
@@ -207,8 +206,7 @@ definitions:
             embedding:
               type: array
               description: The record's embedding
-              minItems: 1
-              maxItems: 16000
+              maxItems: 12288
               items:
                 type: number
             metadata:

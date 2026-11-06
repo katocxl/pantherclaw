@@ -103,8 +103,11 @@ func TestHR524_SealTakesAnOAuthClientAndRefusesWhatTheDomainRefuses(t *testing.T
 		tokenURL, scope, want string
 	}{
 		"no pinned tenant": {"https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token", domain.BotFrameworkScope, "home tenant"},
-		"unbound host":     {"https://login.evil.example/" + sealTenant + "/oauth2/v2.0/token", domain.BotFrameworkScope, "allowed hosts"},
-		"bad scope":        {sealTokenURL, "two scopes", "--oauth-token-url needs"},
+		// A known provider's endpoint on a host the seal does not bind
+		// (HR-060); any other endpoint is not a provider's (G0 M31 D951).
+		"unbound host":   {"https://acme.my.salesforce.com/services/oauth2/token", "api", "allowed hosts"},
+		"other endpoint": {"https://login.evil.example/" + sealTenant + "/oauth2/v2.0/token", domain.BotFrameworkScope, "not a known provider"},
+		"bad scope":      {sealTokenURL, "two scopes", "--oauth-token-url needs"},
 	} {
 		srv.put = nil
 		code, _, errs := run(t, env, args(c.tokenURL, c.scope, file)...)

@@ -907,6 +907,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A pod that runs the edge attests only with an admitted edge image
+	// (G0 M32 D1218 H1).
+	attestors.EdgeImageDigests = d.admission.EdgeImageDigests
 	identity := iapp.New(pool, reg, d.publicURL, clock.System{}).WithAttestors(attestors).WithEntitlements(d.billing)
 	pantherclawv1connect.RegisterIdentityServiceHandler(rs, identityrpc.NewIdentity(identity, d.clusters))
 	grants, runs := m11Issuance(d)

@@ -190,7 +190,7 @@ func (bs *browserStack) startHost(t *testing.T, connection string) *nativeHost {
 	outR, outW := io.Pipe()
 	h := &nativeHost{t: t, in: inW, got: map[string]chan hostReply{}, done: make(chan int, 1), errs: &strings.Builder{}}
 	var errMu sync.Mutex
-	stderr := writerFunc(func(p []byte) (int, error) { errMu.Lock(); defer errMu.Unlock(); return h.errs.Write(p) })
+	stderr := browserWriterFunc(func(p []byte) (int, error) { errMu.Lock(); defer errMu.Unlock(); return h.errs.Write(p) })
 	go func() {
 		code := pclaw.Run(context.Background(), []string{"browser", "host", "--config", path, "chrome-extension://" + m33ExtensionID + "/"},
 			outW, stderr, noEnv, pclaw.Options{Stdin: inR})
@@ -230,9 +230,9 @@ func (bs *browserStack) startHost(t *testing.T, connection string) *nativeHost {
 	return h
 }
 
-type writerFunc func([]byte) (int, error)
+type browserWriterFunc func([]byte) (int, error)
 
-func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
+func (f browserWriterFunc) Write(p []byte) (int, error) { return f(p) }
 
 // send writes one framed message and waits for its answer.
 func (h *nativeHost) send(msg map[string]any) hostReply {

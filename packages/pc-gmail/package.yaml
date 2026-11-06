@@ -81,7 +81,9 @@ definitions:
     dedupe_key: [target.id, params.to, params.cc, params.subject, params.text]
     retry:
       safe: false
-      on_unknown: fail
+      # An irreversible send is never retried: an unknown outcome goes to
+      # reconciliation (HR-007, G0 M34 D1002).
+      on_unknown: reconcile
     approval:
       title: Send an email from Gmail mailbox {target.id}
       fields:
