@@ -80,7 +80,7 @@ func TestT317_AKeyOrAProxyOverrideCannotBeSmuggledIntoTheSandbox(t *testing.T) {
 		"AUTH=Bearer " + "sk-" + "ant-" + "api03-" + strings.Repeat("Q", 40),
 		"URL=https://u:" + "sk-" + "proj-" + strings.Repeat("b", 40) + "@h.example",
 		"X=key=" + "gh" + "p_" + strings.Repeat("c", 36),
-		"AZURE_OPENAI_API_KEY=0123456789abcdef0123456789abcdef", "openai_admin_key=x",
+		"AZURE_OPENAI_API_KEY=x", "openai_admin_key=x",
 	} {
 		if _, err := parseSandboxRun(a, sandboxRunArgs("--env", entry)); err == nil {
 			t.Errorf("--env %q passed", entry)
