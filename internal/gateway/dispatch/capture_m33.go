@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json/jsontext"
+	"errors"
 	"io"
 	"strconv"
 )
@@ -60,7 +61,9 @@ func withoutImages(body []byte) ([]byte, bool) {
 	if err != nil {
 		return nil, false
 	}
-	if _, err := dec.ReadToken(); err != io.EOF {
+	// The value is valid only until the decoder's next read: keep a copy.
+	v = v.Clone()
+	if _, err := dec.ReadToken(); !errors.Is(err, io.EOF) {
 		return nil, false
 	}
 	out, err := omitBlocks(v)
@@ -108,15 +111,17 @@ func members(v jsontext.Value) ([]member, error) {
 	}
 	var out []member
 	for dec.PeekKind() != '}' {
-		name, err := dec.ReadToken()
+		tok, err := dec.ReadToken()
 		if err != nil {
 			return nil, err
 		}
+		// A token is valid only until the decoder's next read.
+		name := tok.String()
 		val, err := dec.ReadValue()
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, member{name: name.String(), value: append(jsontext.Value(nil), val...)})
+		out = append(out, member{name: name, value: append(jsontext.Value(nil), val...)})
 	}
 	return out, nil
 }
@@ -135,7 +140,7 @@ func typeOf(ms []member) string {
 }
 
 func omitBlocks(v jsontext.Value) (jsontext.Value, error) {
-	switch v.Kind() {
+	switch v.Kind() { //nolint:exhaustive // Only containers are walked; every other kind is kept as it is.
 	case '{':
 		ms, err := members(v)
 		if err != nil {
