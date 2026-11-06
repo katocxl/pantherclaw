@@ -1037,7 +1037,7 @@
     "techniques_none": "Tests PantherClaw's own permissions: a caller with no permission gets a refusal, not data."
   },
   "RT-220": {
-    "digest": "88b8fb6db1f55b3600fc6d302c1dd394e50a80d50de97d2e07f55c1626a5026f",
+    "digest": "a96531c33fe017c22586fd415105283886128daf822c98d2bbf9de23e6cdf2b6",
     "tier": "community",
     "atlas": [
       "AML.T0100",
@@ -1049,7 +1049,7 @@
     }
   },
   "RT-221": {
-    "digest": "2acd0a590de0c6aadf4c2ee17c8ff2f192ab176421be503be353d8d9f4dc7661",
+    "digest": "28779a70903000bb7adc06a9a933bb80211af8bffe7c762640ad514073a85bde",
     "tier": "community",
     "atlas": [
       "AML.T0098"
@@ -1059,12 +1059,12 @@
     }
   },
   "RT-222": {
-    "digest": "829477b1ab020cf6cc08337bd5b43d03b5fe42d99f9d2702fb27fffbd0732ece",
+    "digest": "61f59608283e44eb5c0315e575dc9d75a67d81cb7005e806085caf5bb5694165",
     "tier": "community",
     "techniques_none": "Tests PantherClaw's own hand-over: a takeover is always held for a person and is bounded."
   },
   "RT-223": {
-    "digest": "869bb5b3ea1d6184e36940ac2dd480b78264a12427e68f42d16a5b27aaae98dc",
+    "digest": "2110c0fc886a75bcbe18bb50790e1965d3697b217ca184ec8b25040ea30e136e",
     "tier": "community",
     "atlas": [
       "AML.T0053"
@@ -1074,7 +1074,7 @@
     }
   },
   "RT-224": {
-    "digest": "f106d334f6a274a0ff83836b2b6895bba085450225e3601fc4c736e44649784b",
+    "digest": "eee01aa74e745205f174c3606d279af54f897bed6ffe7eb4d97ed68865b02fdb",
     "tier": "community",
     "atlas": [
       "AML.T0134"

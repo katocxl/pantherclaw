@@ -129,7 +129,8 @@ func TestT342_ATakeoverIsAlwaysHeldAndBounded(t *testing.T) {
 
 // TestT343_NoComputerUseActionWithoutADecision: every computer-use action
 // is decided and recorded as its own transaction; one the run's grant does
-// not name is denied, and one the package does not know is refused.
+// not name is denied, one the package does not know is refused, and one
+// held for a person is released by its approval for that call only.
 func TestT343_NoComputerUseActionWithoutADecision(t *testing.T) {
 	bs := startBrowserStack(t)
 	computer := bs.startHost(t, "computer")
@@ -154,6 +155,25 @@ func TestT343_NoComputerUseActionWithoutADecision(t *testing.T) {
 	narrow := bs.startHost(t, "computer")
 	if r := narrow.decide("computer", ids.NewV7().String(), map[string]any{"kind": "click", "button": "left", "call": "toolu_e"}); r.Decision != "deny" || r.Held {
 		t.Errorf("a click outside the grant: %+v", r)
+	}
+	// A grant whose computer actions need a person: the held action is
+	// released by its approval for the same call only (D1221 L6).
+	bs.grantRunRequiring(t, m33Bounds, `[{"operations": ["computer.input"], "reason": "COMPUTER_INPUT_NEEDS_A_PERSON",
+		"approval": {"role": "approver", "count": 1}}]`, false)
+	held := bs.startHost(t, "computer")
+	act, typed := ids.NewV7().String(), map[string]any{"kind": "type", "text": "hello", "call": "toolu_held"}
+	h := held.decide("computer", act, typed)
+	if h.Decision != "deny" || !h.Held {
+		t.Fatalf("a computer action needing a person: %+v", h)
+	}
+	if st := bs.approveBrowser(t, h.TransactionID, "computer.input"); st != `"APPROVED"` {
+		t.Fatalf("approval %s", st)
+	}
+	if r := held.decide("computer", act, typed); r.Decision != "allow" {
+		t.Fatalf("the approved call: %+v", r)
+	}
+	if r := held.decide("computer", ids.NewV7().String(), map[string]any{"kind": "type", "text": "hello", "call": "toolu_other"}); r.Decision == "allow" || !r.Held {
+		t.Fatalf("another call of the approved kind: %+v", r)
 	}
 }
 

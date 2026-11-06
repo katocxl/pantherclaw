@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -117,6 +118,87 @@ func TestHR757_TextOnlyBodiesAreKeptAndUnparseableOnesAreNot(t *testing.T) {
 	caps = modelCaptures(conn, "model.messages.create", false, []byte(img), nil, 0, nil, time.Now())
 	if len(caps) != 1 || strings.Contains(string(caps[0].GetContent()), pngData) || !strings.Contains(string(caps[0].GetContent()), `"omitted":true`) {
 		t.Fatalf("captured %+v", caps)
+	}
+}
+
+// TestHR757_FileAudioAndContainerUploadsAreOmitted: Chat file and
+// input_audio parts and Anthropic container_upload blocks are omitted like
+// images (D1221 M4).
+func TestHR757_FileAudioAndContainerUploadsAreOmitted(t *testing.T) {
+	for typ, block := range map[string]string{
+		"file":             `{"type":"file","file":{"filename":"a.pdf","file_data":"data:application/pdf;base64,JVBERi0xLjQK"}}`,
+		"input_audio":      `{"type":"input_audio","input_audio":{"data":"UklGRiQAAABXQVZF","format":"wav"}}`,
+		"container_upload": `{"type":"container_upload","file_id":"file_011CNha8iCJcU1wXNR6q4V8w"}`,
+	} {
+		body := `{"model":"m","messages":[{"role":"user","content":[{"type":"text","text":"here"},` + block + `]}]}`
+		out, ok := withoutImages([]byte(body))
+		if !ok {
+			t.Fatalf("%s: not parsed", typ)
+		}
+		want := `{"model":"m","messages":[{"role":"user","content":[{"type":"text","text":"here"},` + placeholderOf(typ, block) + `]}]}`
+		if string(out) != want {
+			t.Errorf("%s: got %s, want %s", typ, out, want)
+		}
+	}
+}
+
+// allocs is the bytes f allocates.
+func allocs(f func()) uint64 {
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	f()
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc
+}
+
+// TestHR757_DeepBodiesAreOmittedInBoundedMemory: a 16 MiB body nested 5000
+// deep is kept as omitted with reason too_deep, in memory under three times
+// its size, and a large shallow body with an image is rewritten within the
+// same bound (D1221 H1).
+func TestHR757_DeepBodiesAreOmittedInBoundedMemory(t *testing.T) {
+	const depth, size = 5000, 16 << 20
+	open, closing := strings.Repeat(`{"a":`, depth), strings.Repeat(`}`, depth)
+	deep := []byte(open + `"` + strings.Repeat("x", size-len(open)-len(closing)-2) + `"` + closing)
+	var (
+		out []byte
+		ok  bool
+	)
+	if n := allocs(func() { out, ok = withoutImages(deep) }); n >= 3*uint64(len(deep)) {
+		t.Errorf("deep body allocated %d bytes for %d", n, len(deep))
+	}
+	if want := `{"omitted":true,"bytes":` + itoa(len(deep)) + `,"reason":"too_deep"}`; !ok || string(out) != want {
+		t.Fatalf("deep body kept as %.200s", out)
+	}
+	// Depth 64 is kept; 65 is not.
+	at64 := strings.Repeat(`[`, 64) + strings.Repeat(`]`, 64)
+	if out, ok := withoutImages([]byte(at64)); !ok || string(out) != at64 {
+		t.Errorf("depth 64 changed: %s", out)
+	}
+	if out, _ := withoutImages([]byte(`[` + at64 + `]`)); !strings.Contains(string(out), `"too_deep"`) {
+		t.Errorf("depth 65 kept: %s", out)
+	}
+
+	img := `{"type":"image","source":{"type":"base64","media_type":"image/png","data":"` + pngData + `"}}`
+	text := strings.Repeat("y", size)
+	shallow := []byte(`{"messages":[{"role":"user","content":[{"type":"text","text":"` + text + `"},` + img + `]}]}`)
+	if n := allocs(func() { out, ok = withoutImages(shallow) }); n >= 3*uint64(len(shallow)) {
+		t.Errorf("shallow body allocated %d bytes for %d", n, len(shallow))
+	}
+	if !ok || strings.Contains(string(out), pngData) || !strings.Contains(string(out), placeholderOf("image", img)) || !strings.Contains(string(out), text) {
+		t.Fatal("shallow body not rewritten")
+	}
+
+	conn := &control.Connection{
+		GatewayConnection: &pb.GatewayConnection{Id: "c", Kind: KindModel, Model: &pb.ModelConfig{CapturePrompts: true}},
+		Captures: []*pb.GatewayCaptureProfile{{
+			Id: "p", Operations: []string{"model.messages.create"}, Request: true, ByteCap: 1 << 16,
+			ExpireTime: timestamppb.New(time.Now().Add(time.Hour)),
+		}},
+	}
+	caps := modelCaptures(conn, "model.messages.create", false, deep, nil, 0, nil, time.Now())
+	if len(caps) != 1 || !strings.Contains(string(caps[0].GetContent()), `"reason":"too_deep"`) {
+		t.Fatalf("deep body captured as %+v", caps)
 	}
 }
 

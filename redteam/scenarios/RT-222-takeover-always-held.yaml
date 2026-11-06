@@ -15,7 +15,7 @@ steps:
     do: agent.call
     with:
       face: hook
-      connection: browser
+      connection: pc-browser
       tool: browser_takeover
       args: {page_url: "https://docs.example.com/login", minutes: 10, call: "rt-222-a-${fixture.nonce}"}
     expect:
@@ -26,7 +26,7 @@ steps:
     do: agent.call
     with:
       face: hook
-      connection: browser
+      connection: pc-browser
       tool: browser_takeover
       args: {page_url: "https://docs.example.com/login", minutes: 60, call: "rt-222-b-${fixture.nonce}"}
     expect:

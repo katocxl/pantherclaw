@@ -114,9 +114,39 @@ test("TestHR758_AnyErrorRefuses", async () => {
   assert.throws(() => new ComputerUseGuard(undefined as never, "desktop"));
 });
 
-test("TestHR758_ACallIdThatIsNotOneGetsARandomCall", async () => {
+test("TestHR758_ACallIdThatIsNotOneGetsAStableCall", async () => {
   const { guard, seen } = stub(allow);
   await guard.decideAnthropic({ id: "bad id!", name: "computer", input: { action: "double_click" } });
-  const call = String(seen.at(-1)?.input.call);
-  assert.match(call, /^pc-[0-9a-f]{32}$/);
+  await guard.decideAnthropic({ id: "bad id!", name: "computer", input: { action: "double_click" } });
+  const [a, b] = seen.map((s) => String(s.input.call));
+  assert.match(a, /^pc-[0-9a-f]{32}$/);
+  assert.equal(a, b);
+  await guard.decideAnthropic({ id: "other id!", name: "computer", input: { action: "double_click" } });
+  assert.notEqual(seen.at(-1)?.input.call, a);
+  // Only a missing id gets a random call.
+  await guard.decideOpenAI({ action: { type: "move", x: 1, y: 1 } });
+  await guard.decideOpenAI({ action: { type: "move", x: 1, y: 1 } });
+  const [c, d] = seen.slice(-2).map((s) => String(s.input.call));
+  assert.match(c, /^pc-[0-9a-f]{32}$/);
+  assert.notEqual(c, d);
+});
+
+test("TestHR758_AHeldActionAskedAgainWithTheSameIdIsTheSameCall", async () => {
+  const held: HookResult = { outcome: "deny", held: true, why: "held", answer: { decision: "deny", code: "APPROVAL_REQUIRED", transaction_id: "t-2" } as never };
+  const { guard, seen } = stub(held);
+  for (let i = 0; i < 2; i++) {
+    assert.equal((await guard.decideOpenAI({ call_id: "call_9", action: { type: "type", text: "x" } })).held, true);
+    assert.equal((await guard.decideAnthropic({ id: "toolu_9", name: "computer", input: { action: "key", text: "Return" } })).held, true);
+  }
+  assert.deepEqual(seen.map((s) => s.input.call), ["call_9", "toolu_9", "call_9", "toolu_9"]);
+});
+
+test("TestHR758_ABedrockToolUseIsDecidedWithItsToolUseId", async () => {
+  const { guard, seen } = stub(allow);
+  const input = { action: "left_click", coordinate: [3, 4] };
+  assert.equal((await guard.decideAnthropic({ toolUseId: "tooluse_ab12", name: "computer", input })).allowed, true);
+  assert.equal((await guard.decideAnthropic({ toolUse: { toolUseId: "tooluse_ab12", name: "computer", input } })).allowed, true);
+  for (const s of seen) assert.deepEqual(s.input, { kind: "click", button: "left", x: 3, y: 4, call: "tooluse_ab12" });
+  const r = await guard.decideAnthropic({ toolUse: { toolUseId: "t", name: "bash", input } });
+  assert.deepEqual([r.allowed, r.code, seen.length], [false, CODE_ACTION_UNKNOWN, 2]);
 });

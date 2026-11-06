@@ -113,6 +113,14 @@ func failClosed(s sources) []string {
 	need(ordered(rules, `regexSubstitution: `+"`chrome-extension://${chrome.runtime.id}/hold.html#\\\\0`", `regexFilter: "^https?://.*$"`, `"main_frame"`),
 		"rules.js: the hold rule redirects every top-level http(s) navigation")
 	need(ordered(rules, "export function allowNavigationOnce", "tabIds: [tabId]", "NAVIGATION_RULE_TTL_MS"), "rules.js: a decided navigation passes once on its tab")
+	// A decided navigation's or submit's rule lasts at most 10 s and goes once its request redirects, completes or fails.
+	need(strings.Contains(rules, "const NAVIGATION_RULE_TTL_MS = 10_000;"), "rules.js: a decided rule lasts at most 10 s")
+	need(ordered(bg, "[chrome.webRequest.onBeforeRedirect, chrome.webRequest.onCompleted, chrome.webRequest.onErrorOccurred]",
+		"void removeNavigationRulesFor(d.tabId, d.url);", `types: ["main_frame"]`), "background.js: a decided rule goes once its request completes or fails")
+	// A download is a takeover tab's only when no other open tab shows its page.
+	need(ordered(bg, "async function fromTakeoverTab", "if (!tab || tab.url !== item.referrer) {", "chrome.tabs.query({})",
+		"return tabs !== null && tabs.every((t) => t.id === tabId || t.url !== item.referrer);"),
+		"background.js: a download counts as the takeover tab's only when no other tab shows its page")
 	return bad
 }
 
@@ -131,18 +139,45 @@ func TestHR751_TheExtensionFailsClosed(t *testing.T) {
 		"open on deny":   s.with("hold.js", `if (a && a.decision === "allow") {`, `if (a) {`),
 		"click on deny":  s.with("content.js", `if (a.decision === "allow" && marked.isConnected) {`, `if (marked.isConnected) {`),
 		"allow on fail":  s.with("host.js", `return { decision: "deny", held: false, code: CANNOT_DECIDE`, `return { decision: "allow", held: false, code: CANNOT_DECIDE`),
+		"shared page":    s.with("background.js", "tabs.every((t) => t.id === tabId || t.url !== item.referrer)", "true"),
+		"long rule":      s.with("rules.js", "const NAVIGATION_RULE_TTL_MS = 10_000;", "const NAVIGATION_RULE_TTL_MS = 60_000;"),
+		"rule kept":      s.with("background.js", "void removeNavigationRulesFor(d.tabId, d.url);", ""),
 	} {
 		if len(failClosed(mutated)) == 0 {
 			t.Errorf("%s: the check passes a source that does not fail closed", name)
 		}
 	}
+	t.Run("node", func(t *testing.T) {
+		if !haveNode() {
+			t.Skip("node not found")
+		}
+		out := runNode(t, hostScript)
+		for _, want := range []string{"no-port deny CANNOT_DECIDE", "allow allow t", "held deny true", "odd deny CANNOT_DECIDE", "disconnect deny CANNOT_DECIDE"} {
+			if !strings.Contains(out, want+"\n") {
+				t.Errorf("host.js run lacks %q:\n%s", want, out)
+			}
+		}
+	})
+}
+
+// TestHR751_TakeoverDownloadsAndDecidedRulesStayNarrow: run by node
+// against a stand-in browser, a download whose page is open only in the
+// takeover tab is saved without asking, and one whose page is also open in
+// another tab is asked and, without an answer, canceled and erased; a
+// decided navigation's or submit's rule lasts 10 s and goes once a request
+// it matches on its tab completes or fails, and not for another address or
+// tab.
+func TestHR751_TakeoverDownloadsAndDecidedRulesStayNarrow(t *testing.T) {
 	if !haveNode() {
-		return
+		t.Skip("node not found")
 	}
-	out := runNode(t, hostScript)
-	for _, want := range []string{"no-port deny CANNOT_DECIDE", "allow allow t", "held deny true", "odd deny CANNOT_DECIDE", "disconnect deny CANNOT_DECIDE"} {
+	out := runNode(t, backgroundScript)
+	for _, want := range []string{
+		"download only-tab resume 1", "download shared-page cancel 2,erase 2", "download other-page cancel 3,erase 3",
+		"rule ttl 10000", "rules other-address 7,8", "rules completed 8", "rules errored none",
+	} {
 		if !strings.Contains(out, want+"\n") {
-			t.Errorf("host.js run lacks %q:\n%s", want, out)
+			t.Errorf("background.js run lacks %q:\n%s", want, out)
 		}
 	}
 }
@@ -271,12 +306,14 @@ func TestHR754_NoPageContentLeavesTheBrowser(t *testing.T) {
 			t.Errorf("%s: the check passes a source that sends page content", name)
 		}
 	}
-	if !haveNode() {
-		return
-	}
-	if out := runNode(t, hostScript); !strings.Contains(out, "sent v,id,type,tool,action_id,input\n") {
-		t.Errorf("host.js sends other members:\n%s", out)
-	}
+	t.Run("node", func(t *testing.T) {
+		if !haveNode() {
+			t.Skip("node not found")
+		}
+		if out := runNode(t, hostScript); !strings.Contains(out, "sent v,id,type,tool,action_id,input\n") {
+			t.Errorf("host.js sends other members:\n%s", out)
+		}
+	})
 }
 
 var (
@@ -311,6 +348,14 @@ func secretFields(s sources) []string {
 	}
 	if !strings.Contains(f, `el.type === "password"`) {
 		bad = append(bad, "fields.js does not refuse password inputs")
+	}
+	// A field once seen as secret stays secret, and an input whose type leaves "password" is kept as secret.
+	if !ordered(f, "const seenSecret = new WeakSet();", "if (seenSecret.has(field)) {", "return true;", "seenSecret.add(field);",
+		`(r.oldValue || "").toLowerCase() === "password"`, "seenSecret.add(r.target);", `attributeFilter: ["type"], attributeOldValue: true`) {
+		bad = append(bad, "fields.js lets a field stop being secret when its type changes")
+	}
+	if !ordered(f, "el instanceof HTMLTextAreaElement", "isContentEditable", `[el.getAttribute("name"), el.id, el.getAttribute("aria-label")]`) {
+		bad = append(bad, "fields.js does not refuse secret text areas and contenteditable fields")
 	}
 	if !ordered(f, `for (const type of ["beforeinput", "paste", "drop", "keydown"]) {`, "window.addEventListener(type, onEdit, opts);",
 		`for (const type of ["input", "change"]) {`, "window.addEventListener(type, onValue, opts);") || !strings.Contains(f, "const opts = { capture: true };") {
@@ -373,27 +418,35 @@ func TestHR752_SecretAndChallengeFieldsAreRefused(t *testing.T) {
 		"removal knob":  s.with("managed_schema.json", `"extra_secret_hosts": {`, `"disable_secret_hosts": {"type": "boolean"}, "extra_secret_hosts": {`),
 		"other lifter":  s.with("fields.js", "let lifted = false;", "let lifted = false;\n  window.addEventListener(\"message\", () => { lifted = true; });"),
 		"secret submit": s.with("content.js", "if (info.secret_fields) {", "if (false) {"),
+		"not sticky":    s.with("fields.js", "if (seenSecret.has(field)) {", "if (false) {"),
+		"inputs only":   s.with("fields.js", "el instanceof HTMLTextAreaElement", "false"),
 	} {
 		if len(secretFields(mutated)) == 0 {
 			t.Errorf("%s: the check passes a source that lets secret input through", name)
 		}
 	}
-	if !haveNode() {
-		return
-	}
-	out := runNode(t, fieldsScript)
-	for _, want := range []string{
-		"shop.example.com password true", "shop.example.com otp-autocomplete true", "shop.example.com billing-cc-number true",
-		"shop.example.com pin-name true", "shop.example.com card-placeholder true", "shop.example.com email false", "shop.example.com div false",
-		"shop.example.com beforeinput-secret prevented", "shop.example.com beforeinput-email allowed", "shop.example.com input-secret cleared",
-		"shop.example.com input-email kept", "shop.example.com tab-key allowed", "shop.example.com lifted allowed",
-		"js.stripe.com email true", "x.paypal.com email true", "paypal.com email true", "pay.example.test email true",
-		"www.google.com/recaptcha/ click prevented", "challenges.cloudflare.com keydown prevented", "shop.example.com click none",
-	} {
-		if !strings.Contains(out, want+"\n") {
-			t.Errorf("fields.js run lacks %q:\n%s", want, out)
+	t.Run("node", func(t *testing.T) {
+		if !haveNode() {
+			t.Skip("node not found")
 		}
-	}
+		out := runNode(t, fieldsScript)
+		for _, want := range []string{
+			"shop.example.com password true", "shop.example.com otp-autocomplete true", "shop.example.com billing-cc-number true",
+			"shop.example.com pin-name true", "shop.example.com card-placeholder true", "shop.example.com email false", "shop.example.com div false",
+			"shop.example.com beforeinput-secret prevented", "shop.example.com beforeinput-email allowed", "shop.example.com input-secret cleared",
+			"shop.example.com input-email kept", "shop.example.com tab-key allowed", "shop.example.com lifted allowed",
+			"shop.example.com show-password prevented", "shop.example.com show-password-input cleared", "shop.example.com pwd_field-was-password prevented",
+			"shop.example.com pwd_field-text false", "shop.example.com textarea-cvv true", "shop.example.com textarea-notes false",
+			"shop.example.com contenteditable-text-node true", "shop.example.com contenteditable-input cleared",
+			"shop.example.com contenteditable-message false", "shop.example.com element-not-editable false",
+			"js.stripe.com email true", "x.paypal.com email true", "paypal.com email true", "pay.example.test email true",
+			"www.google.com/recaptcha/ click prevented", "challenges.cloudflare.com keydown prevented", "shop.example.com click none",
+		} {
+			if !strings.Contains(out, want+"\n") {
+				t.Errorf("fields.js run lacks %q:\n%s", want, out)
+			}
+		}
+	})
 }
 
 // TestHR751_TheManifestKeepsTheAgentInTheDecidedBrowser: the manifest asks
@@ -424,7 +477,7 @@ func TestHR751_TheManifestKeepsTheAgentInTheDecidedBrowser(t *testing.T) {
 			return []string{err.Error()}
 		}
 		var bad []string
-		want := []string{"alarms", "declarativeNetRequestWithHostAccess", "downloads", "nativeMessaging", "storage", "tabs", "webNavigation"}
+		want := []string{"alarms", "declarativeNetRequestWithHostAccess", "downloads", "nativeMessaging", "storage", "tabs", "webNavigation", "webRequest"}
 		got := slices.Sorted(slices.Values(m.Permissions))
 		if !slices.Equal(got, want) {
 			bad = append(bad, fmt.Sprintf("permissions %v, want %v", got, want))
@@ -525,15 +578,27 @@ import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 const src = fs.readFileSync(path.join(process.argv[2], "fields.js"), "utf8");
-class HTMLInputElement {
-  constructor(a) { this.type = a.type || "text"; this.name = a.name || ""; this.id = a.id || ""; this.value = a.value || ""; this.attrs = a.attrs || {}; }
+class HTMLElement {
+  constructor(a = {}) {
+    this.id = a.id || ""; this.attrs = a.attrs || {}; this.isContentEditable = !!a.editable;
+    this.parentElement = a.parent || null; this.textContent = a.text || "";
+  }
   getAttribute(n) { return n in this.attrs ? this.attrs[n] : null; }
 }
+class HTMLInputElement extends HTMLElement {
+  constructor(a) { super(a); this.type = a.type || "text"; this.name = a.name || ""; this.value = a.value || ""; }
+}
+class HTMLTextAreaElement extends HTMLElement {
+  constructor(a) { super(a); this.value = a.value || ""; }
+}
+class Text { constructor(parent) { this.parentElement = parent; } }
 class KeyboardEvent { constructor(key) { this.key = key; this.ctrlKey = this.metaKey = this.altKey = false; } }
 function frame(host, pathname = "/") {
   const listeners = {};
+  const observers = [];
+  class MutationObserver { constructor(cb) { observers.push(cb); } observe() {} }
   const ctx = {
-    HTMLInputElement, KeyboardEvent, location: { hostname: host, pathname },
+    HTMLElement, HTMLInputElement, HTMLTextAreaElement, Text, MutationObserver, KeyboardEvent, location: { hostname: host, pathname },
     window: { addEventListener: (t, f) => (listeners[t] ||= []).push(f) },
     document: { documentElement: null },
     chrome: { storage: { managed: { get: (_k, cb) => cb({ extra_secret_hosts: ["pay.example.test"] }) } } },
@@ -545,8 +610,9 @@ function frame(host, pathname = "/") {
     for (const f of listeners[type] || []) f(e);
     return e;
   };
-  return { f: ctx.pcFields, fire, listeners };
+  return { f: ctx.pcFields, fire, listeners, observers };
 }
+const verdict = (e) => (e.prevented ? "prevented" : "allowed");
 const inputs = {
   password: new HTMLInputElement({ type: "password" }),
   "otp-autocomplete": new HTMLInputElement({ attrs: { autocomplete: "section-login one-time-code" } }),
@@ -567,6 +633,28 @@ console.log("shop.example.com input-secret", typed.value === "" ? "cleared" : "k
 const mail = new HTMLInputElement({ type: "email", value: "a@example.com" });
 shop.fire("input", mail);
 console.log("shop.example.com input-email", mail.value === "" ? "cleared" : "kept");
+// A show-password button turns a password input into text: it stays secret.
+const shown = new HTMLInputElement({ type: "password", name: "pwd_field", attrs: { autocomplete: "off" } });
+shop.fire("focusin", shown);
+shown.type = "text";
+console.log("shop.example.com show-password", verdict(shop.fire("beforeinput", shown)));
+shown.value = "hunter2";
+shop.fire("input", shown);
+console.log("shop.example.com show-password-input", shown.value === "" ? "cleared" : "kept");
+// An input never seen whose type left "password" stays secret.
+const unseen = new HTMLInputElement({ type: "text", name: "pwd_field", attrs: { autocomplete: "off" } });
+for (const cb of shop.observers) cb([{ target: unseen, attributeName: "type", oldValue: "password" }]);
+console.log("shop.example.com pwd_field-was-password", verdict(shop.fire("beforeinput", unseen)));
+console.log("shop.example.com pwd_field-text", shop.f.isSecret(new HTMLInputElement({ name: "pwd_field", attrs: { autocomplete: "off" } })));
+console.log("shop.example.com textarea-cvv", shop.f.isSecret(new HTMLTextAreaElement({ attrs: { name: "cvv" } })));
+console.log("shop.example.com textarea-notes", shop.f.isSecret(new HTMLTextAreaElement({ attrs: { name: "notes" } })));
+const editHost = new HTMLElement({ editable: true, attrs: { "aria-label": "Password" }, text: "hunter2" });
+const editChild = new HTMLElement({ editable: true, parent: editHost });
+console.log("shop.example.com contenteditable-text-node", shop.f.isSecret(new Text(editChild)));
+shop.fire("input", new Text(editChild));
+console.log("shop.example.com contenteditable-input", editHost.textContent === "" ? "cleared" : "kept");
+console.log("shop.example.com contenteditable-message", shop.f.isSecret(new HTMLElement({ editable: true, attrs: { "aria-label": "Message" }, text: "hi" })));
+console.log("shop.example.com element-not-editable", shop.f.isSecret(new HTMLElement({ attrs: { name: "password" } })));
 console.log("shop.example.com click", shop.listeners.click ? "listening" : "none");
 shop.f.lift();
 console.log("shop.example.com lifted", shop.fire("beforeinput", inputs.password).prevented ? "prevented" : "allowed");
@@ -578,4 +666,81 @@ const rc = frame("www.google.com", "/recaptcha/api2/anchor");
 console.log("www.google.com/recaptcha/ click", rc.fire("click", {}).prevented ? "prevented" : "allowed");
 const cf = frame("challenges.cloudflare.com");
 console.log("challenges.cloudflare.com keydown", cf.fire("keydown", {}, new KeyboardEvent("Enter")).prevented ? "prevented" : "allowed");
+`
+
+// backgroundScript runs background.js and rules.js against a stand-in
+// browser with no native host.
+const backgroundScript = `
+import { pathToFileURL } from "node:url";
+import path from "node:path";
+const dir = process.argv[2];
+const ev = () => { const fs = []; return { fs, addListener: (f) => fs.push(f) }; };
+const settle = () => new Promise((r) => setTimeout(r, 50));
+const log = [];
+const session = {};
+let sessionRules = [];
+let openTabs = [];
+globalThis.chrome = {
+  runtime: { id: "ext", lastError: undefined, connectNative() { throw new Error("no host"); }, onMessage: ev(), onInstalled: ev(), onStartup: ev() },
+  storage: {
+    managed: { get: async () => ({}) },
+    session: {
+      get: async (k) => (k === null ? { ...session } : { [k]: session[k] }),
+      set: async (o) => void Object.assign(session, o),
+      remove: async (k) => void delete session[k],
+    },
+  },
+  downloads: {
+    onCreated: ev(), pause: async () => {}, search: async () => [], removeFile: async () => {},
+    resume: async (id) => void log.push("resume " + id), cancel: async (id) => void log.push("cancel " + id), erase: async (q) => void log.push("erase " + q.id),
+  },
+  webNavigation: { onCommitted: ev(), onErrorOccurred: ev() },
+  webRequest: { onBeforeRedirect: ev(), onCompleted: ev(), onErrorOccurred: ev() },
+  alarms: { onAlarm: ev(), create: async () => {}, clear: async () => {} },
+  tabs: {
+    onRemoved: ev(), sendMessage: async () => {}, query: async () => openTabs.slice(),
+    get: async (id) => { const t = openTabs.find((x) => x.id === id); if (!t) throw new Error("no tab"); return t; },
+  },
+  declarativeNetRequest: {
+    updateDynamicRules: async () => {},
+    getSessionRules: async () => sessionRules.slice(),
+    updateSessionRules: async (u) => {
+      sessionRules = sessionRules.filter((r) => !(u.removeRuleIds || []).includes(r.id)).concat(u.addRules || []);
+    },
+  },
+};
+await import(pathToFileURL(path.join(dir, "background.js")).href);
+const rules = await import(pathToFileURL(path.join(dir, "rules.js")).href);
+await settle();
+
+const page = "https://docs.example.com/report";
+session["takeover:5"] = Date.now() + 60_000;
+async function download(label, id, tabs) {
+  openTabs = tabs;
+  log.length = 0;
+  for (const f of chrome.downloads.onCreated.fs) f({ id, referrer: page, url: page + ".pdf", filename: "r.pdf", mime: "application/pdf", totalBytes: 1 });
+  await settle();
+  console.log("download", label, log.join(","));
+}
+await download("only-tab", 1, [{ id: 5, url: page }, { id: 6, url: "https://docs.example.com/" }]);
+await download("shared-page", 2, [{ id: 5, url: page }, { id: 6, url: page }]);
+await download("other-page", 3, [{ id: 5, url: "https://docs.example.com/other" }]);
+
+const re = "^" + rules.re2Escape("https://shop.example.com/pay") + "(\\?.*)?$";
+const realSetTimeout = globalThis.setTimeout;
+let ttl = 0;
+globalThis.setTimeout = (f, ms, ...a) => { ttl = Math.max(ttl, ms || 0); return realSetTimeout(f, ms, ...a); };
+await rules.allowNavigationOnce(7, re);
+globalThis.setTimeout = realSetTimeout;
+await rules.allowNavigationOnce(8, re);
+console.log("rule ttl", ttl);
+const tabsOf = () => sessionRules.map((r) => r.condition.tabIds[0]).join(",") || "none";
+const fire = async (event, tabId, url) => { for (const f of chrome.webRequest[event].fs) f({ tabId, url }); await settle(); };
+await fire("onCompleted", 7, "https://shop.example.com/other");
+console.log("rules other-address", tabsOf());
+await fire("onCompleted", 7, "https://shop.example.com/pay?order=1");
+console.log("rules completed", tabsOf());
+await fire("onErrorOccurred", 8, "https://shop.example.com/pay");
+console.log("rules errored", tabsOf());
+process.exit(0);
 `

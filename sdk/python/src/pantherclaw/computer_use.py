@@ -6,7 +6,10 @@
 ``ComputerUseGuard`` asks the local connection's /hook face (package
 pc.computer, hook tool ``computer``) about each input action a model asks
 for: an Anthropic ``computer_*`` tool use (``decide_anthropic``) or an
-OpenAI ``computer_call`` (``decide_openai``). Only an allow lets the action
+OpenAI ``computer_call`` (``decide_openai``); Bedrock Converse ``toolUse``
+blocks for the same Anthropic tool go to ``decide_anthropic``. The model's
+call id (``id``, ``toolUseId`` or ``call_id``) is the call, so a held action
+asked again with the same id is the same call. Only an allow lets the action
 run. Screenshots, waits, cursor positions and zooms read the screen and are
 allowed locally, never sent. An action the guard does not know is refused
 locally (COMPUTER_ACTION_UNKNOWN), and any failure refuses (fail closed,
@@ -16,6 +19,7 @@ through the guard are decided.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import secrets
 from collections.abc import Mapping
@@ -82,7 +86,14 @@ def _refused(code: str, reason: str) -> ComputerDecision:
 
 
 def _call_id(raw: Any) -> str:
-    return raw if isinstance(raw, str) and _CALL.match(raw) else "pc-" + secrets.token_hex(16)
+    """The model's call id as the call. An id that cannot be one maps to a
+    digest of it, so a held action asked again with the same id sends the
+    same call; only a missing id gets a random one."""
+    if isinstance(raw, str) and _CALL.match(raw):
+        return raw
+    if isinstance(raw, str) and raw:
+        return "pc-" + hashlib.sha256(raw.encode()).hexdigest()[:32]
+    return "pc-" + secrets.token_hex(16)
 
 
 def _int(v: Any) -> int | None:
@@ -133,8 +144,12 @@ class ComputerUseGuard:
         return ComputerDecision(False, code=code or CODE_CANNOT_DECIDE, reason=res.why, transaction_id=txn)
 
     def decide_anthropic(self, tool_use: Mapping[str, Any]) -> ComputerDecision:
-        """Decides an Anthropic computer tool use (``{id, name, input}``)."""
+        """Decides an Anthropic computer tool use (``{id, name, input}``), or
+        the same tool on Bedrock: a Converse ``toolUse`` block
+        (``{toolUseId, name, input}``, alone or as ``{"toolUse": {...}}``)."""
         try:
+            if isinstance(tool_use, Mapping) and isinstance(tool_use.get("toolUse"), Mapping):
+                tool_use = tool_use["toolUse"]
             if not isinstance(tool_use, Mapping):
                 return _refused(CODE_ACTION_UNKNOWN, "a computer tool use is an object")
             name = tool_use.get("name")
@@ -156,7 +171,7 @@ class ComputerUseGuard:
                 # key and hold_key name keys; type types text; a click or a
                 # scroll names the modifier keys held.
                 out["text" if kind == "type" else "keys"] = text
-            out["call"] = _call_id(tool_use.get("id"))
+            out["call"] = _call_id(tool_use["id"] if "id" in tool_use else tool_use.get("toolUseId"))
             return self._ask(out)
         except Exception as e:  # noqa: BLE001 - any failure refuses
             return _refused(CODE_CANNOT_DECIDE, f"PantherClaw cannot decide: {e}")

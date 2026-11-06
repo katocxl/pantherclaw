@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -35,5 +36,45 @@ func TestHR753_TheManifestGoesWhereChromeReadsIt(t *testing.T) {
 	dirs, _ := browserHostDirs(true)
 	if dirs["chrome"] == "" || dirs["chromium"] == "" || filepath.Dir(dirs["chrome"]) == home {
 		t.Errorf("system dirs %v", dirs)
+	}
+}
+
+// TestHR753_SystemInstallNeedsRootAndARootOnlyFolder: --system without
+// root is refused before anything is written, and a system folder someone
+// other than root owns or can write is refused; a file the person owns is
+// not root-owned.
+func TestHR753_SystemInstallNeedsRootAndARootOnlyFolder(t *testing.T) {
+	fi, err := os.Stat(hostConfigFile(t, 0o644))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if browserFileOwnedByRoot(fi) != (os.Geteuid() == 0) {
+		t.Errorf("owned by root = %v as uid %d", browserFileOwnedByRoot(fi), os.Geteuid())
+	}
+	dir := filepath.Join(t.TempDir(), "PantherClaw", "browser")
+	err = prepareBrowserInstallDir(dir, true)
+	if os.Geteuid() != 0 {
+		if err == nil || !strings.Contains(err.Error(), "needs root") {
+			t.Fatalf("--system as uid %d: %v", os.Geteuid(), err)
+		}
+		if _, err := os.Stat(dir); err == nil {
+			t.Error("made the folder before refusing")
+		}
+		r := recordInstall(t)
+		keyFile, _, _ := proxyFiles(t)
+		if code, _, _ := runArgs(t, "browser", "install-host", "--gateway", "https://gw.example.test", "--connection", "browser",
+			"--key-file", keyFile, "--extension-id", extOK, "--system"); code == 0 || r.manifest != nil {
+			t.Errorf("--system as uid %d = %d, registered %s", os.Geteuid(), code, r.manifest)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("as root: %v", err)
+	}
+	if err := os.Chmod(dir, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareBrowserInstallDir(dir, true); err == nil {
+		t.Error("a folder others can write was accepted")
 	}
 }

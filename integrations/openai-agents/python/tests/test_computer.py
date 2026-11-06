@@ -23,9 +23,11 @@ class _Guard(ComputerUseGuard):
     def __init__(self, decision: ComputerDecision) -> None:  # noqa: D107 - no client: decide_openai is replaced
         self.decision = decision
         self.seen: list[dict[str, Any]] = []
+        self.calls: list[str] = []
 
     def decide_openai(self, computer_call: Any) -> ComputerDecision:
         self.seen.append(computer_call["action"])
+        self.calls.append(computer_call["call_id"])
         return self.decision
 
 
@@ -175,6 +177,41 @@ class GuardComputerTest(unittest.TestCase):
         asyncio.run(go())
         self.assertEqual(screen.done, ["click", "screenshot", "wait"])
         self.assertEqual([a["type"] for a in g.seen], ["click", "type"])
+
+    def test_HR758_a_held_action_asked_again_is_the_same_call(self) -> None:
+        # The SDK passes no call_id to a Computer: the call comes from the
+        # action, so asking a held action again sends the same call, and the
+        # same action after an allow is a new one.
+        g, screen = _Guard(ComputerDecision(False, held=True, transaction_id="t-2")), _Screen()
+        c = guard_computer(screen, g)
+        for _ in range(2):
+            with self.assertRaises(PantherClawRefused):
+                c.keypress(["ENTER"])
+        held = g.calls[0]
+        self.assertRegex(held, r"^oa-[0-9a-f]{32}\Z")
+        self.assertEqual(g.calls, [held, held])
+        g.decision = ComputerDecision(True)
+        c.keypress(["ENTER"])
+        c.keypress(["ENTER"])
+        c.keypress(["TAB"])
+        self.assertEqual(g.calls[2], held)
+        self.assertEqual(len(set(g.calls[2:])), 3)
+        self.assertEqual(screen.done, ["keypress", "keypress", "keypress"])
+        # Another wrapped computer never repeats these calls.
+        g2 = _Guard(ComputerDecision(True))
+        guard_computer(_Screen(), g2).keypress(["ENTER"])
+        self.assertNotIn(g2.calls[0], g.calls)
+
+        async def go() -> list[str]:
+            ga = _Guard(ComputerDecision(False, held=True))
+            ca = guard_computer(_AsyncScreen(), ga)
+            for _ in range(2):
+                with self.assertRaises(PantherClawRefused):
+                    await ca.type("x")
+            return ga.calls
+
+        a = asyncio.run(go())
+        self.assertEqual(a[0], a[1])
 
 
 if __name__ == "__main__":

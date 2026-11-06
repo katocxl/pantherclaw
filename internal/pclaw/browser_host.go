@@ -102,16 +102,27 @@ type browserStatusOut struct {
 	Reason     string `json:"reason"`
 }
 
-// readBrowserHostConfig reads and checks the configuration file. On unix a
-// file group or others can read is refused: it names the key file.
+// browserFileOwnedByRootFn says whether root owns a file; a variable so
+// tests can stand in for a root-owned file.
+var browserFileOwnedByRootFn = browserFileOwnedByRoot
+
+// readBrowserHostConfig reads and checks the configuration file. It names
+// the key file and holds no secret, but it decides what the host signs
+// for. On unix a file group or others can write is refused; one they can
+// read is accepted only when root owns it (install-host --system).
 func readBrowserHostConfig(path string) (browserHostConfig, error) {
 	var cfg browserHostConfig
 	fi, err := os.Stat(path)
 	if err != nil {
 		return cfg, fmt.Errorf("the host configuration: %w", err)
 	}
-	if runtime.GOOS != "windows" && fi.Mode().Perm()&0o077 != 0 {
-		return cfg, fmt.Errorf("the host configuration %s is readable by group or others: chmod 600 it", path)
+	if perm := fi.Mode().Perm(); runtime.GOOS != "windows" {
+		if perm&0o022 != 0 {
+			return cfg, fmt.Errorf("the host configuration %s is writable by group or others: chmod 600 it", path)
+		}
+		if perm&0o044 != 0 && !browserFileOwnedByRootFn(fi) {
+			return cfg, fmt.Errorf("the host configuration %s is readable by group or others and root does not own it: chmod 600 it", path)
+		}
 	}
 	raw, err := os.ReadFile(path) //nolint:gosec // G304: operator-chosen path
 	if err != nil {

@@ -17,7 +17,7 @@ steps:
     do: agent.call
     with:
       face: hook
-      connection: browser
+      connection: pc-browser
       tool: browser_navigate
       args: {url: "https://www.shop.example.com/item/7", user_agent: "Mozilla/5.0 range", accept_language: "en-US", call: "rt-224-a-${fixture.nonce}"}
     expect:
@@ -26,7 +26,7 @@ steps:
     do: agent.call
     with:
       face: hook
-      connection: browser
+      connection: pc-browser
       tool: browser_navigate
       args: {url: "https://www.shop.example.com/item/7", user_agent: "Mozilla/5.0 range", accept_language: "en-US", call: "rt-224-b-${fixture.nonce}"}
     expect:

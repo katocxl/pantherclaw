@@ -133,6 +133,20 @@ func (s *stack) scopedRun(t *testing.T, scope string) {
 // edition when team, starts a run on it and makes it the stack's run.
 func (s *stack) grantRun(t *testing.T, bounds string, team bool) {
 	t.Helper()
+	s.grantRunRequiring(t, bounds, "", team)
+}
+
+// grantRunRequiring is grantRun for a grant that also carries these
+// requirements (a JSON list; "" for none).
+func (s *stack) grantRunRequiring(t *testing.T, bounds, requirements string, team bool) {
+	t.Helper()
+	var reqs []gdomain.Requirement
+	if requirements != "" {
+		var err error
+		if reqs, err = gdomain.DecodeRequirements([]byte(requirements)); err != nil {
+			t.Fatal(err)
+		}
+	}
 	var agent, inst string
 	s.query(t, "SELECT agent_id::text FROM pc.runs WHERE id = $1", []any{s.run}, &agent)
 	s.query(t, "SELECT id::text FROM pc.agent_instances WHERE agent_id = $1 AND state = 'ADMITTED' LIMIT 1", []any{agent}, &inst)
@@ -156,7 +170,7 @@ func (s *stack) grantRun(t *testing.T, bounds string, team bool) {
 	}
 	g, err := grants.Issue(human, grantsapp.IssueRequest{
 		AgentID: mustUUID(t, agent), Principal: gdomain.Principal{Kind: gdomain.PrincipalUser, ID: user}, TaskRef: "data",
-		ExpiresAt: time.Now().Add(time.Hour), Bounds: b,
+		ExpiresAt: time.Now().Add(time.Hour), Bounds: b, Requirements: reqs,
 	})
 	if err != nil {
 		t.Fatal(err)

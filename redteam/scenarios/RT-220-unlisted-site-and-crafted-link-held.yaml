@@ -18,7 +18,7 @@ steps:
     do: agent.call
     with:
       face: hook
-      connection: browser
+      connection: pc-browser
       tool: browser_navigate
       args: {url: "https://docs.example.com/guide", user_agent: "Mozilla/5.0 range", accept_language: "en-US", call: "rt-220-a-${fixture.nonce}"}
     expect:
@@ -27,7 +27,7 @@ steps:
     do: agent.call
     with:
       face: hook
-      connection: browser
+      connection: pc-browser
       tool: browser_navigate
       args: {url: "https://prize-claim.example.net/win", user_agent: "Mozilla/5.0 range", accept_language: "en-US", call: "rt-220-b-${fixture.nonce}"}
     expect:
@@ -38,7 +38,7 @@ steps:
     do: agent.call
     with:
       face: hook
-      connection: browser
+      connection: pc-browser
       tool: browser_navigate
       args: {url: "https://docs.example.com.prize-claim.example.net/", user_agent: "Mozilla/5.0 range", accept_language: "en-US", call: "rt-220-c-${fixture.nonce}"}
     expect:
@@ -49,7 +49,7 @@ steps:
     do: agent.call
     with:
       face: hook
-      connection: browser
+      connection: pc-browser
       tool: browser_navigate
       args: {url: "http://203.0.113.7/", user_agent: "Mozilla/5.0 range", accept_language: "en-US", call: "rt-220-d-${fixture.nonce}"}
     expect:
@@ -60,7 +60,7 @@ steps:
     do: agent.call
     with:
       face: hook
-      connection: browser
+      connection: pc-browser
       tool: browser_navigate
       args: {url: "https://docs.example.com@prize-claim.example.net/", user_agent: "Mozilla/5.0 range", accept_language: "en-US", call: "rt-220-e-${fixture.nonce}"}
     expect:

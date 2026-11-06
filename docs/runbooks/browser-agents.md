@@ -33,14 +33,21 @@ It writes three things and prints their paths:
 
 | File | Where (user) | Where (`--system`) |
 | --- | --- | --- |
-| `host-config.json` (0600) and the wrapper `pantherclaw-browser-host.bat` (Windows) or `pantherclaw-browser-host.sh` (0755) | `os.UserConfigDir()/PantherClaw/browser` | `%ProgramData%\PantherClaw\browser`, `/etc/pantherclaw/browser` or `/Library/Application Support/PantherClaw/browser` |
+| `host-config.json` (0600 for the user; 0644 and owned by root with `--system`) and the wrapper `pantherclaw-browser-host.bat` (Windows) or `pantherclaw-browser-host.sh` (0755) | `os.UserConfigDir()/PantherClaw/browser` | `%ProgramFiles%\PantherClaw\browser`, `/etc/pantherclaw/browser` or `/Library/Application Support/PantherClaw/browser` |
 | Manifest `dev.pantherclaw.browser.json` | Windows: next to the configuration, registered as the default value of `HKCU\Software\Google\Chrome\NativeMessagingHosts\dev.pantherclaw.browser` and `HKCU\Software\Chromium\NativeMessagingHosts\dev.pantherclaw.browser`. Linux: `~/.config/google-chrome/NativeMessagingHosts/` and `~/.config/chromium/NativeMessagingHosts/`. macOS: `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/` and `~/Library/Application Support/Chromium/NativeMessagingHosts/` | Windows: the same keys under `HKLM`. Linux: `/etc/opt/chrome/native-messaging-hosts/` and `/etc/chromium/native-messaging-hosts/`. macOS: `/Library/Google/Chrome/NativeMessagingHosts/` and `/Library/Application Support/Chromium/NativeMessagingHosts/` |
 
 Run it again after moving `pclaw` or the key file: the wrapper names both by absolute path.
 
+`--system` needs an administrator (Windows) or root (`sudo`, unix):
+
+- Windows: a `%ProgramFiles%\PantherClaw` or `%ProgramFiles%\PantherClaw\browser` folder that already exists and is not owned by SYSTEM or Administrators is refused, as is anything there that is not a folder: remove it, or take ownership as an administrator. Both folders get an explicit access list, with nothing inherited: SYSTEM and Administrators full control, Users read and execute. An old configuration, wrapper or manifest there is removed and written again, so it carries only that list.
+- Unix: `/etc/pantherclaw/browser` (or the macOS folder) and its parent must be owned by root and not writable by group or others. The configuration is written 0644, owned by root, so every user's browser can start the host.
+
+The configuration holds only the gateway, the connection, the run, the extension ids and the key file's path, never the key. It still decides what the host signs for, so no one but its owner may change it.
+
 What the host does (HR-753):
 
-- It refuses any origin other than a configured extension (exit 1, nothing on stdout), and on unix a configuration that group or others can read (`chmod 600` it).
+- It refuses any origin other than a configured extension (exit 1, nothing on stdout). On unix it refuses a configuration that group or others can write, and one they can read unless root owns it (`chmod 600` a user's configuration).
 - Messages are Chrome's framing: at most 1 MiB in (a larger one closes the host), inputs at most 64 KiB, replies at most 64 KiB.
 - Each decide is one hook call with an 8-second deadline. Any error is a deny with `CANNOT_DECIDE`. Tokens are kept in memory and renewed when less than a minute is left.
 - It never logs a message's input, and it exits when the browser closes its stdin.
@@ -53,10 +60,19 @@ pclaw browser policy generate --extension-id ID --update-url URL --out DIR [--ho
 
 It reads the org's browser sites and writes two files. It installs nothing (HR-755):
 
-- `chrome-policy.json`, the Linux managed-policy form: `ExtensionSettings` force-installs and pins the extension from `--update-url` (https), `IncognitoModeAvailability: 1` turns incognito off, `BrowserGuestModeEnabled: false` turns guest mode off, and `3rdparty.extensions.<id>` gives the extension its `host_name` and the `click_rules` of every site with selectors.
-- `chrome-policy.reg`, the same under `HKEY_LOCAL_MACHINE\Software\Policies\Google\Chrome` (regedit version 5, UTF-16LE).
+- `chrome-policy.json`, the Linux managed-policy form: `ExtensionSettings` force-installs and pins the extension from `--update-url` (https), `IncognitoModeAvailability: 1` turns incognito off, `BrowserGuestModeEnabled: false` turns guest mode off, and `3rdparty.extensions.<id>` gives the extension its `host_name` and the `click_rules` of every site with selectors. Copy it into `/etc/opt/chrome/policies/managed/` for Chrome and `/etc/chromium/policies/managed/` for Chromium.
+- `chrome-policy.reg`, the same under both `HKEY_LOCAL_MACHINE\Software\Policies\Google\Chrome` and `HKEY_LOCAL_MACHINE\Software\Policies\Chromium` (regedit version 5, UTF-16LE).
 
-Deploy them with your device management. Generate them again after a site's selectors change: click rules reach the extension only through policy. macOS policy generation is a follow-up; there, set the same keys with a configuration profile.
+Deploy them with your device management. Generate them again after a site's selectors change: click rules reach the extension only through policy. macOS policy generation is a follow-up; there, set the same keys with a configuration profile (`com.google.Chrome`, `org.chromium.Chromium`).
+
+### Automated agents: use a managed profile
+
+The policy reaches only browser profiles that load it. An automated agent (Playwright, Puppeteer, Selenium, a CDP client) must run in a persistent profile of a browser that has the policy, with the extension loaded. With Playwright that is `launchPersistentContext` (Python `launch_persistent_context`) on that profile's user data folder, without `--disable-extensions` (Playwright adds it unless you drop it with `ignoreDefaultArgs`).
+
+Not covered (PARTIAL):
+
+- Incognito and other off-the-record contexts: Playwright's `newContext`, and CDP `Target.createBrowserContext`. The extension is not in them, so nothing there is asked.
+- Whether `IncognitoModeAvailability: 1` also stops `Target.createBrowserContext` has not been checked yet; that waits for the Phase C browser tests. Until then, treat a context an agent creates over CDP as not covered.
 
 Managed configuration can only add. `extra_secret_hosts` adds hosts whose frames hold only secret fields, beside the built-in payment hosts (`*.` also covers the subdomains).
 
@@ -78,12 +94,17 @@ Open the toolbar popup. It says "Connected to PantherClaw (connection â€¦, run â
 
 No screenshots, DOM, field values or page text leave the browser.
 
+An allowed navigation or submit is let through by a session rule for that one tab and address. The rule goes when the tab commits or fails a navigation, when a request it matches redirects, completes or fails (the `webRequest` permission is for this; the extension only observes, it never blocks or changes a request there), or after 10 seconds, whichever is first. A service-worker restart loses the 10-second timer; the tab's next commit or failure still removes the rule.
+
+Not decided (PARTIAL): navigations inside a frame (only the top-level page is asked), and `file:` pages.
+
 ### Secret and challenge fields
 
 An agent never types into or submits password, one-time-code or payment fields, and never touches a challenge frame (FQ33-4, HR-752). There is no override.
 
 - A field is secret by `type=password`, by an `autocomplete` token (`current-password`, `new-password`, `one-time-code`, the `cc-*` tokens), by a name, id, aria-label or placeholder that looks like a password, PIN, code, card, IBAN, routing or account number or SSN, or because its frame is on a payment host (Stripe, Braintree, Adyen, PayPal, Google Pay, or an `extra_secret_hosts` entry).
 - In a challenge frame (reCAPTCHA, hCaptcha, Cloudflare challenges, Arkose) every pointer, key and input event is refused.
+- A field inside a closed shadow root is not seen, so it is not treated as secret (PARTIAL).
 - Typing, pasting and dropping are prevented, and a value that still arrives is cleared. The page shows "PantherClaw refuses agent input into password, one-time-code, payment and challenge fields. A person can take over this tab from the PantherClaw toolbar button."
 - A submit holding a non-empty secret field is refused in the page and still asked with `secret_fields: true`. The gateway refuses it before the Authority is asked (`BROWSER_SECRET_FIELD`, HR-747), so the refusal is recorded. The agent is told to ask a person to take over the tab and continue after.
 
@@ -135,6 +156,9 @@ Computer use is decided only through the SDK wrappers (R-81). Each action become
 
 - Python: `from pantherclaw.computer_use import ComputerUseGuard`; `guard = ComputerUseGuard(client, "CONNECTION")`; then `guard.decide_anthropic(tool_use)` for an Anthropic `computer` tool use, or `guard.decide_openai(computer_call)` for an OpenAI `computer_call`.
 - TypeScript: `new ComputerUseGuard(client, "CONNECTION")`, with `decideAnthropic` and `decideOpenAI`.
+- Bedrock: pass the Converse `toolUse` block of the Anthropic computer tool (`{toolUseId, name, input}`, or the content block `{toolUse: {...}}`) to `decide_anthropic` / `decideAnthropic`.
+- The model's call id (`id`, `toolUseId` or `call_id`) is the call. A held action asked again with the same id is the same call, so it runs once an approver releases it. An id that cannot be a call (more than 128 characters, or other than letters, digits, `_` and `-`) is replaced by a digest of it; only a missing id gets a random call.
+- `decide_openai` / `decideOpenAI` takes one `action`. A `computer_call` that batches several in `actions` is refused (`COMPUTER_ACTION_UNKNOWN`); decide each one.
 - Each returns `allowed`, `held`, `code`, `reason` and `transaction_id`. Run the action only when `allowed` is true (HR-758).
 - Screenshot, wait, cursor position and zoom are allowed locally and never sent. An unknown action is refused locally (`COMPUTER_ACTION_UNKNOWN`), and any error refuses (`CANNOT_DECIDE`).
 - Both clients also gain a general hook call (`Client.hook_call(connection, tool, input)` / `hookCall`).
@@ -142,6 +166,8 @@ Computer use is decided only through the SDK wrappers (R-81). Each action become
 ### OpenAI Agents SDK
 
 `guard_computer(computer, guard)` from `pantherclaw_openai_agents` returns a `Computer` or `AsyncComputer` subclass that asks before click, double click, drag, keypress, move, scroll and type, and raises the integration's refusal error on a hold or a refusal. Screenshot and wait pass through.
+
+The Agents SDK calls a `Computer` with each action's arguments only: the `computer_call`'s `call_id` never reaches it, and one `call_id` can carry several actions. So the wrapper makes each call from the action itself, a random value per wrapped computer and the number of identical actions allowed before it. A held action asked again through the same wrapped computer is the same call, so it runs once released; the same action after an allow is a new call. A new wrapped computer (a restarted process) makes new calls, so an action held before the restart is asked as a new one. Modifier keys the SDK passes with a click, drag, move or scroll are not passed through.
 
 ### The model connection
 

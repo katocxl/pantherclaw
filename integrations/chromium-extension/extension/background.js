@@ -13,7 +13,7 @@
 
 import { Host, cannotDecide } from "./host.js";
 import {
-  addTakeoverRule, allowNavigationOnce, installHoldRule, re2Escape, removeNavigationRules, removeTakeoverRule,
+  addTakeoverRule, allowNavigationOnce, installHoldRule, re2Escape, removeNavigationRules, removeNavigationRulesFor, removeTakeoverRule,
 } from "./rules.js";
 
 /** @typedef {import("./host.js").Answer} Answer */
@@ -197,10 +197,14 @@ function decideClick(m) {
 
 /**
  * Whether a download comes from a tab in a takeover: its referrer is that
- * tab's page (a download names no tab).
+ * tab's page and no other open tab shows that page (a download names no
+ * tab, so a page open in two tabs is decided as usual).
  * @param {chrome.downloads.DownloadItem} item
  */
 async function fromTakeoverTab(item) {
+  if (!item.referrer) {
+    return false;
+  }
   const all = await chrome.storage.session.get(null);
   for (const key of Object.keys(all)) {
     if (!key.startsWith("takeover:")) {
@@ -211,9 +215,11 @@ async function fromTakeoverTab(item) {
       continue;
     }
     const tab = await chrome.tabs.get(tabId).catch(() => null);
-    if (tab && item.referrer && tab.url === item.referrer) {
-      return true;
+    if (!tab || tab.url !== item.referrer) {
+      continue;
     }
+    const tabs = await chrome.tabs.query({}).catch(() => null);
+    return tabs !== null && tabs.every((t) => t.id === tabId || t.url !== item.referrer);
   }
   return false;
 }
@@ -324,6 +330,15 @@ chrome.webNavigation.onErrorOccurred.addListener((d) => {
     void removeNavigationRules(d.tabId);
   }
 });
+
+/** A decided navigation's or submit's rule goes once the request it let through redirects, completes or fails. */
+for (const event of [chrome.webRequest.onBeforeRedirect, chrome.webRequest.onCompleted, chrome.webRequest.onErrorOccurred]) {
+  event.addListener((d) => {
+    if (d.tabId >= 0) {
+      void removeNavigationRulesFor(d.tabId, d.url);
+    }
+  }, { urls: ["http://*/*", "https://*/*"], types: ["main_frame"] });
+}
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name.startsWith("takeover:")) {

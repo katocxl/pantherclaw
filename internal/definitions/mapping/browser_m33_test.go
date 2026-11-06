@@ -59,6 +59,44 @@ func TestHR124_PcBrowserMappingGolden(t *testing.T) {
 	}
 }
 
+// TestHR124_PcComputerMappingGolden pins the ActionIR the pc.computer hook
+// mapping produces for each kind of input: the target is the local desktop,
+// coordinates are params but not material, and the call id is the dedupe
+// key (G0 M33 D984, HR-758).
+func TestHR124_PcComputerMappingGolden(t *testing.T) {
+	c := mapperFor(t, pccomputer.Package)
+	ctx := context.Background()
+	var out bytes.Buffer
+	for _, args := range []string{
+		`{"kind":"click","button":"left","x":10,"y":20,"call":"toolu_1"}`,
+		`{"kind":"double_click","button":"left","x":10,"y":20,"call":"toolu_2"}`,
+		`{"kind":"drag","x":300,"y":400,"call":"toolu_3"}`,
+		`{"kind":"type","text":"hello","call":"toolu_4"}`,
+		`{"kind":"key","keys":"ctrl+s","call":"toolu_5"}`,
+		`{"kind":"scroll","x":5,"y":6,"call":"toolu_6"}`,
+		`{"kind":"move","x":0,"y":0,"call":"call_7"}`,
+	} {
+		p, err := c.Hook(ctx, tc, "computer", []byte(args))
+		if err != nil {
+			t.Fatalf("computer %s: %v", args, err)
+		}
+		fmt.Fprintf(&out, "hook computer %s\n%s\n", p.HashHex(), p.Canonical)
+	}
+	path := filepath.Join("testdata", "pc-computer.actionir")
+	if *update {
+		if err := os.WriteFile(path, out.Bytes(), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("%v (run go test -update to create it)", err)
+	}
+	if !bytes.Equal(out.Bytes(), want) {
+		t.Fatalf("mapping output changed; a mapping change must be deliberate (HR-124).\n got:\n%s\nwant:\n%s", out.Bytes(), want)
+	}
+}
+
 // TestHR748_BrowserMappingsNormalizeURLs: two spellings of one address are
 // one action whose target is the host and whose url is the normalized
 // spelling; the download's unknown size (-1) is omitted.

@@ -255,8 +255,13 @@ func (c *Comparer) compare(ctx context.Context, j Job) {
 	if err != nil {
 		return
 	}
-	a, errA := c.fetch(ctx, u, j.UserAgent, j.AcceptLanguage)
-	b, errB := c.fetch(ctx, u, c.plainUA, "")
+	// The fetches send the address without its user info, query or
+	// fragment (scheme://host/path), so nothing the agent's address carried
+	// in them reaches the site again (D1221 L5, R-80); the report's path
+	// digest is still the D986 one, of the path and the query.
+	addr := &url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path, RawPath: u.RawPath}
+	a, errA := c.fetch(ctx, addr, j.UserAgent, j.AcceptLanguage)
+	b, errB := c.fetch(ctx, addr, c.plainUA, "")
 	if errA != nil || errB != nil {
 		c.failures.Add(1)
 		c.failMetric.Add(ctx, 1)

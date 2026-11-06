@@ -10,8 +10,11 @@
 // value that still arrives is cleared, and every pointer, key and input
 // event in a challenge frame is refused. There is no override; a person
 // does that step in a takeover (D982), the only time this is lifted.
-// Cooperative (PARTIAL, R-78): script that sets a value directly, or input
-// from outside the page's events, is not seen.
+// A text area or contenteditable is secret by its name, id, autocomplete or
+// aria-label, and a field once seen as secret stays secret (a show-password
+// button does not lift it). Cooperative (PARTIAL, R-78): script that sets a
+// value directly, input from outside the page's events, and inputs inside a
+// closed shadow root are not seen.
 
 (() => {
   /** autocomplete tokens that mark a secret field. */
@@ -59,14 +62,55 @@
   }
 
   /**
-   * Whether el is a secret input.
+   * Fields once seen as secret stay secret: a show-password button changes
+   * the type, not the field.
+   * @type {WeakSet<HTMLElement>}
+   */
+  const seenSecret = new WeakSet();
+
+  /**
+   * The field el edits: an input, a text area, or the outermost editable
+   * host of an element or text node inside contenteditable; otherwise null.
+   * @param {EventTarget | null} el
+   * @returns {HTMLElement | null}
+   */
+  function editable(el) {
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+      return el;
+    }
+    const node = el instanceof Text ? el.parentElement : el;
+    if (!(node instanceof HTMLElement) || !node.isContentEditable) {
+      return null;
+    }
+    let editHost = node;
+    while (editHost.parentElement && editHost.parentElement.isContentEditable) {
+      editHost = editHost.parentElement;
+    }
+    return editHost;
+  }
+
+  /**
+   * Whether el is a secret field: an input, a text area or a contenteditable.
    * @param {EventTarget | null} el
    */
   function isSecret(el) {
-    if (!(el instanceof HTMLInputElement)) {
+    const field = editable(el);
+    if (!field) {
       return false;
     }
-    if (secretFrame() || el.type === "password") {
+    if (seenSecret.has(field)) {
+      return true;
+    }
+    if (secretNow(field)) {
+      seenSecret.add(field);
+      return true;
+    }
+    return false;
+  }
+
+  /** @param {HTMLElement} el */
+  function secretNow(el) {
+    if (secretFrame() || (el instanceof HTMLInputElement && el.type === "password")) {
       return true;
     }
     const tokens = (el.getAttribute("autocomplete") || "").toLowerCase().split(/\s+/)
@@ -74,13 +118,25 @@
     if (tokens.some((t) => SECRET_AUTOCOMPLETE.has(t))) {
       return true;
     }
-    for (const text of [el.name, el.id, el.getAttribute("aria-label"), el.getAttribute("placeholder")]) {
+    const texts = el instanceof HTMLInputElement
+      ? [el.name, el.id, el.getAttribute("aria-label"), el.getAttribute("placeholder")]
+      : [el.getAttribute("name"), el.id, el.getAttribute("aria-label")];
+    for (const text of texts) {
       if (text && SECRET_TEXT.test(text)) {
         return true;
       }
     }
     return false;
   }
+
+  // An input whose type leaves "password" stays secret, seen or not.
+  new MutationObserver((records) => {
+    for (const r of records) {
+      if (r.target instanceof HTMLInputElement && (r.oldValue || "").toLowerCase() === "password") {
+        seenSecret.add(r.target);
+      }
+    }
+  }).observe(document, { subtree: true, attributes: true, attributeFilter: ["type"], attributeOldValue: true });
 
   /**
    * Whether a form holds a secret input with a value.
@@ -146,11 +202,19 @@
 
   /** A value that still arrived is cleared. @param {Event} e */
   function onValue(e) {
-    const el = targetOf(e);
+    const el = editable(targetOf(e));
     if (lifted || !isSecret(el)) {
       return;
     }
-    const input = /** @type {HTMLInputElement} */ (el);
+    if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) {
+      const editHost = /** @type {HTMLElement} */ (el);
+      if (editHost.textContent !== "") {
+        editHost.textContent = "";
+        showBanner(NOTICE);
+      }
+      return;
+    }
+    const input = el;
     if (input.value !== "") {
       input.value = "";
       showBanner(NOTICE);

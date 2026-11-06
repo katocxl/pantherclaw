@@ -10,7 +10,7 @@ Every technique of both matrices has exactly one place:
 - **Outside PantherClaw:** the technique needs something PantherClaw does not see; the kind of tool that covers it is named.
 - **No PantherClaw control yet:** the technique is within an agent platform's reach and PantherClaw ships no control for it; why is given.
 
-Mapping digest: `7ecdc7995a95f7143e2da1e930cb325f8d8ede427c5c518f3447f69f179138aa`.
+Mapping digest: `e646e53b1a485b61015df7a05be1d9e4dd5518efa7c78b7e2a06d635a2906f37`.
 
 | Framework | Catalogue version | Catalogue digest |
 |---|---|---|
@@ -367,7 +367,7 @@ Mapping digest: `7ecdc7995a95f7143e2da1e930cb325f8d8ede427c5c518f3447f69f179138a
 | Technique | Name | Place | Mapped to it |
 |---|---|---|---|
 | [T1134](https://attack.mitre.org/techniques/T1134) | Access Token Manipulation | Outside PantherClaw: covered by EDR | It needs an endpoint. |
-| [T1696](https://attack.mitre.org/techniques/T1696) | Anti-Automation Evasion | No PantherClaw control yet | Anti-automation evasion (T1696): an agent solving automation checks in its own browser makes no PantherClaw call. |
+| [T1696](https://attack.mitre.org/techniques/T1696) | Anti-Automation Evasion | Mapped | T1696.001: prevent `prevent.browser_secret_fields` |
 | [T1197](https://attack.mitre.org/techniques/T1197) | BITS Jobs | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1612](https://attack.mitre.org/techniques/T1612) | Build Image on Host | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1622](https://attack.mitre.org/techniques/T1622) | Debugger Evasion | Outside PantherClaw: covered by EDR | It needs an endpoint. |

@@ -238,22 +238,38 @@ func TestHR753_TheHostServesOnlyAConfiguredExtension(t *testing.T) {
 }
 
 // TestHR753_TheHostRefusesAConfigurationOthersCanRead: on unix a host
-// configuration group or others can read is refused (it names the key
-// file); a 0600 one is read.
+// configuration group or others can write is refused, and one they can
+// read is refused unless root owns it (install-host --system writes it
+// 0644 as root); a 0600 one is read.
 func TestHR753_TheHostRefusesAConfigurationOthersCanRead(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix file modes")
 	}
+	rootOwned := false
+	old := browserFileOwnedByRootFn
+	browserFileOwnedByRootFn = func(os.FileInfo) bool { return rootOwned }
+	t.Cleanup(func() { browserFileOwnedByRootFn = old })
 	if _, err := readBrowserHostConfig(hostConfigFile(t, 0o600)); err != nil {
 		t.Fatalf("0600: %v", err)
 	}
-	for _, mode := range []os.FileMode{0o640, 0o604} {
+	for _, mode := range []os.FileMode{0o640, 0o604, 0o620, 0o602, 0o664} {
 		if _, err := readBrowserHostConfig(hostConfigFile(t, mode)); err == nil || !strings.Contains(err.Error(), "chmod 600") {
 			t.Errorf("%o: %v", mode, err)
 		}
 		code, out, _ := runHost(t, nil, "--config", hostConfigFile(t, mode), "chrome-extension://"+extOK+"/")
 		if code != 1 || out != "" {
 			t.Errorf("%o: run = %d %q", mode, code, out)
+		}
+	}
+	rootOwned = true
+	for _, mode := range []os.FileMode{0o644, 0o640, 0o604} {
+		if _, err := readBrowserHostConfig(hostConfigFile(t, mode)); err != nil {
+			t.Errorf("root-owned %o: %v", mode, err)
+		}
+	}
+	for _, mode := range []os.FileMode{0o664, 0o646, 0o620} {
+		if _, err := readBrowserHostConfig(hostConfigFile(t, mode)); err == nil || !strings.Contains(err.Error(), "writable") {
+			t.Errorf("root-owned %o: %v", mode, err)
 		}
 	}
 }
@@ -563,7 +579,8 @@ func TestHR755_ThePolicyGeneratorOnlyWritesTwoFiles(t *testing.T) {
 	}})
 	dir := filepath.Join(t.TempDir(), "out")
 	code, out, errs := run(t, env, "browser", "policy", "generate", "--extension-id", extOK, "--update-url", "https://ext.example.test/update.xml", "--out", dir)
-	if code != 0 || !strings.Contains(out, "Nothing is installed") {
+	if code != 0 || !strings.Contains(out, "Nothing is installed") ||
+		!strings.Contains(out, "/etc/opt/chrome/policies/managed") || !strings.Contains(out, "/etc/chromium/policies/managed") {
 		t.Fatalf("generate = %d %q %q", code, out, errs)
 	}
 	entries, _ := os.ReadDir(dir)
@@ -604,13 +621,21 @@ func TestHR755_ThePolicyGeneratorOnlyWritesTwoFiles(t *testing.T) {
 	}
 	reg := string(utf16.Decode(u))
 	for _, want := range []string{
-		`[HKEY_LOCAL_MACHINE\Software\Policies\Google\Chrome]`,
+		`[HKEY_LOCAL_MACHINE\Software\Policies\Google\Chrome]`, `[HKEY_LOCAL_MACHINE\Software\Policies\Chromium]`,
+		`[HKEY_LOCAL_MACHINE\Software\Policies\Google\Chrome\3rdparty\extensions\` + extOK + `\policy]`,
+		`[HKEY_LOCAL_MACHINE\Software\Policies\Chromium\3rdparty\extensions\` + extOK + `\policy]`,
 		`"IncognitoModeAvailability"=dword:00000001`, `"BrowserGuestModeEnabled"=dword:00000000`,
-		`\3rdparty\extensions\` + extOK + `\policy]`, `"host_name"="dev.pantherclaw.browser"`,
+		`"host_name"="dev.pantherclaw.browser"`,
 		`\"installation_mode\":\"force_installed\"`, `\"toolbar_pin\":\"force_pinned\"`, `a[href=\\\"/delete\\\"]`,
 	} {
 		if !strings.Contains(reg, want) {
 			t.Errorf("reg lacks %q:\n%s", want, reg)
+		}
+	}
+	// Each root carries the whole policy, not only its key.
+	for _, want := range []string{`"IncognitoModeAvailability"=dword:00000001`, `"BrowserGuestModeEnabled"=dword:00000000`, `"host_name"=`, `"click_rules"=`, `"ExtensionSettings"=`} {
+		if n := strings.Count(reg, want); n != 2 {
+			t.Errorf("reg has %q %d times, want 2", want, n)
 		}
 	}
 }

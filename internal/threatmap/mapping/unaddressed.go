@@ -39,6 +39,5 @@ var Unaddressed = []UnaddressedEntry{
 	{ID: "T1080", Why: "Taint shared content (T1080): granted writes to a shared repository are allowed; PantherClaw does not judge their content."},
 	{ID: "T1528", Why: "Steal application access token (T1528): theft of a token happens where it is stored; PantherClaw acts only on its later use."},
 	{ID: "T1651", Why: "Cloud administration command (T1651): commands run through a cloud's own management service have no PantherClaw control yet."},
-	{ID: "T1696", Why: "Anti-automation evasion (T1696): an agent solving automation checks in its own browser makes no PantherClaw call."},
 	{ID: "T1699", Why: "Direct prompt injection (T1699): it happens in the model's conversation; PantherClaw decides on the actions that follow."},
 }

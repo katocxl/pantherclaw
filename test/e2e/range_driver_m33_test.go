@@ -28,6 +28,12 @@ import (
 // cloaking compare.
 const capBrowserAgent = app.Capability("browser_agent")
 
+// browserRoles are the M33 range roles and the dev seed's connections they
+// are bound to, as `--role pc-browser=browser --role pc-computer=computer`
+// binds them (D1220 (3); a role name has no underscore): a role named browser would also turn on the
+// console capability browser (RT-060, RT-061).
+var browserRoles = map[string]string{"pc-browser": "browser", "pc-computer": "computer"}
+
 // browserTool reports whether a hook-face tool is a pc.browser or
 // pc.computer one: the native host's and the computer-use wrappers' call,
 // not Claude Code's.
@@ -46,6 +52,9 @@ func (d *rangeDriver) setupBrowserAgent(sc domain.Scenario) {
 // callBrowserHook asks the hook face as `pclaw browser host` does: a signed
 // PAP/1 POST of the tool and its input, with the action id.
 func (d *rangeDriver) callBrowserHook(conn string, w callWith, act ids.UUID) (domain.Observation, *callRec, error) {
+	if c, ok := browserRoles[conn]; ok {
+		conn = c
+	}
 	input := w.Args
 	if len(input) == 0 {
 		input = []byte("{}")

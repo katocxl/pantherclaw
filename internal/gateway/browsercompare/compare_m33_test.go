@@ -224,6 +224,43 @@ func TestHR759_OnlyAMismatchIsReportedWithDigestsAndNumbers(t *testing.T) {
 	}
 }
 
+// TestHR759_FetchesSendTheAddressWithoutItsQuery: both fetches GET
+// scheme://host/path, with no user info, query or fragment, while the
+// report's path digest is still that of the path and the query (D1221 L5,
+// D986).
+func TestHR759_FetchesSendTheAddressWithoutItsQuery(t *testing.T) {
+	var mu sync.Mutex
+	var uris []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		uris = append(uris, r.RequestURI)
+		mu.Unlock()
+		if strings.Contains(r.UserAgent(), "AgentBrowser") {
+			_, _ = w.Write([]byte("<p>something else entirely for agents only, nothing like the article</p>"))
+			return
+		}
+		_, _ = w.Write([]byte(article))
+	}))
+	t.Cleanup(srv.Close)
+	r := &reports{}
+	c := newComparer(t, r)
+	u, err := url.Parse(srv.URL + "/a%2Fb/page?token=s3cr3t&id=7#frag")
+	if err != nil {
+		t.Fatal(err)
+	}
+	u.User = url.UserPassword("u", "p")
+	compareOnce(t, c, Job{Connection: "c1", URL: u.String(), Host: "shop.example", UserAgent: "AgentBrowser/1.0"})
+	mu.Lock()
+	defer mu.Unlock()
+	if len(uris) != 2 || uris[0] != "/a%2Fb/page" || uris[1] != "/a%2Fb/page" {
+		t.Fatalf("fetched %v", uris)
+	}
+	got := r.all()
+	if len(got) != 1 || got[0].PathSHA256 != pathDigest(u) {
+		t.Fatalf("reports %+v", got)
+	}
+}
+
 // TestHR759_RedirectsAreFollowedByHandAtMostThree: up to three redirects
 // are followed, each a new request, http and https only; a redirect to
 // another scheme is a failed fetch, counted and not reported.

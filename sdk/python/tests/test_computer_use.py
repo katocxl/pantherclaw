@@ -147,12 +147,48 @@ class ComputerUseTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             ComputerUseGuard(None, "desktop")  # type: ignore[arg-type]
 
-    def test_HR758_a_call_id_that_is_not_one_gets_a_random_call(self) -> None:
+    def test_HR758_a_call_id_that_is_not_one_gets_a_stable_call(self) -> None:
         g = _Gateway()
         try:
-            g.guard().decide_anthropic({"id": "bad id!", "name": "computer", "input": {"action": "double_click"}})
-            call = g.inputs()[-1]["call"]
-            self.assertTrue(call.startswith("pc-") and len(call) == 35, call)
+            for _ in range(2):
+                g.guard().decide_anthropic({"id": "bad id!", "name": "computer", "input": {"action": "double_click"}})
+            a, b = (i["call"] for i in g.inputs())
+            self.assertTrue(a.startswith("pc-") and len(a) == 35, a)
+            self.assertEqual(a, b)
+            g.guard().decide_anthropic({"id": "other id!", "name": "computer", "input": {"action": "double_click"}})
+            self.assertNotEqual(g.inputs()[-1]["call"], a)
+            # Only a missing id gets a random call.
+            g.guard().decide_openai({"action": {"type": "move", "x": 1, "y": 1}})
+            g.guard().decide_openai({"action": {"type": "move", "x": 1, "y": 1}})
+            c, d = (i["call"] for i in g.inputs()[-2:])
+            self.assertTrue(c.startswith("pc-") and c != d, (c, d))
+        finally:
+            g.close()
+
+    def test_HR758_a_held_action_asked_again_with_the_same_id_is_the_same_call(self) -> None:
+        g = _Gateway({"decision": "deny", "held": True, "code": "APPROVAL_REQUIRED", "reason": "held", "transaction_id": "t-2"})
+        try:
+            for _ in range(2):
+                self.assertTrue(g.guard().decide_openai({"call_id": "call_9", "action": {"type": "type", "text": "x"}}).held)
+                self.assertTrue(g.guard().decide_anthropic({"id": "toolu_9", "name": "computer", "input": {"action": "key", "text": "Return"}}).held)
+            self.assertEqual([i["call"] for i in g.inputs()], ["call_9", "toolu_9", "call_9", "toolu_9"])
+        finally:
+            g.close()
+
+    def test_HR758_a_bedrock_tool_use_is_decided_with_its_tool_use_id(self) -> None:
+        g = _Gateway()
+        try:
+            inp = {"action": "left_click", "coordinate": [3, 4]}
+            for tu in (
+                {"toolUseId": "tooluse_ab12", "name": "computer", "input": inp},
+                {"toolUse": {"toolUseId": "tooluse_ab12", "name": "computer", "input": inp}},
+            ):
+                self.assertTrue(g.guard().decide_anthropic(tu).allowed)
+            for got in g.inputs():
+                self.assertEqual(got, {"kind": "click", "button": "left", "x": 3, "y": 4, "call": "tooluse_ab12"})
+            d = g.guard().decide_anthropic({"toolUse": {"toolUseId": "t", "name": "bash", "input": inp}})
+            self.assertEqual((d.allowed, d.code), (False, CODE_ACTION_UNKNOWN))
+            self.assertEqual(len(g.inputs()), 2)
         finally:
             g.close()
 
