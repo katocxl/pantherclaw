@@ -142,6 +142,11 @@ type options struct {
 	// shell also seeds pc.shell and the hook connection "shell" (dev seed
 	// --shell).
 	shell bool
+	// browser also seeds pc.browser and pc.computer and the hook connections
+	// "browser" and "computer" (dev seed --browser, G0 M33); browserCompareUA
+	// is the gateway's browser_compare.plain_user_agent (D986).
+	browser          bool
+	browserCompareUA string
 	// people serves the API at http://localhost (security keys need a
 	// name) with this OIDC provider and, with relay, email (M5 part 2).
 	people *idp
@@ -327,6 +332,9 @@ func start(t *testing.T, o options) *stack {
 	if o.shell {
 		args = append(args, "--shell")
 	}
+	if o.browser {
+		args = append(args, "--browser")
+	}
 	if o.a2a {
 		args = append(args, s.startA2APeer(t, dir)...)
 	}
@@ -478,6 +486,8 @@ func start(t *testing.T, o options) *stack {
 			t.Fatal(err)
 		}
 	}
+	// The cloaking compare is on only with a plain user agent (G0 M33 D986).
+	gc.BrowserCompare.PlainUserAgent = o.browserCompareUA
 	s.gatewayCfg = gc
 	s.gatewayEnroll = enrollFile
 	s.gw = s.startGateway(t)

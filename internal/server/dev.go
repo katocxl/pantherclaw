@@ -25,6 +25,8 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 	pcawsecs "github.com/katocxl/pantherclaw/packages/pc-aws-ecs"
+	pcbrowser "github.com/katocxl/pantherclaw/packages/pc-browser"
+	pccomputer "github.com/katocxl/pantherclaw/packages/pc-computer"
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
 	pcgitlab "github.com/katocxl/pantherclaw/packages/pc-gitlab"
 	pcgmail "github.com/katocxl/pantherclaw/packages/pc-gmail"
@@ -67,6 +69,9 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	access := fs.String("access-mode", "", "with --target-url: "+accessUsage+" (default none)")
 	shell := fs.Bool("shell", false, "with --gateway-out: also seed the pc.shell package and the hook connection \"shell\" (Claude Code), in enforce mode; "+
 		"with --workload-out the grant also allows shell commands")
+	browser := fs.Bool("browser", false, "with --gateway-out: also seed the pc.browser and pc.computer packages and the hook connections "+
+		"\"browser\" and \"computer\" (the browser extension's native host and the computer-use wrappers, G0 M33), in enforce mode; "+
+		"the seeded grant names neither package's operations")
 	githubURL := fs.String("github-url", "", "with --gateway-out: also seed pc.github and the connection \"github\" to this GitHub API "+
 		"(pantherclaw-sim github), held by the gateway (seal the GitHub App with pclaw seal --github-app), the gateway as its fact provider, "+
 		"and, with --workload-out, the GitHub operations in the grant")
@@ -135,7 +140,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 			return fmt.Errorf("dev seed: %s already exists", out)
 		}
 	}
-	if (*targetURL != "" || *shell || *githubURL != "" || *stripeURL != "" || *postgresFile != "" || *slackURL != "" || *a2aURL != "" ||
+	if (*targetURL != "" || *shell || *browser || *githubURL != "" || *stripeURL != "" || *postgresFile != "" || *slackURL != "" || *a2aURL != "" ||
 		*jiraURL != "" || *gitlabURL != "" || *awsECSURL != "" || *modelURL != "" || *googleURL != "" || *m365URL != "" || saas.any()) &&
 		*gatewayOut == "" {
 		return errTargetNeedsGateway
@@ -192,6 +197,10 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	pkgs := []devPackage{{mockpayments.Name, mockpayments.Version, mockpayments.Package}}
 	if *shell {
 		pkgs = append(pkgs, devPackage{pcshell.Name, pcshell.Version, pcshell.Package})
+	}
+	if *browser {
+		pkgs = append(pkgs, devPackage{pcbrowser.Name, pcbrowser.Version, pcbrowser.Package},
+			devPackage{pccomputer.Name, pccomputer.Version, pccomputer.Package})
 	}
 	if *githubURL != "" {
 		pkgs = append(pkgs, devPackage{pcgithub.Name, pcgithub.Version, pcgithub.Package})
@@ -361,6 +370,18 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 			}
 			_, _ = fmt.Fprintf(stdout, "seeded package %s@%s and connection %s (%s); the Claude Code hook asks the gateway at /hook/%s\n",
 				pcshell.Name, pcshell.Version, c.ID, c.Name, c.Name)
+		}
+		if *browser {
+			for _, b := range []struct{ conn, pkg, version string }{
+				{devBrowserConnectionName, pcbrowser.Name, pcbrowser.Version},
+				{devComputerConnectionName, pccomputer.Name, pccomputer.Version},
+			} {
+				c, err := seedHookConnection(ctx, cfg, pool, org, gw, b.conn, b.pkg)
+				if err != nil {
+					return err
+				}
+				_, _ = fmt.Fprintf(stdout, "seeded package %s@%s and connection %s (%s) at /hook/%s\n", b.pkg, b.version, c.ID, c.Name, c.Name)
+			}
 		}
 	}
 	if *workloadOut == "" {

@@ -109,7 +109,7 @@ def _at(out: dict[str, Any], p: tuple[int, int] | None) -> None:
 
 class ComputerUseGuard:
     """Decides computer actions through ``connection``, a local connection
-    whose package is pc.computer. It is safe to share between threads."""
+    whose package is pc.computer. Threads may share one guard."""
 
     def __init__(self, client: Client, connection: str) -> None:
         if client is None or not connection:
