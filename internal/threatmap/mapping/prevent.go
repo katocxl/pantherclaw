@@ -357,4 +357,27 @@ var Prevent = []PreventControl{
 			"AML.T0029": "Denial of AI service (AML.T0029): an agent flooding its model connection stops at its token rule.",
 		},
 	},
+	{
+		// G0 M32 D970: no reason code, like sandbox_closure; the evidence is
+		// the kube closures the server records from a pod's signed probe run.
+		ID: "prevent.kubernetes_closure", Title: "An agent pod's only route is its edge sidecar", Surface: SurfaceSandbox,
+		HR:         []string{"HR-741", "HR-742", "HR-743"},
+		Requires:   RequiresAlways,
+		Techniques: []string{"T1552.005", "T1613"},
+		Why: map[string]string{
+			"T1552.005": "Cloud instance metadata API (T1552.005): the metadata address has no route from an agent pod, as its kube closure shows.",
+			"T1613":     "Container and resource discovery (T1613): an agent pod has no route to the cluster's API server or the kubelet, as its kube closure shows.",
+		},
+	},
+	{
+		// G0 M32 D967, D970: no reason code; the admission webhook's refusal
+		// is an AdmissionReview deny, audited as kubernetes.admission_denied.
+		ID: "prevent.kubernetes_admission", Title: "A pod in an enforced namespace runs only with its edge sidecar and an issuer entry", Surface: SurfaceSandbox,
+		HR:         []string{"HR-730", "HR-732", "HR-733", "HR-734"},
+		Requires:   RequiresAlways,
+		Techniques: []string{"T1610"},
+		Why: map[string]string{
+			"T1610": "Deploy container (T1610): the admission webhook denies a pod in an enforced namespace without an issuer entry, the edge sidecar or pinned images, and every ephemeral container.",
+		},
+	},
 }

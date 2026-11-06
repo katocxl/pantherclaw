@@ -214,6 +214,42 @@ func TestMapClasses(t *testing.T) {
 			},
 		},
 		{
+			// A gateway's kubernetes binding is identity trust (D1206 M32-1).
+			name: "gateway kubernetes binding set", class: 3004, category: 3, ty: 300401, severity: 1, status: 1,
+			ev: func() Event {
+				e := event("audit." + auditkind.GatewayKubernetesBindingSet)
+				e.ActorType, e.Outcome = "user", "SUCCESS"
+				e.Attrs = map[string]string{"object_type": "gateway", "object_id": "gw-1"}
+				return e
+			},
+			check: func(t *testing.T, r Record) {
+				if r.ClassName != "Entity Management" || r.ActivityName != "Create" || r.Entity == nil || r.Entity.UID != "gw-1" ||
+					r.Entity.Type != "kubernetes_binding" || r.User != nil {
+					t.Errorf("class %q activity %q entity %+v user %+v", r.ClassName, r.ActivityName, r.Entity, r.User)
+				}
+			},
+		},
+		{
+			name: "gateway kubernetes binding cleared", class: 3004, category: 3, ty: 300404, severity: 1, status: 1,
+			ev: func() Event {
+				e := event("audit." + auditkind.GatewayKubernetesBindingCleared)
+				e.ActorType, e.Outcome = "user", "SUCCESS"
+				e.Attrs = map[string]string{"object_type": "gateway", "object_id": "gw-1"}
+				return e
+			},
+			check: func(t *testing.T, r Record) {
+				if r.ActivityName != "Delete" || r.Entity == nil || r.Entity.Type != "kubernetes_binding" {
+					t.Errorf("activity %q entity %+v", r.ActivityName, r.Entity)
+				}
+			},
+		},
+		{
+			// The admission webhook and kube closures are the runtime
+			// firewall: they stay API Activity.
+			name: "kubernetes admission denied", class: 6003, category: 6, ty: 600399, severity: 1, status: 0,
+			ev: func() Event { return event("audit." + auditkind.KubernetesAdmissionDenied) },
+		},
+		{
 			// A firewall change stays API Activity.
 			name: "guardrail audit", class: 6003, category: 6, ty: 600303, severity: 1, status: 0,
 			ev: func() Event { return event("audit." + auditkind.GuardrailsChanged) },

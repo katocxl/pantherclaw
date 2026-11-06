@@ -27,6 +27,13 @@ const (
 	MetricMaintenanceHold  = "pc_maintenance_hold"
 	MetricSpansDropped     = "pc_otlp_spans_dropped_total"
 	MetricMetricExportsBad = "pc_otlp_metric_exports_failed_total"
+	// MetricKubernetesAdmission counts admission webhook decisions by
+	// outcome and code (G0 M32 D967).
+	MetricKubernetesAdmission = "pc_kubernetes_admission_total"
+	// MetricKubernetesAdmissionThrottleOverflow counts deny audits and seen
+	// rows written without being throttled because the throttle was full
+	// (G0 M32 D1218 item 3), by kind (audit, seen).
+	MetricKubernetesAdmissionThrottleOverflow = "pc_kubernetes_admission_throttle_overflow_total"
 )
 
 // Rate-limit scopes, the fixed values of the scope attribute.
@@ -40,6 +47,8 @@ const (
 	ScopeSignals    = "signals"            // IdP security event receivers
 	ScopeReplay     = "replay"             // decision replays
 	ScopeConsoleWeb = "console_web"        // console web routes
+	// ScopeKubernetesAdmission is the Kubernetes admission webhook.
+	ScopeKubernetesAdmission = "kubernetes_admission"
 )
 
 // meterScope names the instruments' instrumentation scope.
@@ -50,6 +59,8 @@ type instruments struct {
 	decisions   metric.Int64Counter
 	jobs        metric.Int64Counter
 	rateLimited metric.Int64Counter
+	admission   metric.Int64Counter
+	overflow    metric.Int64Counter
 }
 
 var (
@@ -69,6 +80,10 @@ func get() *instruments {
 		inst.decisions, _ = m.Int64Counter(MetricDecisions, metric.WithDescription("Authority decisions by outcome."))
 		inst.jobs, _ = m.Int64Counter(MetricJobs, metric.WithDescription("Background jobs worked, by kind and final state of the attempt."))
 		inst.rateLimited, _ = m.Int64Counter(MetricRateLimited, metric.WithDescription("Requests refused by a rate limit, by scope."))
+		inst.admission, _ = m.Int64Counter(MetricKubernetesAdmission,
+			metric.WithDescription("Kubernetes admission webhook decisions, by outcome (allowed, denied) and code."))
+		inst.overflow, _ = m.Int64Counter(MetricKubernetesAdmissionThrottleOverflow,
+			metric.WithDescription("Admission deny audits and seen rows written past a full throttle, by kind (audit, seen)."))
 	})
 	return &inst
 }
@@ -92,6 +107,19 @@ func Job(ctx context.Context, kind, state string) {
 // RateLimited counts one request refused by the rate limit of scope.
 func RateLimited(ctx context.Context, scope string) {
 	get().rateLimited.Add(ctx, 1, metric.WithAttributes(attribute.String(KeyScope, scope)))
+}
+
+// KubernetesAdmission counts one admission webhook decision by its outcome
+// (allowed or denied) and code (G0 M32 D967).
+func KubernetesAdmission(ctx context.Context, outcome, code string) {
+	get().admission.Add(ctx, 1, metric.WithAttributes(attribute.String(KeyOutcome, outcome), attribute.String(KeyCode, code)))
+}
+
+// KubernetesAdmissionThrottleOverflow counts one deny audit or seen row
+// (kind audit or seen) written without being throttled because the
+// throttle was full (G0 M32 D1218 item 3).
+func KubernetesAdmissionThrottleOverflow(ctx context.Context, kind string) {
+	get().overflow.Add(ctx, 1, metric.WithAttributes(attribute.String(KeyKind, kind)))
 }
 
 // PoolStats are a connection pool's counters.

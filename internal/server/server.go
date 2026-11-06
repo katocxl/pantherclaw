@@ -361,6 +361,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	wireM29Model(m14core)
 	wireM30Vectorstore(m14core, m6)
 	wireM31Snowflake(m14core)
+	if err := wireM32Gateways(cfg, m6); err != nil { // G0 M32 D968
+		return err
+	}
 	// Sealing a GitHub App credential schedules an org scan, and a daily one
 	// follows, so coverage reads its installation's permissions (F048).
 	ghScans := &githubapp.Scans{Pool: pool, Ents: bill}
@@ -494,7 +497,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			oauth: oauthhttp.New(authnapp.NewOAuth(pool, tokens, cfg.Auth.PublicURL, clock.System{}, log),
 				cfg.Auth.PublicURL, limiter),
 			device:    device,
-			publicURL: cfg.Auth.PublicURL, clientIP: limiter.ClientIP, clusters: clusters, subjects: subjects, identity: cfg.Identity,
+			publicURL: cfg.Auth.PublicURL, clientIP: limiter.ClientIP, clusters: clusters, admission: cfg.Admission, subjects: subjects, identity: cfg.Identity,
 			logOrigin:    cfg.logOrigin(),
 			packageRoots: roots,
 			hubRoots:     trustedHub,
@@ -524,6 +527,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		if err := m6.serveGateways(ctx, g, cfg, svc, log, nil); err != nil {
+			return err
+		}
+		if err := serveAdmission(ctx, g, cfg, pool, clusters, log); err != nil {
 			return err
 		}
 		certs, err := publicCertReloader(cfg, log)
@@ -814,6 +820,9 @@ type apiDeps struct {
 	clientIP httpx.ClientIPFunc
 	// clusters are the configured Kubernetes clusters (identity.kubernetes_clusters).
 	clusters *kube.Directory
+	// admission is the M32 admission configuration: its edge and probe
+	// image digests check kube closures (wiring_m32_closure.go).
+	admission AdmissionConfig
 	// identity is the workload identity configuration (presets, M17).
 	identity IdentityConfig
 	// subjects are the providers configured for subject tokens (HR-145).
@@ -898,6 +907,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A pod that runs the edge attests only with an admitted edge image
+	// (G0 M32 D1218 H1).
+	attestors.EdgeImageDigests = d.admission.EdgeImageDigests
 	identity := iapp.New(pool, reg, d.publicURL, clock.System{}).WithAttestors(attestors).WithEntitlements(d.billing)
 	pantherclawv1connect.RegisterIdentityServiceHandler(rs, identityrpc.NewIdentity(identity, d.clusters))
 	grants, runs := m11Issuance(d)
@@ -983,6 +995,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		return nil, err
 	}
 	if err := registerAutomationsEngine(rs, d, workload, autos); err != nil {
+		return nil, err
+	}
+	if err := registerKubernetesClosure(rs, d, workload, runs); err != nil {
 		return nil, err
 	}
 	if err := registerAutomationTemplates(rs, d, autos); err != nil {

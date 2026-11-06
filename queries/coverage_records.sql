@@ -66,14 +66,14 @@ LIMIT sqlc.arg(max_rows);
 INSERT INTO pc.coverage_closures (org_id, id, agent_id, connection_id, sandbox_session_id, result, probes,
     positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256,
     engine_version, api_version, runtime, image_digests, config_sha256, config_checks, gateway_id, connection_revision,
-    package_version_id, credential_version, session_started_at, observed_at, expires_at)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(connection_id), sqlc.arg(sandbox_session_id),
+    package_version_id, credential_version, session_started_at, observed_at, expires_at, kube_closure_id)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(connection_id), sqlc.narg(sandbox_session_id),
     sqlc.arg(result), sqlc.arg(probes), sqlc.arg(positive_controls_passed), sqlc.arg(negative_controls_passed),
     sqlc.arg(canary_passed), sqlc.arg(signing_key_jkt), sqlc.arg(server_nonce), sqlc.arg(results_sha256),
     sqlc.arg(engine_version), sqlc.arg(api_version), sqlc.arg(runtime), sqlc.arg(image_digests)::text[],
     sqlc.arg(config_sha256), sqlc.arg(config_checks), sqlc.arg(gateway_id), sqlc.arg(connection_revision),
     sqlc.arg(package_version_id), sqlc.narg(credential_version), sqlc.arg(session_started_at), sqlc.arg(observed_at),
-    sqlc.arg(expires_at))
+    sqlc.arg(expires_at), sqlc.narg(kube_closure_id))
 ON CONFLICT (org_id, agent_id, connection_id, server_nonce) DO NOTHING
 RETURNING *;
 

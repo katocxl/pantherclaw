@@ -860,6 +860,18 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Tests** (Phase B): HR-720..727 and T-330..T-334 unit tests, RT-210..RT-214 on the harness, `TestE2E_M31_ConnectorBreadth`; runbook [connector-breadth.md](runbooks/connector-breadth.md).
 - Migrations `00350`, `00351` (`00352`–`00359` spare).
 
+### M32 — Kubernetes and edge enforcement
+**HR:** HR-730..744 · **F:** F1020–F1029 · **ADR:** 0059 · **G0:** [g0/M32.md](g0/M32.md).
+- **Code first**, like M30 and M31: three streams on pushed branches, assembled on `code/m32` from `code/m31`; tests in Phase B (land/m32), with RT-215..RT-219 and the `TestE2E_M32` exit test. Runbook: [kubernetes.md](runbooks/kubernetes.md).
+- **Agent identity protection** (D1205): the edge's workload key, generated in memory and enrolled from the pod's projected token by Kubernetes attestation; a gateway bound to a service account enrols from its own projected token, each token once; a pod's run starts only under its issuer entry's run grant, launched by the instance through the entry.
+- **Runtime firewall** (D1205):
+  - Admission (FQ32-1): a fail-closed webhook on its own TLS listener, off by default; a pod in an enforced namespace needs an issuer entry, one app container, pinned images, the `pantherclaw-edge` native sidecar and its token mounted only there; ephemeral containers are always denied.
+  - Edge and NetworkPolicy (FQ32-2, FQ32-3): the edge listens on loopback only and keeps its keys in memory; agent pods reach only the gateway and the api by fixed addresses, with no DNS.
+  - Kube closures: the probe's `kubernetes` profile and a control twin, reports signed by the pod's attested key, the server's own admission and NetworkPolicy checks, the `ContainmentKubernetes` profile, 24-hour expiry.
+- **Chart:** cluster config, an in-cluster gateway, the admission listener and per agent namespace a NetworkPolicy, webhook, reviewer role and probe CronJob; the webhook secret generated and kept; self-hosted clusters only (FQ32-4). Rotating the admission certificate means rolling the API pods (the pair is staged at start).
+- **Threat map:** `prevent.kubernetes_closure` and `prevent.kubernetes_admission`; T1610 and T1613 leave Outside.
+- Migrations `00360`–`00367`.
+
 ---
 
 ## 9. CI/CD summary

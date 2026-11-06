@@ -56,6 +56,9 @@ func (d *rangeDriver) uiStep(st domain.Step) (domain.Observation, bool, error) {
 	case "operator.content_mode":
 		obs, err := d.contentMode(st)
 		return obs, true, err
+	case "kube.probe":
+		obs, err := d.kubeProbe(st)
+		return obs, true, err
 	case "selfmcp.probe":
 		obs, err := d.selfMCPProbe(st)
 		return obs, true, err

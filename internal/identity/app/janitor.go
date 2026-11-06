@@ -32,7 +32,7 @@ type Swept struct {
 
 // SweepOrg cleans one org (G0 M3 constraints 8 and 17): replay rows whose
 // nonce expired more than 60 seconds ago, in the slots that can hold them,
-// and old nonces (PAP-1 §4); pending instances past their admission
+// and old nonces (PAP-1 §4) and kube closure nonces (G0 M32); pending instances past their admission
 // deadline become EXPIRED with their ADMISSION entries; runs past their
 // expiry are recorded EXPIRED (they already read so).
 func SweepOrg(ctx context.Context, pool *db.Pool, org ids.OrgID) (Swept, error) {
@@ -55,6 +55,13 @@ func SweepOrg(ctx context.Context, pool *db.Pool, org ids.OrgID) (Swept, error) 
 		if sw.Nonces, err = q.DeleteExpiredNonces(ctx, org, before); err != nil {
 			return err
 		}
+		// Kube closure nonces expired a minute ago, used or not (G0 M32
+		// D1218 L2).
+		kubeNonces, err := q.DeleteExpiredKubeClosureNonces(ctx, org)
+		if err != nil {
+			return err
+		}
+		sw.Nonces += kubeNonces
 		expired, err := q.ExpirePendingInstances(ctx, org)
 		if err != nil {
 			return err

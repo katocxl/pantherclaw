@@ -513,6 +513,10 @@ var agentIdentityKinds = map[string]identityEvent{
 	auditkind.IdaccessMcpAccessDisabled:     {class: classEntityMgmt, activity: entityDisable, activityName: "Disable", entity: "mcp_access"},
 	auditkind.IdaccessConsentGiven:          {class: classEntityMgmt, activity: entityCreate, activityName: "Create", entity: "consent"},
 	auditkind.IdaccessLapsed:                {class: classEntityMgmt, activity: entityDeactivate, activityName: "Deactivate", entity: "idp_access"},
+	// A gateway's kubernetes binding is the TokenReview trust its replicas
+	// enroll by (G0 M32 D968; D1206 M32-1).
+	auditkind.GatewayKubernetesBindingSet:     {class: classEntityMgmt, activity: entityCreate, activityName: "Create", entity: "kubernetes_binding"},
+	auditkind.GatewayKubernetesBindingCleared: {class: classEntityMgmt, activity: entityDelete, activityName: "Delete", entity: "kubernetes_binding"},
 }
 
 func isAgentIdentity(kind string) bool {

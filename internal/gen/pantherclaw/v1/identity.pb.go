@@ -1271,7 +1271,10 @@ type IssuerRevision struct {
 	// Who disabled, superseded or withdrew it.
 	ClosedBy string `protobuf:"bytes,18,opt,name=closed_by,json=closedBy,proto3" json:"closed_by,omitempty"`
 	// When.
-	CloseTime     *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
+	CloseTime *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
+	// Kubernetes only: the grant a pod's run is started under (G0 M32
+	// D973); empty: none.
+	RunGrantId    string `protobuf:"bytes,26,opt,name=run_grant_id,json=runGrantId,proto3" json:"run_grant_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1502,6 +1505,13 @@ func (x *IssuerRevision) GetCloseTime() *timestamppb.Timestamp {
 		return x.CloseTime
 	}
 	return nil
+}
+
+func (x *IssuerRevision) GetRunGrantId() string {
+	if x != nil {
+		return x.RunGrantId
+	}
+	return ""
 }
 
 type isIssuerRevision_Binding interface {
@@ -2220,6 +2230,11 @@ type ProposeIssuerEntryRequest struct {
 	Binding isProposeIssuerEntryRequest_Binding `protobuf_oneof:"binding"`
 	// Admit matching instances without an owner (a widening when turned on).
 	AutoAdmit bool `protobuf:"varint,5,opt,name=auto_admit,json=autoAdmit,proto3" json:"auto_admit,omitempty"`
+	// Kubernetes only: the grant a pod's run is started under
+	// (KubernetesService.StartPodRun, G0 M32 D973). Part of the revision, so
+	// it changes only through a new revision and its approval; empty: the
+	// entry starts no runs.
+	RunGrantId string `protobuf:"bytes,13,opt,name=run_grant_id,json=runGrantId,proto3" json:"run_grant_id,omitempty"`
 	// Reason, recorded with the revision.
 	Reason        string `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -2354,6 +2369,13 @@ func (x *ProposeIssuerEntryRequest) GetAutoAdmit() bool {
 		return x.AutoAdmit
 	}
 	return false
+}
+
+func (x *ProposeIssuerEntryRequest) GetRunGrantId() string {
+	if x != nil {
+		return x.RunGrantId
+	}
+	return ""
 }
 
 func (x *ProposeIssuerEntryRequest) GetReason() string {
@@ -3084,7 +3106,7 @@ const file_pantherclaw_v1_identity_proto_rawDesc = "" +
 	"\x14service_account_name\x18\x03 \x01(\tB-\xbaH*r(2&^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$R\x12serviceAccountName\x128\n" +
 	"\x13service_account_uid\x18\x04 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x11serviceAccountUid\x12\x86\x01\n" +
 	"\x12image_repositories\x18\x05 \x03(\tBW\xbaHT\x92\x01Q\x10\x14\x18\x01\"KrI\x18\xff\x012D^[a-z0-9]+([._-][a-z0-9]+)*(:[0-9]+)?(/[a-z0-9]+([._-][a-z0-9]+)*)+$R\x11imageRepositories\x12J\n" +
-	"\rimage_digests\x18\x06 \x03(\tB%\xbaH\"\x92\x01\x1f\x102\x18\x01\"\x19r\x172\x15^sha256:[0-9a-f]{64}$R\fimageDigests\"\xe3\b\n" +
+	"\rimage_digests\x18\x06 \x03(\tB%\xbaH\"\x92\x01\x1f\x102\x18\x01\"\x19r\x172\x15^sha256:[0-9a-f]{64}$R\fimageDigests\"\x85\t\n" +
 	"\x0eIssuerRevision\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\bentry_id\x18\x02 \x01(\tR\aentryId\x12\x1a\n" +
@@ -3119,7 +3141,9 @@ const file_pantherclaw_v1_identity_proto_rawDesc = "" +
 	"\ractivate_time\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\factivateTime\x12\x1b\n" +
 	"\tclosed_by\x18\x12 \x01(\tR\bclosedBy\x129\n" +
 	"\n" +
-	"close_time\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTimeB\t\n" +
+	"close_time\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\x12 \n" +
+	"\frun_grant_id\x18\x1a \x01(\tR\n" +
+	"runGrantIdB\t\n" +
 	"\abinding\"o\n" +
 	"\x1cCreateEnrollmentTokenRequest\x12#\n" +
 	"\bagent_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\aagentId\x12*\n" +
@@ -3160,7 +3184,7 @@ const file_pantherclaw_v1_identity_proto_rawDesc = "" +
 	"\x06reason\x18\x02 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xe8\aR\x06reason\"N\n" +
 	"\x16RevokeInstanceResponse\x124\n" +
-	"\binstance\x18\x01 \x01(\v2\x18.pantherclaw.v1.InstanceR\binstance\"\xde\x05\n" +
+	"\binstance\x18\x01 \x01(\v2\x18.pantherclaw.v1.InstanceR\binstance\"\x90\a\n" +
 	"\x19ProposeIssuerEntryRequest\x12t\n" +
 	"\bentry_id\x18\x01 \x01(\tBY\xbaHVrT\x18$2P^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})?$R\aentryId\x12#\n" +
 	"\bagent_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\aagentId\x127\n" +
@@ -3177,9 +3201,12 @@ const file_pantherclaw_v1_identity_proto_rawDesc = "" +
 	"\ventra_agent\x18\f \x01(\v2!.pantherclaw.v1.EntraAgentBindingH\x00R\n" +
 	"entraAgent\x12\x1d\n" +
 	"\n" +
-	"auto_admit\x18\x05 \x01(\bR\tautoAdmit\x12\"\n" +
+	"auto_admit\x18\x05 \x01(\bR\tautoAdmit\x12-\n" +
+	"\frun_grant_id\x18\r \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\n" +
+	"runGrantId\x12\"\n" +
 	"\x06reason\x18\x06 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\xe8\aR\x06reasonB\x10\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xe8\aR\x06reason:\x80\x01\xbaH}\x1a{\n" +
+	"\x19run_grant_kubernetes_only\x12-run_grant_id is only for a kubernetes binding\x1a/this.run_grant_id == '' || has(this.kubernetes)B\x10\n" +
 	"\abinding\x12\x05\xbaH\x02\b\x01\"X\n" +
 	"\x1aProposeIssuerEntryResponse\x12:\n" +
 	"\brevision\x18\x01 \x01(\v2\x1e.pantherclaw.v1.IssuerRevisionR\brevision\"\xad\x01\n" +

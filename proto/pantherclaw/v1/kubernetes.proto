@@ -1,0 +1,102 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// KubernetesService is called by the edge of an agent pod in a protected
+// namespace (G0 M32 D966, D970, D973). Like WorkloadService it is
+// authenticated by PAP/1, never by user or service-account credentials:
+// the caller is an instance enrolled by Kubernetes attestation, and every
+// call carries a PAP-Proof signed with the pod's workload key and its
+// workload token.
+service KubernetesService {
+  // IssueClosureNonce returns a fresh single-use nonce for one closure
+  // report of the caller's namespace. The namespace must be the one the
+  // caller's instance was attested in.
+  // permission: workload.run
+  rpc IssueClosureNonce(IssueClosureNonceRequest) returns (IssueClosureNonceResponse);
+  // SubmitClosure accepts a probe report the caller's edge signed with the
+  // pod's workload key (a compact JWS). The server checks the signer (an L2
+  // instance enrolled by Kubernetes attestation whose binding namespace is
+  // the report's), the edge and probe image digests (admission
+  // configuration), the nonce, and the cluster-side checks, then records a
+  // Kubernetes closure (24 hours) and the coverage closure of every mapped
+  // connection (audit kubernetes.closure_recorded).
+  // permission: workload.run
+  rpc SubmitClosure(SubmitClosureRequest) returns (SubmitClosureResponse);
+  // StartPodRun starts the run of the caller's pod under the run grant of
+  // the issuer entry the caller's instance was attested by (D973). A pod
+  // has one run at a time; a new run starts when the previous one ended.
+  // permission: workload.run
+  rpc StartPodRun(StartPodRunRequest) returns (StartPodRunResponse);
+}
+
+// IssueClosureNonceRequest names the namespace a report is for.
+message IssueClosureNonceRequest {
+  // The caller's namespace.
+  string namespace = 1 [(buf.validate.field).string.pattern = "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"];
+}
+
+// IssueClosureNonceResponse is the nonce.
+message IssueClosureNonceResponse {
+  // Single-use server nonce.
+  string nonce = 1;
+  // When it stops being accepted.
+  google.protobuf.Timestamp expire_time = 2;
+}
+
+// SubmitClosureRequest carries one signed probe report.
+message SubmitClosureRequest {
+  // report_jws is the signed report, a compact JWS.
+  string report_jws = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 65536
+  }];
+}
+
+// KubernetesConnectionClosure is the coverage closure recorded for one
+// mapped connection.
+message KubernetesConnectionClosure {
+  // Connection id.
+  string connection_id = 1;
+  // Coverage closure id.
+  string closure_id = 2;
+  // Whether it passed.
+  bool passed = 3;
+  // failed names the results that kept it from passing.
+  repeated string failed = 4;
+}
+
+// SubmitClosureResponse is what the server recorded.
+message SubmitClosureResponse {
+  // The Kubernetes closure id.
+  string kube_closure_id = 1;
+  // "sandbox" or "control".
+  string kind = 2;
+  // Whether the report passed.
+  bool passed = 3;
+  // failed names the results and checks that were not as expected.
+  repeated string failed = 4;
+  // When the closure expires (24 hours).
+  google.protobuf.Timestamp expire_time = 5;
+  // The coverage closures of the mapped connections (kind sandbox only).
+  repeated KubernetesConnectionClosure closures = 6;
+}
+
+// StartPodRunRequest names the caller's pod.
+message StartPodRunRequest {
+  // The pod's name (from the downward API); it must be the pod the
+  // caller's instance was attested for.
+  string pod_name = 1 [(buf.validate.field).string.pattern = "^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$"];
+}
+
+// StartPodRunResponse is the run.
+message StartPodRunResponse {
+  // The run id.
+  string run_id = 1;
+}

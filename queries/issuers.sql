@@ -7,11 +7,11 @@
 
 -- name: InsertIssuerRevision :one
 INSERT INTO pc.trusted_issuers (org_id, id, entry_id, revision, agent_id, kind, issuer, audience, algorithms, binding,
-    auto_admit, widening, state, proposed_by, activated_by, activated_at)
+    auto_admit, widening, state, proposed_by, activated_by, activated_at, run_grant_id)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(entry_id), sqlc.arg(revision), sqlc.arg(agent_id), sqlc.arg(kind),
     sqlc.arg(issuer), sqlc.arg(audience), sqlc.arg(algorithms), sqlc.arg(binding), sqlc.arg(auto_admit), sqlc.arg(widening),
     sqlc.arg(state), sqlc.arg(proposed_by), sqlc.narg(activated_by),
-    CASE WHEN sqlc.arg(state)::text = 'ACTIVE' THEN now() END)
+    CASE WHEN sqlc.arg(state)::text = 'ACTIVE' THEN now() END, sqlc.narg(run_grant_id))
 RETURNING *;
 
 -- name: LockIssuerEntry :many
@@ -52,3 +52,14 @@ SELECT * FROM pc.trusted_issuers WHERE org_id = sqlc.arg(org_id) AND kind = sqlc
 -- name: ActiveRevisionFor :one
 SELECT a.* FROM pc.trusted_issuers r JOIN pc.trusted_issuers a ON a.org_id = r.org_id AND a.entry_id = r.entry_id
 WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(revision_id) AND a.state = 'ACTIVE';
+
+-- The active kubernetes entries for one cluster, namespace and service
+-- account, for the admission webhook (G0 M32 D967; index
+-- trusted_issuers_kubernetes_lookup, migration 00360).
+-- name: ListKubernetesIssuersFor :many
+SELECT * FROM pc.trusted_issuers
+WHERE org_id = sqlc.arg(org_id) AND kind = 'kubernetes' AND state = 'ACTIVE'
+  AND binding #>> '{kubernetes,cluster}' = sqlc.arg(cluster)::text
+  AND binding #>> '{kubernetes,namespace}' = sqlc.arg(namespace)::text
+  AND binding #>> '{kubernetes,service_account_name}' = sqlc.arg(service_account_name)::text
+ORDER BY entry_id;

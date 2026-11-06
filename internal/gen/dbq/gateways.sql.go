@@ -114,7 +114,7 @@ func (q *Queries) GetBrokerKey(ctx context.Context, orgID ids.OrgID, iD ids.UUID
 }
 
 const getGateway = `-- name: GetGateway :one
-SELECT org_id, id, name, state, config_version, created_by, created_at, revoked_by, revoked_at, revoke_reason FROM pc.gateways WHERE org_id = $1 AND id = $2
+SELECT org_id, id, name, state, config_version, created_by, created_at, revoked_by, revoked_at, revoke_reason, kube_binding FROM pc.gateways WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetGateway(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcGateway, error) {
@@ -131,6 +131,7 @@ func (q *Queries) GetGateway(ctx context.Context, orgID ids.OrgID, iD ids.UUID) 
 		&i.RevokedBy,
 		&i.RevokedAt,
 		&i.RevokeReason,
+		&i.KubeBinding,
 	)
 	return i, err
 }
@@ -181,7 +182,7 @@ const insertGateway = `-- name: InsertGateway :one
 
 INSERT INTO pc.gateways (org_id, id, name, created_by)
 VALUES ($1, $2, $3, $4)
-RETURNING org_id, id, name, state, config_version, created_by, created_at, revoked_by, revoked_at, revoke_reason
+RETURNING org_id, id, name, state, config_version, created_by, created_at, revoked_by, revoked_at, revoke_reason, kube_binding
 `
 
 type InsertGatewayParams struct {
@@ -215,6 +216,7 @@ func (q *Queries) InsertGateway(ctx context.Context, arg InsertGatewayParams) (P
 		&i.RevokedBy,
 		&i.RevokedAt,
 		&i.RevokeReason,
+		&i.KubeBinding,
 	)
 	return i, err
 }
@@ -368,7 +370,7 @@ func (q *Queries) ListGatewayCerts(ctx context.Context, orgID ids.OrgID, gateway
 }
 
 const listGateways = `-- name: ListGateways :many
-SELECT org_id, id, name, state, config_version, created_by, created_at, revoked_by, revoked_at, revoke_reason FROM pc.gateways
+SELECT org_id, id, name, state, config_version, created_by, created_at, revoked_by, revoked_at, revoke_reason, kube_binding FROM pc.gateways
 WHERE org_id = $1 AND ($2::boolean OR state = 'ACTIVE')
   AND id > coalesce($3::uuid, '00000000-0000-0000-0000-000000000000')
 ORDER BY id
@@ -407,6 +409,62 @@ func (q *Queries) ListGateways(ctx context.Context, arg ListGatewaysParams) ([]P
 			&i.RevokedBy,
 			&i.RevokedAt,
 			&i.RevokeReason,
+			&i.KubeBinding,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGatewaysForKubeBinding = `-- name: ListGatewaysForKubeBinding :many
+SELECT org_id, id, name, state, config_version, created_by, created_at, revoked_by, revoked_at, revoke_reason, kube_binding FROM pc.gateways
+WHERE org_id = $1 AND state = 'ACTIVE' AND kube_binding IS NOT NULL
+  AND kube_binding ->> 'cluster' = $2::text
+  AND kube_binding ->> 'namespace' = $3::text
+  AND kube_binding ->> 'service_account_name' = $4::text
+ORDER BY id
+`
+
+type ListGatewaysForKubeBindingParams struct {
+	OrgID              ids.OrgID
+	Cluster            string
+	Namespace          string
+	ServiceAccountName string
+}
+
+// The active gateways bound to one cluster, namespace and service account,
+// for enrollment by a projected token (G0 M32 D968).
+func (q *Queries) ListGatewaysForKubeBinding(ctx context.Context, arg ListGatewaysForKubeBindingParams) ([]PcGateway, error) {
+	rows, err := q.db.Query(ctx, listGatewaysForKubeBinding,
+		arg.OrgID,
+		arg.Cluster,
+		arg.Namespace,
+		arg.ServiceAccountName,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcGateway{}
+	for rows.Next() {
+		var i PcGateway
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.Name,
+			&i.State,
+			&i.ConfigVersion,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.RevokedBy,
+			&i.RevokedAt,
+			&i.RevokeReason,
+			&i.KubeBinding,
 		); err != nil {
 			return nil, err
 		}
@@ -419,7 +477,7 @@ func (q *Queries) ListGateways(ctx context.Context, arg ListGatewaysParams) ([]P
 }
 
 const lockGateway = `-- name: LockGateway :one
-SELECT org_id, id, name, state, config_version, created_by, created_at, revoked_by, revoked_at, revoke_reason FROM pc.gateways WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, name, state, config_version, created_by, created_at, revoked_by, revoked_at, revoke_reason, kube_binding FROM pc.gateways WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockGateway(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcGateway, error) {
@@ -436,6 +494,7 @@ func (q *Queries) LockGateway(ctx context.Context, orgID ids.OrgID, iD ids.UUID)
 		&i.RevokedBy,
 		&i.RevokedAt,
 		&i.RevokeReason,
+		&i.KubeBinding,
 	)
 	return i, err
 }
@@ -522,7 +581,7 @@ UPDATE pc.gateways
 SET state = 'REVOKED', revoked_by = $1::text, revoked_at = now(), revoke_reason = $2::text,
     config_version = config_version + 1
 WHERE org_id = $3 AND id = $4 AND state = 'ACTIVE'
-RETURNING org_id, id, name, state, config_version, created_by, created_at, revoked_by, revoked_at, revoke_reason
+RETURNING org_id, id, name, state, config_version, created_by, created_at, revoked_by, revoked_at, revoke_reason, kube_binding
 `
 
 type RevokeGatewayParams struct {
@@ -551,6 +610,7 @@ func (q *Queries) RevokeGateway(ctx context.Context, arg RevokeGatewayParams) (P
 		&i.RevokedBy,
 		&i.RevokedAt,
 		&i.RevokeReason,
+		&i.KubeBinding,
 	)
 	return i, err
 }
@@ -593,6 +653,33 @@ func (q *Queries) RevokeGatewayCerts(ctx context.Context, reason string, orgID i
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setGatewayKubeBinding = `-- name: SetGatewayKubeBinding :one
+UPDATE pc.gateways SET kube_binding = $1
+WHERE org_id = $2 AND id = $3 AND state = 'ACTIVE'
+RETURNING org_id, id, name, state, config_version, created_by, created_at, revoked_by, revoked_at, revoke_reason, kube_binding
+`
+
+// Sets or (NULL) clears an active gateway's Kubernetes binding (G0 M32
+// D968, migration 00361).
+func (q *Queries) SetGatewayKubeBinding(ctx context.Context, kubeBinding []byte, orgID ids.OrgID, iD ids.UUID) (PcGateway, error) {
+	row := q.db.QueryRow(ctx, setGatewayKubeBinding, kubeBinding, orgID, iD)
+	var i PcGateway
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.Name,
+		&i.State,
+		&i.ConfigVersion,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.RevokedBy,
+		&i.RevokedAt,
+		&i.RevokeReason,
+		&i.KubeBinding,
+	)
+	return i, err
 }
 
 const supersedeGatewayCert = `-- name: SupersedeGatewayCert :execrows

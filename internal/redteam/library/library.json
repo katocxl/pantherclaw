@@ -1244,6 +1244,57 @@
       "AML.T0053": "AI agent tool invocation (AML.T0053): the agent calls its own Gmail send tool naming another mailbox."
     }
   },
+  "RT-215": {
+    "digest": "10da6d78381739eb9f656fcb8395a286db4fdd2b05edef0710ba6ccc7044dab3",
+    "tier": "business",
+    "attack": [
+      "T1610",
+      "T1611",
+      "T1609"
+    ],
+    "technique_why": {
+      "T1609": "Container administration command (T1609): an ephemeral container is added to a running agent pod.",
+      "T1610": "Deploy container (T1610): a pod is created in an enforced namespace without the edge sidecar that routes it through the gateway.",
+      "T1611": "Escape to host (T1611): a pod asks for the host network or a mounted token to get around the edge."
+    }
+  },
+  "RT-216": {
+    "digest": "798b7c9d654c48959a8f40d12bd203545113af3a90ad3fa9a2265b6632c41b0b",
+    "tier": "business",
+    "attack": [
+      "T1078.001"
+    ],
+    "technique_why": {
+      "T1078.001": "Default accounts (T1078.001): code in the pod uses the pod's own attested identity to start runs nobody approved."
+    }
+  },
+  "RT-217": {
+    "digest": "7fff4707e8c317d98a88c7311228771486d47d203d7e63f9cd8a525a67c70be1",
+    "tier": "business",
+    "attack": [
+      "T1552.007",
+      "T1199"
+    ],
+    "technique_why": {
+      "T1199": "Trusted relationship (T1199): a pod of another service account poses as the org's gateway.",
+      "T1552.007": "Container API (T1552.007): a projected token read from a pod is replayed to enrol a gateway."
+    }
+  },
+  "RT-218": {
+    "digest": "af1c5fb368f47df7c9b219b8c68213543fa19fc6e4632acbf907c704f4567a85",
+    "tier": "business",
+    "attack": [
+      "T1685"
+    ],
+    "technique_why": {
+      "T1685": "Disable or modify tools (T1685): forged probe evidence would make coverage read enforced while the pod has other routes."
+    }
+  },
+  "RT-219": {
+    "digest": "fcbd4e1ffd1e5eb6d4583cb426cc1e446aeb51d6a92024b98e72616b61c290a6",
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's own verdict: the server's checks decide a kube closure, not the probe's say-so."
+  },
   "RT-260": {
     "digest": "c917e88f00ab7079bb682ed8910c4fc428f9679cdc487522fa9c7a1d2a957105",
     "tier": "community",

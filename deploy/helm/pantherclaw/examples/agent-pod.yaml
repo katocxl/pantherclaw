@@ -1,0 +1,118 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# An agent pod in an enforced namespace (G0 M32 D966, D967, D969). Not a
+# template: copy it and replace the values marked REPLACE. The admission
+# webhook admits it only in this shape:
+#
+# - exactly one app container (the agent), pinned by digest when the
+#   issuer entry pins images;
+# - the edge as the one native sidecar (an init container with
+#   restartPolicy Always) named pantherclaw-edge, by an admitted digest;
+# - no service account token in the pod: the projected token (audience
+#   pantherclaw:<org>, at most 3600 s) is mounted into the edge alone;
+# - no hostNetwork, hostPID, hostIPC, shareProcessNamespace, privileged
+#   container or hostPath;
+# - the edge runs as a fixed non-root user (here the pod's, 65532) that no
+#   other container runs as, and no other container may escalate
+#   privileges, add a capability other than NET_BIND_SERVICE or unmask
+#   /proc;
+# - when the issuer entry pins digests, every plain init container's image
+#   is one of them;
+# - after admission no container's image may change (K8S_IMAGE_CHANGED).
+#
+# The agent reaches nothing but the edge on 127.0.0.1:3128 and trusts the
+# edge's per-session CA from /pc-edge/ca.crt. The namespace's NetworkPolicy
+# lets the pod reach only the gateway and the API, with no DNS, so both
+# hostnames are pinned with hostAliases to their fixed Service addresses.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-agent
+  namespace: agents  # REPLACE: an agentNamespaces entry
+spec:
+  serviceAccountName: my-agent  # REPLACE: the SA the issuer entry names
+  automountServiceAccountToken: false
+  enableServiceLinks: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  hostAliases:
+    - ip: "10.96.200.10"  # REPLACE: gateway.service.clusterIP
+      hostnames: ["pantherclaw-gateway.pantherclaw.internal"]  # gateway.hostname
+    # The edge enrolls, renews its token and starts the pod's run at the API.
+    - ip: "10.96.200.11"  # REPLACE: api.service.clusterIP
+      hostnames: ["pantherclaw-api.pantherclaw.internal"]  # api.service.agentHostname
+  initContainers:
+    - name: pantherclaw-edge
+      image: ghcr.io/katocxl/pantherclaw-edge@sha256:REPLACE  # an admission.edgeImageDigests entry
+      restartPolicy: Always
+      args: ["--config", "/etc/pantherclaw-edge/edge.json"]
+      env:
+        # The run is named after the pod.
+        - name: PC_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: PC_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+      securityContext:
+        runAsNonRoot: true
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+      volumeMounts:
+        - name: edge-config
+          mountPath: /etc/pantherclaw-edge
+          readOnly: true
+        - name: edge-token
+          mountPath: /var/run/pantherclaw/edge
+          readOnly: true
+        - name: pc-edge
+          mountPath: /pc-edge
+  containers:
+    - name: agent
+      image: registry.example.com/my-agent@sha256:REPLACE
+      env:
+        - name: HTTPS_PROXY
+          value: http://127.0.0.1:3128
+        - name: HTTP_PROXY
+          value: http://127.0.0.1:3128
+        - name: SSL_CERT_FILE
+          value: /pc-edge/ca.crt
+      securityContext:
+        # Never the edge's user (65532, the pod's): a container that runs
+        # as the edge's user could read its token and key (D1218 H2).
+        runAsUser: 10001  # REPLACE: your agent's user, not 0 and not 65532
+        runAsNonRoot: true
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+      volumeMounts:
+        - name: pc-edge
+          mountPath: /pc-edge
+          readOnly: true
+  volumes:
+    # The namespace's edge configuration, rendered by the chart.
+    - name: edge-config
+      configMap:
+        name: pantherclaw-edge
+    - name: edge-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              path: token
+              audience: "pantherclaw:00000000-0000-0000-0000-000000000000"  # REPLACE: pantherclaw:<org>
+              expirationSeconds: 3600
+    - name: pc-edge
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1Mi

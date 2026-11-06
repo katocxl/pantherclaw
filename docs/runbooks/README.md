@@ -69,3 +69,4 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [agent-config.md](agent-config.md) | M30 | Agent configuration and memory files: digests and drift alerts from scans, the hook's `agent_config.write`, read-only files in the sandbox |
 | [vectorstore.md](vectorstore.md) | M30 | The pgvector connector: the table DDL, writers and holds, provenance from the permit, a fixed endpoint, bounds |
 | [connector-breadth.md](connector-breadth.md) | M31 | Google Workspace, Microsoft 365, Salesforce, Notion, Linear, Bedrock, Vertex and Snowflake: sealing, shares that hold, and drafting a package from an OpenAPI spec |
+| [kubernetes.md](kubernetes.md) | M32 | Kubernetes enforcement: the fail-closed admission webhook and its TLS and secret rotation, gateway enrolment from a projected token, kube closures and pod runs |

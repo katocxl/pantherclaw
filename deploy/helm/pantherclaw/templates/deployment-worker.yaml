@@ -65,6 +65,7 @@ spec:
               readOnly: true
             - name: tmp
               mountPath: /tmp
+            {{- include "pantherclaw.kubeMounts" (dict "root" . "role" "worker") | nindent 12 }}
       volumes:
         - name: config
           configMap:
@@ -85,6 +86,7 @@ spec:
         - name: kek
           secret:
             secretName: {{ .Values.kek.existingSecret }}
+        {{- include "pantherclaw.kubeVolumes" (dict "root" . "role" "worker") | nindent 8 }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

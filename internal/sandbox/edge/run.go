@@ -35,6 +35,10 @@ const (
 	// gateway, no key, no token and no uplink, and every request refused and
 	// recorded.
 	ModeInspect = "inspect"
+	// ModeKubernetes is the edge as the native sidecar of an agent pod (G0
+	// M32 D966): loopback only, enrolled from the pod's projected token,
+	// one run per pod (kube_m32.go).
+	ModeKubernetes = "kubernetes"
 )
 
 // Config is the edge's configuration file. `pclaw sandbox run` writes it and
@@ -80,6 +84,16 @@ type Config struct {
 	// ModelConnections name the mapped connections of kind model, forwarded
 	// with the model path's limits (G0 M29 D814). Sandbox mode only.
 	ModelConnections []string `json:"model_connections,omitzero"`
+	// KubeTokenFile is the pod's projected service account token (audience
+	// pantherclaw:<org>), read again for every attestation (kubernetes
+	// mode, G0 M32 D966).
+	KubeTokenFile string `json:"kube_token_file,omitzero"`
+	// APIURL is the server's API the edge enrolls with and starts runs at
+	// (kubernetes mode).
+	APIURL string `json:"api_url,omitzero"`
+	// CADir is the shared emptyDir the session CA's certificate is written
+	// to as ca.crt (kubernetes mode); the CA key stays in memory.
+	CADir string `json:"ca_dir,omitzero"`
 }
 
 // ReadConfig reads a configuration file strictly.
@@ -97,6 +111,10 @@ func ReadConfig(path string) (Config, error) {
 		return Config{}, fmt.Errorf("edge: format %q, want %s", c.Format, ConfigFormat)
 	case c.Mode != ModeSandbox && (c.ModelHost != "" || c.ModelConnection != "" || len(c.ModelConnections) > 0):
 		return Config{}, errors.New("edge: only a sandbox's edge has a model route")
+	case c.Mode == ModeKubernetes:
+		return c, checkKubernetesConfig(c)
+	case c.KubeTokenFile != "" || c.APIURL != "" || c.CADir != "":
+		return Config{}, errors.New("edge: kube_token_file, api_url and ca_dir are for kubernetes mode only")
 	case c.Mode == ModeConnector && (c.Listen == "" || c.Subnet == "" || c.BindingFile == "" || c.KeyFile != "" || c.TokenFile != ""):
 		return Config{}, errors.New("edge: a connector's edge needs listen, subnet and binding_file, and has no workload key or token")
 	case c.Mode == ModeConnector:
@@ -136,6 +154,9 @@ const ReadyEvent = "edge.ready"
 // writes Ready to out, and logs every request it forwards or refuses to
 // log.
 func Run(ctx context.Context, c Config, out io.Writer, log *slog.Logger) error {
+	if c.Mode == ModeKubernetes {
+		return runKubernetes(ctx, c, out, log)
+	}
 	read := func(path string) func() string {
 		return func() string {
 			b, err := os.ReadFile(path) //nolint:gosec // G304: the edge's own mounted file

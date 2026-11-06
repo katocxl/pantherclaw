@@ -97,7 +97,7 @@ func (e *Edge) forwardModelConnection(w http.ResponseWriter, r *http.Request, ho
 	}
 	key := fingerprint(r.Method, target, body)
 	action := e.held.action(key)
-	out.Header.Set(headerRunID, e.run)
+	out.Header.Set(headerRunID, e.currentRun())
 	out.Header.Set(headerAction, action)
 	if e.session != "" {
 		out.Header.Set(headerSession, e.session)

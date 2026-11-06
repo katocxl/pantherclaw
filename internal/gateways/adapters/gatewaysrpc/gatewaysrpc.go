@@ -104,7 +104,45 @@ func gatewayOf(g dbq.PcGateway, pantherclawHosted bool) *pantherclawv1.Gateway {
 	if g.RevokeReason != nil {
 		out.RevokeReason = *g.RevokeReason
 	}
+	if b := gwapp.ParseKubeBinding(g.KubeBinding); b != nil {
+		out.KubernetesBinding = &pantherclawv1.GatewayKubernetesBinding{
+			Cluster: b.Cluster, Namespace: b.Namespace, ServiceAccountName: b.ServiceAccountName,
+			ServiceAccountUid: b.ServiceAccountUID, ImageDigests: b.ImageDigests,
+		}
+	}
 	return out
+}
+
+// SetGatewayKubernetesBinding implements GatewayAdminServiceHandler (G0 M32
+// D968).
+func (h *AdminHandler) SetGatewayKubernetesBinding(ctx context.Context, req *pantherclawv1.SetGatewayKubernetesBindingRequest) (*pantherclawv1.SetGatewayKubernetesBindingResponse, error) {
+	id, err := ids.ParseUUID(req.GetGatewayId())
+	if err != nil {
+		return nil, errInvalidID
+	}
+	b := req.GetBinding()
+	g, err := h.s.SetKubernetesBinding(ctx, id, gwapp.KubeBinding{
+		Cluster: b.GetCluster(), Namespace: b.GetNamespace(), ServiceAccountName: b.GetServiceAccountName(),
+		ServiceAccountUID: b.GetServiceAccountUid(), ImageDigests: b.GetImageDigests(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.SetGatewayKubernetesBindingResponse{Gateway: gatewayOf(g, h.s.PantherClawHosted(g.ID))}, nil
+}
+
+// ClearGatewayKubernetesBinding implements GatewayAdminServiceHandler (G0
+// M32 D968).
+func (h *AdminHandler) ClearGatewayKubernetesBinding(ctx context.Context, req *pantherclawv1.ClearGatewayKubernetesBindingRequest) (*pantherclawv1.ClearGatewayKubernetesBindingResponse, error) {
+	id, err := ids.ParseUUID(req.GetGatewayId())
+	if err != nil {
+		return nil, errInvalidID
+	}
+	g, err := h.s.ClearKubernetesBinding(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.ClearGatewayKubernetesBindingResponse{Gateway: gatewayOf(g, h.s.PantherClawHosted(g.ID))}, nil
 }
 
 var certStates = map[string]pantherclawv1.GatewayCertificateState{
@@ -253,9 +291,21 @@ func identity(ctx context.Context) (gwapp.Identity, error) {
 }
 
 // Enroll implements GatewayServiceHandler. It runs on the public API with
-// no principal: the enrollment token authenticates it (HR-180).
+// no principal: the enrollment token, or a bound pod's projected token (G0
+// M32 D968), authenticates it (HR-180).
 func (h *GatewayHandler) Enroll(ctx context.Context, req *pantherclawv1.GatewayServiceEnrollRequest) (*pantherclawv1.GatewayServiceEnrollResponse, error) {
-	en, err := h.s.Enroll(ctx, req.GetToken(), req.GetCsr())
+	var (
+		en  gwapp.Enrolled
+		err error
+	)
+	switch {
+	case req.GetToken() != "" && req.GetKubernetesToken() != "":
+		return nil, gwapp.ErrEnrollment // exactly one (the proto's CEL rule too)
+	case req.GetKubernetesToken() != "":
+		en, err = h.s.EnrollKubernetes(ctx, req.GetKubernetesToken(), req.GetCsr())
+	default:
+		en, err = h.s.Enroll(ctx, req.GetToken(), req.GetCsr())
+	}
 	if err != nil {
 		return nil, err
 	}

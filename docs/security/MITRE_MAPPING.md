@@ -10,7 +10,7 @@ Every technique of both matrices has exactly one place:
 - **Outside PantherClaw:** the technique needs something PantherClaw does not see; the kind of tool that covers it is named.
 - **No PantherClaw control yet:** the technique is within an agent platform's reach and PantherClaw ships no control for it; why is given.
 
-Mapping digest: `3bf6bd564644bd65b9f040ba5bb227d73453fafb543b4e30ef0480b7993115c3`.
+Mapping digest: `c44183528f63d88259a24980774f24f6d483d389da5d7930af99b39f5be85f7a`.
 
 | Framework | Catalogue version | Catalogue digest |
 |---|---|---|
@@ -286,8 +286,8 @@ Mapping digest: `3bf6bd564644bd65b9f040ba5bb227d73453fafb543b4e30ef0480b7993115c
 | [T1566](https://attack.mitre.org/techniques/T1566) | Phishing | Outside PantherClaw: covered by email security | It needs a mailbox. |
 | [T1091](https://attack.mitre.org/techniques/T1091) | Replication Through Removable Media | Outside PantherClaw: covered by physical security | It needs physical access. |
 | [T1195](https://attack.mitre.org/techniques/T1195) | Supply Chain Compromise | Mapped | T1195.001: prevent `prevent.tool_package_review` |
-| [T1199](https://attack.mitre.org/techniques/T1199) | Trusted Relationship | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
-| [T1078](https://attack.mitre.org/techniques/T1078) | Valid Accounts | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
+| [T1199](https://attack.mitre.org/techniques/T1199) | Trusted Relationship | Mapped | scenarios `RT-217` |
+| [T1078](https://attack.mitre.org/techniques/T1078) | Valid Accounts | Mapped | T1078.001: scenarios `RT-216` |
 | [T1669](https://attack.mitre.org/techniques/T1669) | Wi-Fi Networks | Outside PantherClaw: covered by network security | It needs a network. |
 
 ### Execution (TA0002)
@@ -297,8 +297,8 @@ Mapping digest: `3bf6bd564644bd65b9f040ba5bb227d73453fafb543b4e30ef0480b7993115c
 | [T1197](https://attack.mitre.org/techniques/T1197) | BITS Jobs | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1651](https://attack.mitre.org/techniques/T1651) | Cloud Administration Command | No PantherClaw control yet | Cloud administration command (T1651): commands run through a cloud's own management service have no PantherClaw control yet. |
 | [T1059](https://attack.mitre.org/techniques/T1059) | Command and Scripting Interpreter | Mapped | T1059.004: Hub rules `org.hub.held_merge_then_shell`, `org.hub.shell_merge_attempt`; scenarios `RT-003` |
-| [T1609](https://attack.mitre.org/techniques/T1609) | Container Administration Command | Outside PantherClaw: covered by cloud security | It needs cloud infrastructure. |
-| [T1610](https://attack.mitre.org/techniques/T1610) | Deploy Container | Outside PantherClaw: covered by cloud security | It needs cloud infrastructure. |
+| [T1609](https://attack.mitre.org/techniques/T1609) | Container Administration Command | Mapped | scenarios `RT-215` |
+| [T1610](https://attack.mitre.org/techniques/T1610) | Deploy Container | Mapped | prevent `prevent.kubernetes_admission`; scenarios `RT-215` |
 | [T1699](https://attack.mitre.org/techniques/T1699) | Direct Prompt Injection | No PantherClaw control yet | Direct prompt injection (T1699): it happens in the model's conversation; PantherClaw decides on the actions that follow. |
 | [T1675](https://attack.mitre.org/techniques/T1675) | ESXi Administration Command | Outside PantherClaw: covered by cloud security | It needs cloud infrastructure. |
 | [T1203](https://attack.mitre.org/techniques/T1203) | Exploitation for Client Execution | Outside PantherClaw: covered by EDR | It needs an endpoint. |
@@ -342,7 +342,7 @@ Mapping digest: `3bf6bd564644bd65b9f040ba5bb227d73453fafb543b4e30ef0480b7993115c
 | [T1505](https://attack.mitre.org/techniques/T1505) | Server Software Component | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1176](https://attack.mitre.org/techniques/T1176) | Software Extensions | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1205](https://attack.mitre.org/techniques/T1205) | Traffic Signaling | Outside PantherClaw: covered by network security | It needs a network. |
-| [T1078](https://attack.mitre.org/techniques/T1078) | Valid Accounts | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
+| [T1078](https://attack.mitre.org/techniques/T1078) | Valid Accounts | Mapped | T1078.001: scenarios `RT-216` |
 
 ### Privilege Escalation (TA0004)
 
@@ -355,12 +355,12 @@ Mapping digest: `3bf6bd564644bd65b9f040ba5bb227d73453fafb543b4e30ef0480b7993115c
 | [T1037](https://attack.mitre.org/techniques/T1037) | Boot or Logon Initialization Scripts | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1543](https://attack.mitre.org/techniques/T1543) | Create or Modify System Process | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1484](https://attack.mitre.org/techniques/T1484) | Domain or Tenant Policy Modification | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
-| [T1611](https://attack.mitre.org/techniques/T1611) | Escape to Host | Mapped | prevent `prevent.sandbox_closure`; scenarios `RT-015` |
+| [T1611](https://attack.mitre.org/techniques/T1611) | Escape to Host | Mapped | prevent `prevent.sandbox_closure`; scenarios `RT-015`, `RT-215` |
 | [T1546](https://attack.mitre.org/techniques/T1546) | Event Triggered Execution | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1068](https://attack.mitre.org/techniques/T1068) | Exploitation for Privilege Escalation | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1055](https://attack.mitre.org/techniques/T1055) | Process Injection | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1053](https://attack.mitre.org/techniques/T1053) | Scheduled Task/Job | Outside PantherClaw: covered by EDR | It needs an endpoint. |
-| [T1078](https://attack.mitre.org/techniques/T1078) | Valid Accounts | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
+| [T1078](https://attack.mitre.org/techniques/T1078) | Valid Accounts | Mapped | T1078.001: scenarios `RT-216` |
 
 ### Stealth (TA0005)
 
@@ -394,7 +394,7 @@ Mapping digest: `3bf6bd564644bd65b9f040ba5bb227d73453fafb543b4e30ef0480b7993115c
 | [T1205](https://attack.mitre.org/techniques/T1205) | Traffic Signaling | Outside PantherClaw: covered by network security | It needs a network. |
 | [T1127](https://attack.mitre.org/techniques/T1127) | Trusted Developer Utilities Proxy Execution | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1535](https://attack.mitre.org/techniques/T1535) | Unused/Unsupported Cloud Regions | Outside PantherClaw: covered by cloud security | It needs cloud infrastructure. |
-| [T1078](https://attack.mitre.org/techniques/T1078) | Valid Accounts | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
+| [T1078](https://attack.mitre.org/techniques/T1078) | Valid Accounts | Mapped | T1078.001: scenarios `RT-216` |
 | [T1497](https://attack.mitre.org/techniques/T1497) | Virtualization/Sandbox Evasion | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1220](https://attack.mitre.org/techniques/T1220) | XSL Script Processing | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 
@@ -403,7 +403,7 @@ Mapping digest: `3bf6bd564644bd65b9f040ba5bb227d73453fafb543b4e30ef0480b7993115c
 | Technique | Name | Place | Mapped to it |
 |---|---|---|---|
 | [T1686](https://attack.mitre.org/techniques/T1686) | Disable or Modify System Firewall | Outside PantherClaw: covered by EDR | It needs an endpoint. |
-| [T1685](https://attack.mitre.org/techniques/T1685) | Disable or Modify Tools | Mapped | rules `pc.coverage.lost`; scenarios `RT-016` |
+| [T1685](https://attack.mitre.org/techniques/T1685) | Disable or Modify Tools | Mapped | rules `pc.coverage.lost`; scenarios `RT-016`, `RT-218` |
 | [T1484](https://attack.mitre.org/techniques/T1484) | Domain or Tenant Policy Modification | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
 | [T1689](https://attack.mitre.org/techniques/T1689) | Downgrade Attack | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1687](https://attack.mitre.org/techniques/T1687) | Exploitation for Defense Impairment | Outside PantherClaw: covered by EDR | It needs an endpoint. |
@@ -442,7 +442,7 @@ Mapping digest: `3bf6bd564644bd65b9f040ba5bb227d73453fafb543b4e30ef0480b7993115c
 | [T1539](https://attack.mitre.org/techniques/T1539) | Steal Web Session Cookie | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1649](https://attack.mitre.org/techniques/T1649) | Steal or Forge Authentication Certificates | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
 | [T1558](https://attack.mitre.org/techniques/T1558) | Steal or Forge Kerberos Tickets | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
-| [T1552](https://attack.mitre.org/techniques/T1552) | Unsecured Credentials | Mapped | kinds `content.secret_format`; Hub rules `org.hub.secret_outbound_refused`; Hub playbooks `pc.playbook.leaked-key`<br>T1552.001: prevent `prevent.edge_credential_strip`, `prevent.secret_outbound`; scenarios `RT-004`, `RT-190`, `RT-193`; campaigns `RT-144`, `RT-148`, `RT-149`<br>T1552.004: prevent `prevent.sandbox_closure`, `prevent.secret_outbound`; scenarios `RT-005`<br>T1552.005: prevent `prevent.egress_guard`, `prevent.sandbox_closure`; scenarios `RT-015`, `RT-031` |
+| [T1552](https://attack.mitre.org/techniques/T1552) | Unsecured Credentials | Mapped | kinds `content.secret_format`; Hub rules `org.hub.secret_outbound_refused`; Hub playbooks `pc.playbook.leaked-key`<br>T1552.001: prevent `prevent.edge_credential_strip`, `prevent.secret_outbound`; scenarios `RT-004`, `RT-190`, `RT-193`; campaigns `RT-144`, `RT-148`, `RT-149`<br>T1552.004: prevent `prevent.sandbox_closure`, `prevent.secret_outbound`; scenarios `RT-005`<br>T1552.005: prevent `prevent.egress_guard`, `prevent.kubernetes_closure`, `prevent.sandbox_closure`; scenarios `RT-015`, `RT-031`<br>T1552.007: scenarios `RT-217` |
 
 ### Discovery (TA0007)
 
@@ -455,7 +455,7 @@ Mapping digest: `3bf6bd564644bd65b9f040ba5bb227d73453fafb543b4e30ef0480b7993115c
 | [T1538](https://attack.mitre.org/techniques/T1538) | Cloud Service Dashboard | Outside PantherClaw: covered by cloud security | It needs cloud infrastructure. |
 | [T1526](https://attack.mitre.org/techniques/T1526) | Cloud Service Discovery | Outside PantherClaw: covered by cloud security | It needs cloud infrastructure. |
 | [T1619](https://attack.mitre.org/techniques/T1619) | Cloud Storage Object Discovery | Outside PantherClaw: covered by cloud security | It needs cloud infrastructure. |
-| [T1613](https://attack.mitre.org/techniques/T1613) | Container and Resource Discovery | Outside PantherClaw: covered by cloud security | It needs cloud infrastructure. |
+| [T1613](https://attack.mitre.org/techniques/T1613) | Container and Resource Discovery | Mapped | prevent `prevent.kubernetes_closure` |
 | [T1622](https://attack.mitre.org/techniques/T1622) | Debugger Evasion | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1652](https://attack.mitre.org/techniques/T1652) | Device Driver Discovery | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1482](https://attack.mitre.org/techniques/T1482) | Domain Trust Discovery | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
@@ -635,3 +635,7 @@ Abuse cases from [THREAT_MODEL](THREAT_MODEL.md) that no library range scenario 
 | T-331 | AML.T0053 | — |
 | T-332 | AML.T0053 | T1567.002 |
 | T-333 | AML.T0053 | — |
+| T-335 | — | T1609, T1610, T1611 |
+| T-336 | — | T1078.001 |
+| T-337 | — | T1199, T1552.007 |
+| T-338 | — | T1685 |

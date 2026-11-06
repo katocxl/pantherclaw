@@ -98,6 +98,13 @@ type Options struct {
 	Hosts map[string]string
 	// Run is the run every request names.
 	Run string
+	// RunSource, set in kubernetes mode instead of Run (G0 M32 D966,
+	// D973), returns the pod's current run, read for every request; ""
+	// while there is none, and the edge then forwards nothing.
+	RunSource func() string
+	// RunEnded, with RunSource, is told when the gateway refused a request
+	// because the run is no longer active, so that a new run starts.
+	RunEnded func(run string)
 	// Key is the run's workload key; Token returns its current workload
 	// token, "" when there is none.
 	Key   ed25519.PrivateKey
@@ -134,11 +141,14 @@ type Options struct {
 // Edge is one session's sidecar.
 type Edge struct {
 	session, gateway, run string
-	hosts                 map[string]string
-	token                 func() string
-	binding               func() string
-	placeholder           string
-	client                *http.Client
+	// runSource and runEnded replace run in kubernetes mode (G0 M32 D973).
+	runSource   func() string
+	runEnded    func(run string)
+	hosts       map[string]string
+	token       func() string
+	binding     func() string
+	placeholder string
+	client      *http.Client
 	// model is the campaign's model route, nil without one; stream is the
 	// client without an overall timeout that it uses.
 	model  *modelRoute
@@ -174,7 +184,11 @@ func New(o Options) (*Edge, error) {
 		}
 	}
 	if o.Binding == nil {
-		if _, err := ids.ParseUUID(o.Run); err != nil {
+		if o.RunSource != nil {
+			if o.Run != "" {
+				return nil, errors.New("edge: a run source replaces the fixed run")
+			}
+		} else if _, err := ids.ParseUUID(o.Run); err != nil {
 			return nil, errors.New("edge: the run must be a run id")
 		}
 		if len(o.Key) != ed25519.PrivateKeySize || o.Token == nil {
@@ -248,7 +262,7 @@ func New(o Options) (*Edge, error) {
 		return http.ErrUseLastResponse // HR-070
 	}
 	return &Edge{
-		session: o.Session, gateway: u.String(), run: o.Run, hosts: maps.Clone(o.Hosts), token: o.Token, binding: o.Binding, placeholder: o.Placeholder, ca: ca, log: log,
+		session: o.Session, gateway: u.String(), run: o.Run, runSource: o.RunSource, runEnded: o.RunEnded, hosts: maps.Clone(o.Hosts), token: o.Token, binding: o.Binding, placeholder: o.Placeholder, ca: ca, log: log,
 		client: &http.Client{Transport: transport, Timeout: requestTimeout, CheckRedirect: noRedirect},
 		// A stream lasts as long as the model writes; modelTimeout bounds
 		// each call through its context.
@@ -478,6 +492,11 @@ func (e *Edge) forward(w http.ResponseWriter, r *http.Request, host, conn string
 		e.answer(w, r, host, http.StatusServiceUnavailable, "edge_has_no_workload_token")
 		return
 	}
+	run := e.currentRun()
+	if run == "" {
+		e.answer(w, r, host, http.StatusServiceUnavailable, "edge_has_no_run") // G0 M32 D973: fail closed
+		return
+	}
 	target := e.gateway + "/" + url.PathEscape(conn) + r.URL.EscapedPath()
 	if query != "" {
 		target += "?" + query
@@ -496,19 +515,25 @@ func (e *Edge) forward(w http.ResponseWriter, r *http.Request, host, conn string
 	}
 	key := fingerprint(r.Method, target, body)
 	action := e.held.action(key)
-	out.Header.Set(headerRunID, e.run)
+	out.Header.Set(headerRunID, run)
 	out.Header.Set(headerAction, action)
 	if e.session != "" {
 		out.Header.Set(headerSession, e.session)
 	}
 	res, err := e.client.Do(out) //nolint:gosec,bodyclose // G704: only the configured gateway (see above); relay closes the body
 	e.heldAnswer(key, action, res, err)
-	e.relay(w, r, host, conn, action, res, err)
+	e.relayRun(w, r, host, conn, action, run, res, err)
 }
 
 // relay answers the agent with the gateway's answer: its status, body and
 // a header allowlist, never the gateway's own refusal marker.
 func (e *Edge) relay(w http.ResponseWriter, r *http.Request, host, conn, action string, res *http.Response, err error) {
+	e.relayRun(w, r, host, conn, action, "", res, err)
+}
+
+// relayRun is relay for a request of run: in kubernetes mode, a refusal
+// because the run is no longer active starts a new one (G0 M32 D973).
+func (e *Edge) relayRun(w http.ResponseWriter, r *http.Request, host, conn, action, run string, res *http.Response, err error) {
 	if err != nil {
 		e.log.WarnContext(r.Context(), "edge.gateway_unreachable", "connection", conn, "error", err.Error())
 		e.answer(w, r, host, http.StatusBadGateway, "gateway_unreachable")
@@ -526,8 +551,39 @@ func (e *Edge) relay(w http.ResponseWriter, r *http.Request, host, conn, action 
 		}
 	}
 	e.log.InfoContext(r.Context(), "edge.forwarded", "method", r.Method, "connection", conn, "action", action, "status", res.StatusCode)
+	if run != "" && e.runEnded != nil && runNotActive(res.StatusCode, b) {
+		e.runEnded(run)
+	}
 	w.WriteHeader(res.StatusCode)
 	_, _ = w.Write(b)
+}
+
+// reasonRunNotActive is the Authority's reason for a request of a run that
+// ended or was revoked (authority/pipeline ReasonRunNotActive).
+const reasonRunNotActive = "RUN_NOT_ACTIVE"
+
+// runNotActive reports whether a gateway refusal says the run is no longer
+// active.
+func runNotActive(status int, body []byte) bool {
+	if status != http.StatusForbidden {
+		return false
+	}
+	var refusal struct {
+		Reasons []string `json:"reasons"`
+	}
+	if json.Unmarshal(body, &refusal) != nil {
+		return false
+	}
+	return slices.Contains(refusal.Reasons, reasonRunNotActive)
+}
+
+// currentRun is the run a request names: the fixed run, or in kubernetes
+// mode the pod's current one ("" while there is none).
+func (e *Edge) currentRun() string {
+	if e.runSource != nil {
+		return e.runSource()
+	}
+	return e.run
 }
 
 // strip reports every credential header of a request: its name, kind and

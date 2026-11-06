@@ -82,6 +82,15 @@ func (s *Service) now() time.Time {
 	return s.Clock.Now()
 }
 
+// validSource: a closure rests on exactly one of a sandbox session (runc
+// or runsc) and a Kubernetes closure (runtime kubernetes; G0 M32 D970).
+func validSource(c domain.Closure) bool {
+	if !c.KubeClosure.IsZero() {
+		return c.SandboxSession.IsZero() && c.Engine.Runtime == domain.RuntimeKubernetes
+	}
+	return !c.SandboxSession.IsZero() && (c.Engine.Runtime == "runc" || c.Engine.Runtime == "runsc")
+}
+
 func validClosure(c domain.Closure, now time.Time) bool {
 	roles := []string{domain.RoleProbe, domain.RolePositiveControl, domain.RoleNegativeControl, domain.RoleCanary}
 	outcomes := []string{domain.Blocked, domain.Reachable}
@@ -105,8 +114,7 @@ func validClosure(c domain.Closure, now time.Time) bool {
 	}
 	return jktPattern.MatchString(c.SigningKeyJKT) && noncePattern.MatchString(c.ServerNonce) &&
 		enginePattern.MatchString(c.Engine.Version) && apiVersionPattern.MatchString(c.Engine.APIVersion) &&
-		(c.Engine.Runtime == "runc" || c.Engine.Runtime == "runsc") && !c.Agent.IsZero() && !c.Connection.IsZero() &&
-		!c.SandboxSession.IsZero() && !c.Bound.Gateway.IsZero() && !c.Bound.PackageVersion.IsZero() &&
+		validSource(c) && !c.Agent.IsZero() && !c.Connection.IsZero() && !c.Bound.Gateway.IsZero() && !c.Bound.PackageVersion.IsZero() &&
 		c.Bound.ConnectionRevision > 0 && !c.SessionStartedAt.After(c.ObservedAt) &&
 		!c.ObservedAt.After(now.Add(time.Minute)) && c.ObservedAt.After(now.Add(-time.Hour))
 }
@@ -153,7 +161,7 @@ func (s *Service) RecordClosure(ctx context.Context, tx db.TenantTx, c domain.Cl
 	if len(changes) > 0 { // only closure-invalidating kinds
 		return ids.UUID{}, ErrClosureStale
 	}
-	v := domain.Evaluate(c.Probes, c.ConfigChecks)
+	v := domain.EvaluateIn(domain.ContainmentOf(c.Engine.Runtime), c.Probes, c.ConfigChecks)
 	probes, err := json.Marshal(c.Probes)
 	if err != nil {
 		return ids.UUID{}, err
@@ -169,9 +177,16 @@ func (s *Service) RecordClosure(ctx context.Context, tx db.TenantTx, c domain.Cl
 	if v.Passed {
 		result = "PASSED"
 	}
+	var session, kube *ids.UUID
+	if c.KubeClosure.IsZero() {
+		session = &c.SandboxSession
+	} else {
+		kube = &c.KubeClosure
+	}
 	row, err := q.InsertCoverageClosure(ctx, dbq.InsertCoverageClosureParams{
-		OrgID: tx.OrgID(), ID: ids.NewV7(), AgentID: c.Agent, ConnectionID: c.Connection, SandboxSessionID: c.SandboxSession,
-		Result: result, Probes: probes, PositiveControlsPassed: v.PositiveControls, NegativeControlsPassed: v.Negative,
+		OrgID: tx.OrgID(), ID: ids.NewV7(), AgentID: c.Agent, ConnectionID: c.Connection, SandboxSessionID: session,
+		KubeClosureID: kube,
+		Result:        result, Probes: probes, PositiveControlsPassed: v.PositiveControls, NegativeControlsPassed: v.Negative,
 		CanaryPassed: v.Canary, SigningKeyJkt: c.SigningKeyJKT, ServerNonce: c.ServerNonce, ResultsSha256: c.ResultsSHA256[:],
 		EngineVersion: c.Engine.Version, ApiVersion: c.Engine.APIVersion, Runtime: c.Engine.Runtime,
 		ImageDigests: c.ImageDigests, ConfigSha256: c.ConfigSHA256[:], ConfigChecks: checks, GatewayID: bound.Gateway,
@@ -266,9 +281,12 @@ const ClosureLedgerKind = "sandbox.closure"
 // are base64url raw Ed25519 public keys: ProbeKey verified the sandbox
 // report and HostKey the control and canary reports.
 type ClosureEntry struct {
-	V           int                  `json:"v"`
-	Closure     string               `json:"closure"`
-	Session     string               `json:"session"`
+	V       int    `json:"v"`
+	Closure string `json:"closure"`
+	Session string `json:"session"`
+	// KubeClosure is set instead of Session for a kube closure (G0 M32
+	// D970); Session is then empty.
+	KubeClosure string               `json:"kube_closure,omitempty"`
 	Agent       string               `json:"agent"`
 	Connections []string             `json:"connections"`
 	Result      string               `json:"result"`
@@ -302,6 +320,9 @@ func (s *Service) enterClosure(ctx context.Context, tx db.TenantTx, id ids.UUID,
 		ProbeKey: base64.RawURLEncoding.EncodeToString(c.ProbeKey), HostKey: base64.RawURLEncoding.EncodeToString(c.HostKey),
 		Reports: []ClosureEntryReport{}, Probes: make([]ClosureEntryProbe, 0, len(c.Probes)),
 		RecordedAt: evdomain.Timestamp(s.now()),
+	}
+	if !c.KubeClosure.IsZero() {
+		e.Session, e.KubeClosure = "", c.KubeClosure.String()
 	}
 	for _, r := range c.Reports {
 		e.Reports = append(e.Reports, ClosureEntryReport{Run: r.Run.String(), Kind: r.Kind, SHA256: hex.EncodeToString(r.SHA256[:])})
