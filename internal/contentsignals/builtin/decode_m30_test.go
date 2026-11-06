@@ -4,9 +4,11 @@
 package builtin_test
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -80,6 +82,44 @@ func TestHR703_OneCharacterNextToARunDoesNotHideIt(t *testing.T) {
 				t.Fatalf("want injection_phrase via %s, got %+v", c.enc, found)
 			}
 		})
+	}
+}
+
+// TestHR703_APhraseInsideJunkBytesIsStillRead (G0 M30 D1215b): 10 or 30
+// bytes that are not text on each side of the phrase, hex or base64
+// encoded, still give injection_phrase with the layer named; 512 random
+// bytes, encoded either way, give no decoded finding.
+func TestHR703_APhraseInsideJunkBytesIsStillRead(t *testing.T) {
+	cases := map[string]struct{ text, enc string }{
+		"base64 behind 12 slashes": {"note ////////////" + base64.RawStdEncoding.EncodeToString([]byte(phrase)), "base64"},
+	}
+	for _, n := range []int{10, 30} {
+		junk := strings.Repeat("\xff", n)
+		raw := []byte(junk + phrase + junk)
+		cases["hex, "+strconv.Itoa(n)+" junk bytes"] = struct{ text, enc string }{"id " + hex.EncodeToString(raw), "hex"}
+		cases["base64, "+strconv.Itoa(n)+" junk bytes"] = struct{ text, enc string }{"note " + base64.StdEncoding.EncodeToString(raw), "base64"}
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			found := classify(t, c.text)
+			f, ok := findingOf(found, domain.KindInjectionPhrase)
+			if !ok || !strings.Contains(f.Encoding, c.enc) || !f.Valid() {
+				t.Fatalf("want injection_phrase via %s, got %+v", c.enc, found)
+			}
+		})
+	}
+	// 512 seeded random bytes: SHA-256 of the seed and a counter.
+	var random []byte
+	for i := 0; len(random) < 512; i++ {
+		h := sha256.Sum256([]byte("D1215b-" + strconv.Itoa(i)))
+		random = append(random, h[:]...)
+	}
+	for name, text := range map[string]string{"base64": base64.StdEncoding.EncodeToString(random), "hex": hex.EncodeToString(random)} {
+		for _, f := range classify(t, "blob "+text) {
+			if f.Encoding != "" || f.Kind == domain.KindInjectionPhrase || f.Kind == domain.KindSecretFormat {
+				t.Errorf("random %s: %+v", name, f)
+			}
+		}
 	}
 }
 

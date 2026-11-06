@@ -339,21 +339,48 @@ func decodeHexRuns(s string) []string {
 // and whether at least 80% of it is printable runes, an invalid byte
 // counting as one unprintable rune. A few junk bytes from a glued prefix
 // or suffix thus do not hide the text after them (G0 M30 D1215a).
+//
+// Otherwise a reading is still kept when it holds a printable stretch of
+// at least minStretch runes (split at invalid bytes and at unprintable
+// runes other than \n, \r and \t): only those stretches are passed on,
+// joined with "\n", so text inside much junk is still read (D1215b).
 func readable(b []byte) (string, bool) {
 	if len(b) == 0 {
 		return "", false
 	}
 	n, ok := 0, 0
-	for rest := b; len(rest) > 0; {
-		r, size := utf8.DecodeRune(rest)
-		rest = rest[size:]
-		n++
-		if r == utf8.RuneError && size == 1 {
-			continue
+	var stretches []string
+	start, runes := 0, 0
+	end := func(at int) {
+		if runes >= minStretch {
+			stretches = append(stretches, string(b[start:at]))
 		}
-		if unicode.IsPrint(r) || r == '\n' || r == '\r' || r == '\t' {
-			ok++
-		}
+		runes = 0
 	}
-	return strings.ToValidUTF8(string(b), string(utf8.RuneError)), ok*5 >= n*4
+	for i := 0; i < len(b); {
+		r, size := utf8.DecodeRune(b[i:])
+		n++
+		if (r != utf8.RuneError || size != 1) && (unicode.IsPrint(r) || r == '\n' || r == '\r' || r == '\t') {
+			ok++
+			if runes == 0 {
+				start = i
+			}
+			runes++
+		} else {
+			end(i)
+		}
+		i += size
+	}
+	end(len(b))
+	if ok*5 >= n*4 {
+		return strings.ToValidUTF8(string(b), string(utf8.RuneError)), true
+	}
+	if len(stretches) > 0 {
+		return strings.Join(stretches, "\n"), true
+	}
+	return "", false
 }
+
+// minStretch is the fewest printable runes a stretch inside junk is read
+// from (D1215b).
+const minStretch = 16
