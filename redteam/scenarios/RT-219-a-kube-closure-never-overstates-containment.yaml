@@ -1,0 +1,34 @@
+apiVersion: pantherclaw.range/v1
+id: RT-219
+title: A kube closure does not pass with an open NetworkPolicy, no recent admission decision or a probe that got through
+category: boundary
+suite: platform
+tier: business
+attacker: A9
+threats: [T-339]
+rules: [HR-742, HR-743]
+techniques_none: "Tests PantherClaw's own verdict: the server's checks decide a kube closure, not the probe's say-so."
+requires: [payments]
+harness_only: true
+steps:
+  - id: network-policy-opened
+    do: kube.probe
+    with: {attack: network_policy_open}
+    expect:
+      outcome: REFUSED
+      reason: NOT_ENFORCED
+      decisive_control: HR-742
+  - id: admission-not-seen-for-a-day
+    do: kube.probe
+    with: {attack: admission_not_seen}
+    expect:
+      outcome: REFUSED
+      reason: NOT_ENFORCED
+      decisive_control: HR-742
+  - id: a-probe-got-through
+    do: kube.probe
+    with: {attack: probe_reached}
+    expect:
+      outcome: REFUSED
+      reason: NOT_ENFORCED
+      decisive_control: HR-742

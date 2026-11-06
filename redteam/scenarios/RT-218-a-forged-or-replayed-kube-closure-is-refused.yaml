@@ -1,0 +1,43 @@
+apiVersion: pantherclaw.range/v1
+id: RT-218
+title: A kube closure signed by another key, on a used nonce, for another namespace or from an unlisted probe image is refused
+category: boundary
+suite: platform
+tier: business
+attacker: A1
+threats: [T-338]
+rules: [HR-741, HR-738]
+attack: [T1562.001]
+technique_why:
+  T1562.001: "Disable or modify tools (T1562.001): forged probe evidence would make coverage read enforced while the pod has other routes."
+requires: [payments]
+harness_only: true
+steps:
+  - id: signed-by-another-key
+    do: kube.probe
+    with: {attack: report_other_key}
+    expect:
+      outcome: REFUSED
+      reason: K8S_CLOSURE_REJECTED
+      decisive_control: HR-741
+  - id: nonce-replayed
+    do: kube.probe
+    with: {attack: report_nonce_replayed}
+    expect:
+      outcome: REFUSED
+      reason: K8S_CLOSURE_REJECTED
+      decisive_control: HR-741
+  - id: nonce-for-another-namespace
+    do: kube.probe
+    with: {attack: nonce_other_namespace}
+    expect:
+      outcome: REFUSED
+      reason: K8S_NAMESPACE
+      decisive_control: HR-741
+  - id: probe-image-off-the-list
+    do: kube.probe
+    with: {attack: probe_image_off_list}
+    expect:
+      outcome: REFUSED
+      reason: K8S_CLOSURE_REJECTED
+      decisive_control: HR-741

@@ -1,0 +1,52 @@
+apiVersion: pantherclaw.range/v1
+id: RT-215
+title: A pod without the edge, with host access or an exposed token is not admitted, and a guessed webhook path answers nothing
+category: boundary
+suite: platform
+tier: business
+attacker: A5
+threats: [T-335]
+rules: [HR-730, HR-731, HR-733, HR-734]
+attack: [T1610, T1611, T1609]
+technique_why:
+  T1610: "Deploy container (T1610): a pod is created in an enforced namespace without the edge sidecar that routes it through the gateway."
+  T1611: "Escape to host (T1611): a pod asks for the host network or a mounted token to get around the edge."
+  T1609: "Container administration command (T1609): an ephemeral container is added to a running agent pod."
+requires: [payments]
+harness_only: true
+steps:
+  - id: pod-without-the-edge
+    do: kube.probe
+    with: {attack: pod_without_edge}
+    expect:
+      outcome: REFUSED
+      reason: K8S_EDGE_MISSING
+      decisive_control: HR-733
+  - id: host-network
+    do: kube.probe
+    with: {attack: host_network}
+    expect:
+      outcome: REFUSED
+      reason: K8S_POD_ESCAPE
+      decisive_control: HR-734
+  - id: service-account-token-mounted
+    do: kube.probe
+    with: {attack: exposed_token}
+    expect:
+      outcome: REFUSED
+      reason: K8S_TOKEN_EXPOSED
+      decisive_control: HR-734
+  - id: ephemeral-container
+    do: kube.probe
+    with: {attack: ephemeral_container}
+    expect:
+      outcome: REFUSED
+      reason: K8S_EPHEMERAL
+      decisive_control: HR-730
+  - id: guessed-webhook-path
+    do: kube.probe
+    with: {attack: guessed_webhook_path}
+    expect:
+      outcome: REFUSED
+      reason: NOT_FOUND
+      decisive_control: HR-731

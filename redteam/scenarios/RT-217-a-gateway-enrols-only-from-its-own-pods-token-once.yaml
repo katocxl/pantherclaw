@@ -1,0 +1,30 @@
+apiVersion: pantherclaw.range/v1
+id: RT-217
+title: A gateway enrols only from its own bound pod's projected token, once
+category: boundary
+suite: platform
+tier: business
+attacker: A5
+threats: [T-337]
+rules: [HR-739]
+attack: [T1552.007, T1199]
+technique_why:
+  T1552.007: "Container API (T1552.007): a projected token read from a pod is replayed to enrol a gateway."
+  T1199: "Trusted relationship (T1199): a pod of another service account poses as the org's gateway."
+requires: [payments]
+harness_only: true
+steps:
+  - id: projected-token-reused
+    do: kube.probe
+    with: {attack: gateway_token_reused}
+    expect:
+      outcome: REFUSED
+      reason: GATEWAY_ENROLLMENT_REFUSED
+      decisive_control: HR-739
+  - id: another-service-accounts-token
+    do: kube.probe
+    with: {attack: gateway_other_service_account}
+    expect:
+      outcome: REFUSED
+      reason: GATEWAY_ENROLLMENT_REFUSED
+      decisive_control: HR-739
