@@ -117,6 +117,7 @@ func TestPackCoversD11(t *testing.T) {
 	business := []string{
 		"pc.probing.denial_burst", "pc.sequence.read_then_disclose", "pc.budget.splitting", "pc.delegation.depth_anomaly",
 		"pc.drift.behavior", "pc.threatmap.lane_lost",
+		"pc.runtime.agent_deployed", // G0 M34 D997, HR-769
 	}
 	for _, id := range community {
 		if editions[id] != "community" {

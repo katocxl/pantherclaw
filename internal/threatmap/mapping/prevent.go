@@ -414,7 +414,7 @@ var Prevent = []PreventControl{
 		Requires:   RequiresAlways,
 		Techniques: []string{"AML.T0103"},
 		Why: map[string]string{
-			"AML.T0103": "Deploy AI agent (AML.T0103): creating or patching a Vertex reasoning engine and creating or updating a Foundry agent through PantherClaw are irreversible agent.deploy operations that no template grants.",
+			"AML.T0103": "Deploy AI agent (AML.T0103): creating or changing a Vertex reasoning engine or a Foundry agent is an irreversible agent.deploy operation that no template grants.",
 		},
 	},
 	{
@@ -426,7 +426,7 @@ var Prevent = []PreventControl{
 		Requires:   RequiresAlways,
 		Techniques: []string{"T1651"},
 		Why: map[string]string{
-			"T1651": "Cloud administration command (T1651): aws.ssm.send_command, aws.ssm.send_powershell_command and azure.vm.run_command through PantherClaw are irreversible code.execute operations, decided on their target instance or VM and their commands.",
+			"T1651": "Cloud administration command (T1651): SSM SendCommand and Azure VM Run Command are irreversible code.execute operations, decided on their one instance or VM and their commands.",
 		},
 	},
 }

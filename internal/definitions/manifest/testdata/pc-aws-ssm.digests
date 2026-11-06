@@ -1,0 +1,2 @@
+aws.ssm.send_command sha256:bef24aecb725816a4ace56a4c9f92283c9d482aec40cbe70eb29e07358aecca4
+aws.ssm.send_powershell_command sha256:8d9b324b1edaa6d0193f4860af030a7aeb24eed4cb5d48fb4e17eb1575334b24

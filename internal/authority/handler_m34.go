@@ -64,7 +64,7 @@ func runtimeTargetAccount(target string) string {
 func (h *Handler) refusedRuntime(ctx context.Context, gw Gateway, raw []byte) (*pantherclawv1.AuthorizeResponse, error) {
 	p, err := actionir.Parse(raw)
 	if err != nil || p.Action.Channel != channelRuntime {
-		return nil, nil
+		return nil, nil //nolint:nilerr // an unparsable body is the Service's to refuse, as before
 	}
 	ok, err := h.runtimeAccountMatches(ctx, gw, p.Action)
 	if err != nil {
@@ -88,11 +88,11 @@ func (h *Handler) runtimeAccountMatches(ctx context.Context, gw Gateway, a actio
 	}
 	conn, err := ids.ParseUUID(a.Connection)
 	if err != nil {
-		return false, nil
+		return false, nil //nolint:nilerr // no connection id: the check refuses (fail closed)
 	}
 	run, err := ids.ParseUUID(a.RunID)
 	if err != nil {
-		return false, nil
+		return false, nil //nolint:nilerr // no run id: the check refuses (fail closed)
 	}
 	target, kind, account, found, err := ra.RuntimeAccount(ctx, gw.Org, conn, run)
 	if err != nil {

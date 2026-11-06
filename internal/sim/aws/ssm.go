@@ -66,8 +66,9 @@ func (s *Server) serveSSM(w http.ResponseWriter, body []byte, target string, p p
 		writeECSError(w, "SerializationException", "the request")
 		return
 	}
-	// IAM evaluates SendCommand on the document and on every instance; a
-	// session policy naming any one of them (or "*") is enough here.
+	// IAM evaluates SendCommand on the document and on every instance, and
+	// the session policy must allow it on each of them (G0 M34 D1203: a
+	// session naming only the instance, or only the document, is refused).
 	resources := []string{"arn:aws:ssm:" + Region + "::document/" + in.DocumentName}
 	for _, id := range in.InstanceIDs {
 		resources = append(resources, instanceARN(id))
@@ -79,7 +80,7 @@ func (s *Server) serveSSM(w http.ResponseWriter, body []byte, target string, p p
 	if p.sess != nil {
 		call.Policy = p.sess.actions()
 	}
-	call.Allowed = slices.ContainsFunc(resources, func(r string) bool { return s.allowed(p.service, action, r, p.sess) })
+	call.Allowed = !slices.ContainsFunc(resources, func(r string) bool { return !s.allowed(p.service, action, r, p.sess) })
 	s.calls = append(s.calls, call)
 	if !call.Allowed {
 		writeECSError(w, "AccessDeniedException", fmt.Sprintf("not authorized to perform %s:%s", p.service, action))

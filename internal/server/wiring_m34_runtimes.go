@@ -120,12 +120,21 @@ func (s *runtimeRuns) StartRuntimeRun(ctx context.Context, req *pantherclawv1.St
 	if err != nil {
 		return nil, err
 	}
-	name := req.GetName()
+	run, err := s.start(ctx, in, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	s.workload.SetNonce(ctx, in)
+	return &pantherclawv1.StartRuntimeRunResponse{RunId: run.ID.String()}, nil
+}
+
+// start starts the run of in, an instance PAP/1 has authenticated.
+func (s *runtimeRuns) start(ctx context.Context, in pap.Instance, name string) (runsapp.Run, error) {
 	if !runtimeRunName.MatchString(name) {
-		return nil, errRuntimeRunName
+		return runsapp.Run{}, errRuntimeRunName
 	}
 	var run runsapp.Run
-	err = s.pool.InTenantTx(ctx, in.Org, func(ctx context.Context, tx db.TenantTx) error {
+	err := s.pool.InTenantTx(ctx, in.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		rev, err := s.signer(ctx, q, in)
 		if err != nil {
@@ -151,9 +160,5 @@ func (s *runtimeRuns) StartRuntimeRun(ctx context.Context, req *pantherclawv1.St
 		})
 		return err
 	})
-	if err != nil {
-		return nil, err
-	}
-	s.workload.SetNonce(ctx, in)
-	return &pantherclawv1.StartRuntimeRunResponse{RunId: run.ID.String()}, nil
+	return run, err
 }

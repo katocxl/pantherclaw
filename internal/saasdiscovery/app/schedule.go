@@ -21,6 +21,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/tenantctx"
 	"github.com/katocxl/pantherclaw/internal/saasdiscovery/domain"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -112,10 +113,10 @@ const (
 var skipped, _ = otel.Meter("github.com/katocxl/pantherclaw/internal/saasdiscovery/app").Int64Counter(MetricScheduleSkipped,
 	metric.WithDescription("Daily SaaS and cloud agent runtime scans not started, by reason."))
 
-// errSkip is a schedule skipped for a reason; last_started_at stays.
-type errSkip struct{ reason string }
+// skipError is a schedule skipped for a reason; last_started_at stays.
+type skipError struct{ reason string }
 
-func (e errSkip) Error() string { return "saas: daily scan skipped: " + e.reason }
+func (e skipError) Error() string { return "saas: daily scan skipped: " + e.reason }
 
 // Scheduler starts the daily scans (G0 M34 D997, FQ34-3).
 type Scheduler struct {
@@ -137,7 +138,9 @@ func (s *Scheduler) RunOrg(ctx context.Context, org ids.OrgID) (int, error) {
 	if err != nil || len(list) == 0 {
 		return 0, err
 	}
-	if !s.entitled(ctx) {
+	// The org's entitlements, as other jobs read them: a job's context
+	// carries no caller, so without the org it reads the licence's.
+	if !s.entitled(tenantctx.WithOrg(ctx, org)) {
 		for _, sch := range list {
 			s.skip(ctx, sch, SkipEdition)
 		}
@@ -151,7 +154,7 @@ func (s *Scheduler) RunOrg(ctx context.Context, org ids.OrgID) (int, error) {
 		err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 			return s.StartScheduledTx(ctx, tx, sch)
 		})
-		var skip errSkip
+		var skip skipError
 		switch {
 		case errors.As(err, &skip):
 			s.skip(ctx, sch, skip.reason)
@@ -184,7 +187,7 @@ func (s *Scheduler) skip(ctx context.Context, sch Schedule, reason string) {
 // D997a): it locks the schedule, checks that it is still due and that its
 // person is still an ACTIVE member holding agent.manage, and starts a scan
 // with origin schedule, started_by the person, audited by System with the
-// person in schedule_person. A skip (errSkip) leaves last_started_at
+// person in schedule_person. A skip (skipError) leaves last_started_at
 // unchanged.
 func (s *Scheduler) StartScheduledTx(ctx context.Context, tx db.TenantTx, sch Schedule) error {
 	q := dbq.New(tx)
@@ -201,11 +204,11 @@ func (s *Scheduler) StartScheduledTx(ctx context.Context, tx db.TenantTx, sch Sc
 	if ok, err := personMayScan(ctx, q, sch.OrgID, locked.CreatedBy); err != nil {
 		return err
 	} else if !ok {
-		return errSkip{SkipPerson}
+		return skipError{SkipPerson}
 	}
 	want, ok := domain.CollectorOf(sch.Source)
 	if !ok || !domain.SourceTenantOK(sch.Source, sch.Tenant) {
-		return errSkip{SkipConnection}
+		return skipError{SkipConnection}
 	}
 	err = startTx(ctx, tx, scanStart{
 		org: sch.OrgID, run: ids.NewV7(), connection: sch.ConnectionID, source: sch.Source, tenant: sch.Tenant, want: want,
@@ -214,9 +217,9 @@ func (s *Scheduler) StartScheduledTx(ctx context.Context, tx db.TenantTx, sch Sc
 	})
 	switch {
 	case errors.Is(err, ErrConnection):
-		return errSkip{SkipConnection}
+		return skipError{SkipConnection}
 	case errors.Is(err, ErrScanRunning):
-		return errSkip{SkipRunning}
+		return skipError{SkipRunning}
 	case err != nil:
 		return err
 	}
@@ -234,7 +237,7 @@ func personMayScan(ctx context.Context, q *dbq.Queries, org ids.OrgID, createdBy
 	}
 	id, err := ids.ParseUUID(raw)
 	if err != nil || id.IsZero() {
-		return false, nil
+		return false, nil //nolint:nilerr // a schedule that names no person is no person who may scan
 	}
 	u, err := q.GetUser(ctx, org, id)
 	if db.IsNoRows(err) {
