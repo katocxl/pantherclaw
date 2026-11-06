@@ -46,7 +46,7 @@ func TestHR744_APodsRunStartsOnlyUnderItsEntrysRunGrant(t *testing.T) {
 	if n := f.count(t, `SELECT count(*)::int FROM pc.runs r JOIN pc.agent_instances i ON i.org_id = r.org_id AND i.id = r.instance_id
 		WHERE r.org_id = $1 AND r.id = $2 AND r.agent_id = $3 AND r.grant_id = $4 AND r.task_ref = $5 AND r.principal_source = 'trusted_issuer'
 		AND r.launcher_instance_id = r.instance_id AND r.launcher_issuer_id = i.issuer_revision_id
-		AND convert_from(r.actor_chain, 'UTF8') LIKE '%trusted_issuer%'`, mustUUID(t, res.GetRunId()), f.podAgent, f.grant, f.agentPod.name); n != 1 {
+		AND r.actor_chain::text LIKE '%trusted_issuer%'`, mustUUID(t, res.GetRunId()), f.podAgent, f.grant, f.agentPod.name); n != 1 {
 		t.Errorf("the pod run is not launched by the instance under the entry's grant (%d rows)", n)
 	}
 	for attack, reason := range map[string]string{

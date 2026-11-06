@@ -482,6 +482,13 @@ func (f *kubeFixture) runEdge(t *testing.T, p kubePod) (string, string, func()) 
 		defer logMu.Unlock()
 		return logs.Write(b)
 	}), nil))
+	t.Cleanup(func() {
+		if t.Failed() {
+			logMu.Lock()
+			defer logMu.Unlock()
+			t.Logf("edge %s/%s log:\n%s", p.namespace, p.name, logs.String())
+		}
+	})
 	go func() { done <- edge.Run(ctx, c, pw, log); _ = pw.Close() }()
 	line, err := bufio.NewReader(pr).ReadString('\n')
 	if err != nil {
@@ -623,6 +630,11 @@ func (f *kubeFixture) enrollGateway(t *testing.T, tok string) error {
 // hosts map; with the NetworkPolicy opened the next closure fails.
 func TestE2E_M32_KubernetesEnforcement(t *testing.T) {
 	f := startKube(t)
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("server log:\n%s", f.s.logs.String())
+		}
+	})
 
 	// Admission (T-335, HR-730..735).
 	if code, _, _ := f.admit(t, strings.Repeat("x", len(f.secret)), f.probePod(f.agentPod.edgeImage)); code != http.StatusNotFound {

@@ -61,14 +61,25 @@ ALTER TABLE pc.coverage_closures
     ADD CONSTRAINT coverage_closures_one_source CHECK (num_nonnulls(sandbox_session_id, kube_closure_id) = 1),
     DROP CONSTRAINT coverage_closures_runtime_check,
     -- squawk-ignore constraint-missing-not-valid
-    ADD CONSTRAINT coverage_closures_runtime_check CHECK (runtime IN ('runc', 'runsc', 'kubernetes'));
+    ADD CONSTRAINT coverage_closures_runtime_check CHECK (runtime IN ('runc', 'runsc', 'kubernetes')),
+    -- The Kubernetes profile has no external canary (D970): a passing kube
+    -- closure records canary_passed false, as no canary ran; a sandbox
+    -- closure still needs its canary to pass.
+    DROP CONSTRAINT coverage_closures_check,
+    -- squawk-ignore constraint-missing-not-valid
+    ADD CONSTRAINT coverage_closures_check CHECK (result = 'FAILED'
+        OR (positive_controls_passed AND negative_controls_passed AND (canary_passed OR runtime = 'kubernetes')));
 -- squawk-ignore adding-foreign-key-constraint
 ALTER TABLE pc.coverage_closures
+    -- squawk-ignore constraint-missing-not-valid, adding-foreign-key-constraint
     ADD CONSTRAINT coverage_closures_kube_closure_fk FOREIGN KEY (org_id, kube_closure_id)
         REFERENCES pc.kube_closures (org_id, id);
 
 -- +goose Down
 ALTER TABLE pc.coverage_closures
+    DROP CONSTRAINT coverage_closures_check,
+    ADD CONSTRAINT coverage_closures_check CHECK (result = 'FAILED'
+        OR (positive_controls_passed AND negative_controls_passed AND canary_passed)),
     DROP CONSTRAINT coverage_closures_runtime_check,
     ADD CONSTRAINT coverage_closures_runtime_check CHECK (runtime IN ('runc', 'runsc')),
     DROP CONSTRAINT coverage_closures_one_source,
