@@ -66,7 +66,7 @@ func (b *builder) sel(expr string, t ColumnType) string {
 		return selected(expr)
 	}
 	n := strconv.Itoa(MaxValueChars + 1)
-	switch t {
+	switch t { //nolint:exhaustive // only dates and times take a fixed format
 	case TypeDate:
 		return "LEFT(TO_VARCHAR(" + expr + ", 'YYYY-MM-DD'), " + n + ")"
 	case TypeTimestamptz:

@@ -12,7 +12,7 @@ Seal the credential with the token endpoint of your own Microsoft Entra tenant:
 https://login.microsoftonline.com/<tenant id>/oauth2/v2.0/token
 ```
 
-The tenant id is a lowercase GUID. The token endpoint is what pins your home tenant, and the agent can never choose it.
+The tenant id is a GUID, in either case. The token endpoint is what pins your home tenant, and the agent can never choose it.
 
 The connection's credential header and scheme must be `Authorization` and `Bearer`, and its allowed hosts must include both `login.microsoftonline.com` and the bot's service URL host. Put the client secret in a file outside the repository, or pipe it in with `--from-file -`. It is never a command-line argument:
 

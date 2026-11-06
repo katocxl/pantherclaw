@@ -12,11 +12,12 @@
 -- +goose Up
 CREATE TABLE pc.owned_accounts (
     org_id   uuid        NOT NULL REFERENCES pc.orgs (id),
-    id       uuid        NOT NULL PRIMARY KEY,
+    id       uuid        NOT NULL,
     kind     text        NOT NULL CHECK (kind IN ('aws_account', 'github_org', 'email_domain', 'gcp_project', 'azure_tenant')),
     value    text        NOT NULL CHECK (char_length(value) BETWEEN 1 AND 253),
     added_by text        NOT NULL,
     added_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (org_id, id),
     UNIQUE (org_id, kind, value)
 );
 

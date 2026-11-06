@@ -126,8 +126,10 @@ func TestHR186_TheHookAllowsOnlyWhatPantherClawAllowed(t *testing.T) {
 	for name, tc := range map[string]struct{ tool, command, want string }{
 		"denied":     {"PowerShell", "rm -Recurse x", "SHELL_DESTRUCTIVE"},
 		"held":       {"Bash", "deploy prod", "not by you"},
-		"other tool": {"Write", "ls", "only the commands Bash, PowerShell and Monitor run"},
-		"empty":      {"Bash", "", "empty"},
+		"other tool": {"Read", "ls", "only the commands Bash, PowerShell and Monitor run"},
+		// A write tool is decided since G0 M30 D943; one naming no file blocks.
+		"a write naming no file": {"Write", "ls", "names no file"},
+		"empty":                  {"Bash", "", "empty"},
 	} {
 		code, out, errs := runHook(t, env, hookEvent(tc.tool, tc.command, dir, "toolu_02"))
 		if code != 2 || out != "" || !strings.Contains(errs, tc.want) || strings.Contains(errs, `"ask"`) {
@@ -328,7 +330,7 @@ func TestHR186_ThePluginBlocksOnFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	pre := cfg.Hooks["PreToolUse"]
-	if len(cfg.Hooks) != 1 || len(pre) != 1 || pre[0].Matcher != "Bash|PowerShell|Monitor" || len(pre[0].Hooks) != 1 {
+	if len(cfg.Hooks) != 1 || len(pre) != 1 || pre[0].Matcher != m30Matcher || len(pre[0].Hooks) != 1 {
 		t.Fatalf("hooks %+v", cfg.Hooks)
 	}
 	h := pre[0].Hooks[0]

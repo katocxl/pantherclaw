@@ -42,7 +42,7 @@ var distanceOp = map[Distance]string{
 
 // Vector limits (D922, D922a, D922b).
 const (
-	MaxDimensions    = 16000
+	MaxDimensions    = 12288
 	DefaultTopK      = 10
 	MaxTopK          = 100
 	MaxFilterKeys    = 16

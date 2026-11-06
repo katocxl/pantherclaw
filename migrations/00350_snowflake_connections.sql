@@ -61,6 +61,8 @@ ALTER TABLE pc.snowflake_connections FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON pc.snowflake_connections
     USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
     WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
+CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.snowflake_connections
+    FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
 
 -- The account, warehouse, database and schema are fixed: pc_app may update
 -- only the manifest columns.
@@ -68,6 +70,13 @@ GRANT SELECT, INSERT ON pc.snowflake_connections TO pc_app;
 GRANT UPDATE (config, digest, proposed, proposed_digest, proposed_at, confirmed_by, confirmed_credential, confirmed_at, updated_at)
     ON pc.snowflake_connections TO pc_app;
 GRANT SELECT ON pc.snowflake_connections TO pc_audit_ro;
+-- +goose StatementBegin
+DO $$ BEGIN
+    IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_deleter') THEN
+        GRANT SELECT, DELETE ON pc.snowflake_connections TO pc_deleter;
+    END IF;
+END $$;
+-- +goose StatementEnd
 
 -- +goose Down
 -- The rollback refuses while a snowflake connection exists, and never

@@ -189,7 +189,9 @@ func TestHR184_NewConnectionsStartInMonitorMode(t *testing.T) {
 	shell, err := e.svc.Create(e.admin, app.CreateInput{
 		Name: "laptop", Kind: app.KindLocal, Package: "pc.shell", Gateway: e.gateway, AccessMode: app.AccessNone, DefaultMode: app.ModeEnforce,
 	})
-	if err != nil || shell.BaseUrl != nil || len(shell.Routes) != 1 || modeOf(shell, "shell-command") != app.ModeEnforce {
+	// pc.shell 1.1.0 also serves agent-config-write (G0 M30 D943).
+	if err != nil || shell.BaseUrl != nil || len(shell.Routes) != 2 || modeOf(shell, "shell-command") != app.ModeEnforce ||
+		modeOf(shell, "agent-config-write") != app.ModeEnforce {
 		t.Fatalf("local connection: %+v %v", shell, err)
 	}
 	for name, in := range map[string]app.CreateInput{

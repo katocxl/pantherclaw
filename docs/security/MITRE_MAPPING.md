@@ -10,7 +10,7 @@ Every technique of both matrices has exactly one place:
 - **Outside PantherClaw:** the technique needs something PantherClaw does not see; the kind of tool that covers it is named.
 - **No PantherClaw control yet:** the technique is within an agent platform's reach and PantherClaw ships no control for it; why is given.
 
-Mapping digest: `f2e73ba571b82c6273ca48e76d04358b7b1b742c1cd38ce7fe8a103978543a75`.
+Mapping digest: `c43d9a140c152bb84664629a3e6600ed64a3221f5138bbb7ae5e9fa396e6b6e7`.
 
 | Framework | Catalogue version | Catalogue digest |
 |---|---|---|
@@ -94,10 +94,10 @@ Mapping digest: `f2e73ba571b82c6273ca48e76d04358b7b1b742c1cd38ce7fe8a103978543a7
 | Technique | Name | Place | Mapped to it |
 |---|---|---|---|
 | [AML.T0100](https://atlas.mitre.org/techniques/AML.T0100) | AI Agent Clickbait | No PantherClaw control yet | AI agent clickbait (AML.T0100): clicks by computer-using agents in a browser have no PantherClaw control. |
-| [AML.T0053](https://atlas.mitre.org/techniques/AML.T0053) | AI Agent Tool Invocation | Mapped | prevent `prevent.grant_scope`, `prevent.mapped_routes`; rules `pc.authority.self_issue`; kinds `behavior.NEW_TOOL`; Hub playbooks `pc.playbook.rogue-sub-agent`, `pc.playbook.rogue-sub-agent-contain`; scenarios `RT-001`, `RT-002`, `RT-019`, `RT-121` |
+| [AML.T0053](https://atlas.mitre.org/techniques/AML.T0053) | AI Agent Tool Invocation | Mapped | prevent `prevent.grant_scope`, `prevent.mapped_routes`; rules `pc.authority.self_issue`; kinds `behavior.NEW_TOOL`; Hub playbooks `pc.playbook.rogue-sub-agent`, `pc.playbook.rogue-sub-agent-contain`; scenarios `RT-001`, `RT-002`, `RT-019`, `RT-121`, `RT-211`, `RT-212`, `RT-213`, `RT-214` |
 | [AML.T0050](https://atlas.mitre.org/techniques/AML.T0050) | Command and Scripting Interpreter | Mapped | Hub rules `org.hub.held_merge_then_shell`, `org.hub.shell_merge_attempt`; scenarios `RT-003` |
 | [AML.T0103](https://atlas.mitre.org/techniques/AML.T0103) | Deploy AI Agent | No PantherClaw control yet | Deploy AI agent (AML.T0103): an agent launched apart from PantherClaw is only found by discovery; it has no PantherClaw control. |
-| [AML.T0051](https://atlas.mitre.org/techniques/AML.T0051) | LLM Prompt Injection | Mapped | AML.T0051.001: prevent `prevent.content_hold`; rules `pc.tools.description_injection`; kinds `content.injection_phrase`; Hub playbooks `pc.playbook.poisoned-mcp-server`; scenarios `RT-154`, `RT-158`, `RT-159`, `RT-163`; campaigns `RT-140`, `RT-141`, `RT-142`, `RT-143`, `RT-144`, `RT-145`, `RT-146`, `RT-147` |
+| [AML.T0051](https://atlas.mitre.org/techniques/AML.T0051) | LLM Prompt Injection | Mapped | AML.T0051.001: prevent `prevent.content_hold`; rules `pc.tools.description_injection`; kinds `content.injection_phrase`; Hub playbooks `pc.playbook.poisoned-mcp-server`; scenarios `RT-154`, `RT-158`, `RT-159`, `RT-163`, `RT-200`; campaigns `RT-140`, `RT-141`, `RT-142`, `RT-143`, `RT-144`, `RT-145`, `RT-146`, `RT-147` |
 | [AML.T0011](https://atlas.mitre.org/techniques/AML.T0011) | User Execution | Outside PantherClaw: covered by security awareness | It needs a person. |
 
 ### Persistence (AML.TA0006)
@@ -112,7 +112,7 @@ Mapping digest: `f2e73ba571b82c6273ca48e76d04358b7b1b742c1cd38ce7fe8a103978543a7
 | [AML.T0142](https://atlas.mitre.org/techniques/AML.T0142) | Event Triggered Execution | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [AML.T0061](https://atlas.mitre.org/techniques/AML.T0061) | LLM Prompt Self-Replication | No PantherClaw control yet | LLM prompt self-replication (AML.T0061): PantherClaw does not inspect model output for prompts that copy themselves. |
 | [AML.T0018](https://atlas.mitre.org/techniques/AML.T0018) | Manipulate AI Model | Outside PantherClaw: covered by model security | It happens in model development. |
-| [AML.T0081](https://atlas.mitre.org/techniques/AML.T0081) | Modify AI Agent Configuration | Mapped | prevent `prevent.agent_config`; rules `pc.agent.config_changed` |
+| [AML.T0081](https://atlas.mitre.org/techniques/AML.T0081) | Modify AI Agent Configuration | Mapped | prevent `prevent.agent_config`; rules `pc.agent.config_changed`; scenarios `RT-203` |
 | [AML.T0145](https://atlas.mitre.org/techniques/AML.T0145) | Poison AI Agent Learning Environment | Outside PantherClaw: covered by model security | It happens in model development. |
 | [AML.T0093](https://atlas.mitre.org/techniques/AML.T0093) | Prompt Infiltration via Public-Facing Application | Mapped | prevent `prevent.content_hold`; scenarios `RT-154` |
 | [AML.T0070](https://atlas.mitre.org/techniques/AML.T0070) | RAG Poisoning | Mapped | prevent `prevent.vector_writers` |
@@ -122,7 +122,7 @@ Mapping digest: `f2e73ba571b82c6273ca48e76d04358b7b1b742c1cd38ce7fe8a103978543a7
 
 | Technique | Name | Place | Mapped to it |
 |---|---|---|---|
-| [AML.T0053](https://atlas.mitre.org/techniques/AML.T0053) | AI Agent Tool Invocation | Mapped | prevent `prevent.grant_scope`, `prevent.mapped_routes`; rules `pc.authority.self_issue`; kinds `behavior.NEW_TOOL`; Hub playbooks `pc.playbook.rogue-sub-agent`, `pc.playbook.rogue-sub-agent-contain`; scenarios `RT-001`, `RT-002`, `RT-019`, `RT-121` |
+| [AML.T0053](https://atlas.mitre.org/techniques/AML.T0053) | AI Agent Tool Invocation | Mapped | prevent `prevent.grant_scope`, `prevent.mapped_routes`; rules `pc.authority.self_issue`; kinds `behavior.NEW_TOOL`; Hub playbooks `pc.playbook.rogue-sub-agent`, `pc.playbook.rogue-sub-agent-contain`; scenarios `RT-001`, `RT-002`, `RT-019`, `RT-121`, `RT-211`, `RT-212`, `RT-213`, `RT-214` |
 | [AML.T0105](https://atlas.mitre.org/techniques/AML.T0105) | Escape to Host | Mapped | prevent `prevent.sandbox_closure`; scenarios `RT-015` |
 | [AML.T0054](https://atlas.mitre.org/techniques/AML.T0054) | LLM Jailbreak | No PantherClaw control yet | LLM jailbreak (AML.T0054): it happens inside the model's conversation; PantherClaw decides on the actions that follow, not on the prompt. |
 | [AML.T0012](https://atlas.mitre.org/techniques/AML.T0012) | Valid Accounts | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
@@ -144,11 +144,11 @@ Mapping digest: `f2e73ba571b82c6273ca48e76d04358b7b1b742c1cd38ce7fe8a103978543a7
 | [AML.T0073](https://atlas.mitre.org/techniques/AML.T0073) | Impersonation | Mapped | prevent `prevent.approval_independence`, `prevent.workload_proof`; scenarios `RT-045`, `RT-047`, `RT-050` |
 | [AML.T0138](https://atlas.mitre.org/techniques/AML.T0138) | Indicator Removal | Mapped | rules `pc.integrity.evidence_integrity_failed` |
 | [AML.T0054](https://atlas.mitre.org/techniques/AML.T0054) | LLM Jailbreak | No PantherClaw control yet | LLM jailbreak (AML.T0054): it happens inside the model's conversation; PantherClaw decides on the actions that follow, not on the prompt. |
-| [AML.T0068](https://atlas.mitre.org/techniques/AML.T0068) | LLM Prompt Obfuscation | Mapped | prevent `prevent.content_hold` |
+| [AML.T0068](https://atlas.mitre.org/techniques/AML.T0068) | LLM Prompt Obfuscation | Mapped | prevent `prevent.content_hold`; scenarios `RT-200` |
 | [AML.T0067](https://atlas.mitre.org/techniques/AML.T0067) | LLM Trusted Output Components Manipulation | No PantherClaw control yet | LLM trusted output components manipulation (AML.T0067): citations and labels in a model's answer have no PantherClaw control. |
 | [AML.T0092](https://atlas.mitre.org/techniques/AML.T0092) | Manipulate User LLM Chat History | No PantherClaw control yet | Manipulate user LLM chat history (AML.T0092): chat history lives in the assistant, not in PantherClaw's evidence. |
 | [AML.T0074](https://atlas.mitre.org/techniques/AML.T0074) | Masquerading | Outside PantherClaw: covered by EDR | It needs an endpoint. |
-| [AML.T0081](https://atlas.mitre.org/techniques/AML.T0081) | Modify AI Agent Configuration | Mapped | prevent `prevent.agent_config`; rules `pc.agent.config_changed` |
+| [AML.T0081](https://atlas.mitre.org/techniques/AML.T0081) | Modify AI Agent Configuration | Mapped | prevent `prevent.agent_config`; rules `pc.agent.config_changed`; scenarios `RT-203` |
 | [AML.T0123](https://atlas.mitre.org/techniques/AML.T0123) | Obfuscated Files or Information | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [AML.T0129](https://atlas.mitre.org/techniques/AML.T0129) | Triggers in Multimodal Inputs | No PantherClaw control yet | Triggers in multimodal inputs (AML.T0129): content signals read text; images and audio have no control yet. |
 | [AML.T0097](https://atlas.mitre.org/techniques/AML.T0097) | Virtualization/Sandbox Evasion | Outside PantherClaw: covered by EDR | It needs an endpoint. |
@@ -163,7 +163,7 @@ Mapping digest: `f2e73ba571b82c6273ca48e76d04358b7b1b742c1cd38ce7fe8a103978543a7
 | [AML.T0090](https://atlas.mitre.org/techniques/AML.T0090) | OS Credential Dumping | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [AML.T0082](https://atlas.mitre.org/techniques/AML.T0082) | RAG Credential Harvesting | No PantherClaw control yet | RAG credential harvesting (AML.T0082): credentials retrieved from an index never pass a PantherClaw decision. |
 | [AML.T0113](https://atlas.mitre.org/techniques/AML.T0113) | Steal Web Session Cookie | Outside PantherClaw: covered by EDR | It needs an endpoint. |
-| [AML.T0055](https://atlas.mitre.org/techniques/AML.T0055) | Unsecured Credentials | Mapped | prevent `prevent.edge_credential_strip`, `prevent.secret_outbound`; kinds `content.secret_format`; scenarios `RT-004`, `RT-005`; campaigns `RT-144`, `RT-148`, `RT-149` |
+| [AML.T0055](https://atlas.mitre.org/techniques/AML.T0055) | Unsecured Credentials | Mapped | prevent `prevent.edge_credential_strip`, `prevent.secret_outbound`; kinds `content.secret_format`; scenarios `RT-004`, `RT-005`, `RT-190`; campaigns `RT-144`, `RT-148`, `RT-149` |
 
 ### Discovery (AML.TA0008)
 
@@ -185,11 +185,11 @@ Mapping digest: `f2e73ba571b82c6273ca48e76d04358b7b1b742c1cd38ce7fe8a103978543a7
 
 | Technique | Name | Place | Mapped to it |
 |---|---|---|---|
-| [AML.T0053](https://atlas.mitre.org/techniques/AML.T0053) | AI Agent Tool Invocation | Mapped | prevent `prevent.grant_scope`, `prevent.mapped_routes`; rules `pc.authority.self_issue`; kinds `behavior.NEW_TOOL`; Hub playbooks `pc.playbook.rogue-sub-agent`, `pc.playbook.rogue-sub-agent-contain`; scenarios `RT-001`, `RT-002`, `RT-019`, `RT-121` |
+| [AML.T0053](https://atlas.mitre.org/techniques/AML.T0053) | AI Agent Tool Invocation | Mapped | prevent `prevent.grant_scope`, `prevent.mapped_routes`; rules `pc.authority.self_issue`; kinds `behavior.NEW_TOOL`; Hub playbooks `pc.playbook.rogue-sub-agent`, `pc.playbook.rogue-sub-agent-contain`; scenarios `RT-001`, `RT-002`, `RT-019`, `RT-121`, `RT-211`, `RT-212`, `RT-213`, `RT-214` |
 | [AML.T0122](https://atlas.mitre.org/techniques/AML.T0122) | Exploitation of Remote Services | Outside PantherClaw: covered by network security | It needs a network. |
 | [AML.T0143](https://atlas.mitre.org/techniques/AML.T0143) | LLM Prompt Propagation | No PantherClaw control yet | LLM prompt propagation (AML.T0143): instructions carried onward between stores and agents have no control of their own yet. |
 | [AML.T0052](https://atlas.mitre.org/techniques/AML.T0052) | Phishing | Outside PantherClaw: covered by email security | It needs a mailbox. |
-| [AML.T0091](https://atlas.mitre.org/techniques/AML.T0091) | Use Alternate Authentication Material | Mapped | AML.T0091.000: prevent `prevent.mcp_token_binding`, `prevent.workload_proof`; rules `pc.identity.key_new_network`, `pc.integrity.effect_without_receipt`; Hub playbooks `pc.playbook.leaked-key`; scenarios `RT-012`, `RT-013`, `RT-032`, `RT-036`, `RT-048`, `RT-151`, `RT-152`, `RT-153` |
+| [AML.T0091](https://atlas.mitre.org/techniques/AML.T0091) | Use Alternate Authentication Material | Mapped | AML.T0091.000: prevent `prevent.mcp_token_binding`, `prevent.workload_proof`; rules `pc.identity.key_new_network`, `pc.identity.workload_proof_refused`, `pc.integrity.effect_without_receipt`; Hub playbooks `pc.playbook.leaked-key`; scenarios `RT-012`, `RT-013`, `RT-032`, `RT-036`, `RT-048`, `RT-151`, `RT-152`, `RT-153`, `RT-202`, `RT-260` |
 | [AML.T0012](https://atlas.mitre.org/techniques/AML.T0012) | Valid Accounts | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
 
 ### Collection (AML.TA0009)
@@ -220,8 +220,8 @@ Mapping digest: `f2e73ba571b82c6273ca48e76d04358b7b1b742c1cd38ce7fe8a103978543a7
 
 | Technique | Name | Place | Mapped to it |
 |---|---|---|---|
-| [AML.T0086](https://atlas.mitre.org/techniques/AML.T0086) | Exfiltration via AI Agent Tool Invocation | Mapped | prevent `prevent.data_flow_hold`, `prevent.destination_grant`, `prevent.secret_outbound`; rules `pc.drift.behavior`, `pc.sequence.read_then_disclose`; kinds `behavior.NEW_DESTINATION`; Hub rules `org.hub.external_disclosure_repeat`, `org.hub.secret_outbound_refused`; Hub playbooks `pc.playbook.leaked-key`; scenarios `RT-009`, `RT-010`, `RT-011`, `RT-046`, `RT-120`; campaigns `RT-141`, `RT-145`, `RT-149` |
-| [AML.T0024](https://atlas.mitre.org/techniques/AML.T0024) | Exfiltration via AI Inference API | Outside PantherClaw: covered by model security | It happens in model development. |
+| [AML.T0086](https://atlas.mitre.org/techniques/AML.T0086) | Exfiltration via AI Agent Tool Invocation | Mapped | prevent `prevent.data_flow_hold`, `prevent.destination_grant`, `prevent.secret_outbound`; rules `pc.drift.behavior`, `pc.sequence.read_then_disclose`; kinds `behavior.NEW_DESTINATION`; Hub rules `org.hub.external_disclosure_repeat`, `org.hub.secret_outbound_refused`; Hub playbooks `pc.playbook.leaked-key`; scenarios `RT-009`, `RT-010`, `RT-011`, `RT-046`, `RT-120`, `RT-196`; campaigns `RT-141`, `RT-145`, `RT-149` |
+| [AML.T0024](https://atlas.mitre.org/techniques/AML.T0024) | Exfiltration via AI Inference API | Mapped | scenarios `RT-191`, `RT-193` |
 | [AML.T0136](https://atlas.mitre.org/techniques/AML.T0136) | Exfiltration via AI User Interface | No PantherClaw control yet | Exfiltration via AI user interface (AML.T0136): disclosure in an assistant's own answers has no PantherClaw control. |
 | [AML.T0025](https://atlas.mitre.org/techniques/AML.T0025) | Exfiltration via Cyber Means | Mapped | prevent `prevent.sandbox_closure` |
 | [AML.T0077](https://atlas.mitre.org/techniques/AML.T0077) | LLM Response Rendering | No PantherClaw control yet | LLM response rendering (AML.T0077): rendering of model output in a client has no PantherClaw control. |
@@ -231,9 +231,9 @@ Mapping digest: `f2e73ba571b82c6273ca48e76d04358b7b1b742c1cd38ce7fe8a103978543a7
 | Technique | Name | Place | Mapped to it |
 |---|---|---|---|
 | [AML.T0130](https://atlas.mitre.org/techniques/AML.T0130) | AI Agent Response Biasing | No PantherClaw control yet | AI agent response biasing (AML.T0130): bias in what an assistant recommends never reaches a PantherClaw decision. |
-| [AML.T0034](https://atlas.mitre.org/techniques/AML.T0034) | Cost Harvesting | Mapped | prevent `prevent.token_caps`<br>AML.T0034.002: kinds `behavior.VOLUME_SPIKE` |
+| [AML.T0034](https://atlas.mitre.org/techniques/AML.T0034) | Cost Harvesting | Mapped | prevent `prevent.token_caps`; scenarios `RT-192`, `RT-197`<br>AML.T0034.002: kinds `behavior.VOLUME_SPIKE` |
 | [AML.T0101](https://atlas.mitre.org/techniques/AML.T0101) | Data Destruction via AI Agent Tool Invocation | Mapped | prevent `prevent.grant_scope` |
-| [AML.T0029](https://atlas.mitre.org/techniques/AML.T0029) | Denial of AI Service | Mapped | prevent `prevent.token_caps` |
+| [AML.T0029](https://atlas.mitre.org/techniques/AML.T0029) | Denial of AI Service | Mapped | prevent `prevent.token_caps`; scenarios `RT-194` |
 | [AML.T0031](https://atlas.mitre.org/techniques/AML.T0031) | Erode AI Model Integrity | Outside PantherClaw: covered by model security | It happens in model development. |
 | [AML.T0059](https://atlas.mitre.org/techniques/AML.T0059) | Erode Dataset Integrity | Outside PantherClaw: covered by model security | It happens in model development. |
 | [AML.T0015](https://atlas.mitre.org/techniques/AML.T0015) | Evade AI Model | Outside PantherClaw: covered by model security | It happens in model development. |
@@ -298,12 +298,12 @@ Mapping digest: `f2e73ba571b82c6273ca48e76d04358b7b1b742c1cd38ce7fe8a103978543a7
 | [T1651](https://attack.mitre.org/techniques/T1651) | Cloud Administration Command | No PantherClaw control yet | Cloud administration command (T1651): commands run through a cloud's own management service have no PantherClaw control yet. |
 | [T1059](https://attack.mitre.org/techniques/T1059) | Command and Scripting Interpreter | Mapped | T1059.004: Hub rules `org.hub.held_merge_then_shell`, `org.hub.shell_merge_attempt`; scenarios `RT-003` |
 | [T1609](https://attack.mitre.org/techniques/T1609) | Container Administration Command | Outside PantherClaw: covered by cloud security | It needs cloud infrastructure. |
-| [T1610](https://attack.mitre.org/techniques/T1610) | Deploy Container | Mapped | prevent `prevent.kubernetes_admission` |
+| [T1610](https://attack.mitre.org/techniques/T1610) | Deploy Container | Mapped | prevent `prevent.kubernetes_admission`; scenarios `RT-215` |
 | [T1699](https://attack.mitre.org/techniques/T1699) | Direct Prompt Injection | No PantherClaw control yet | Direct prompt injection (T1699): it happens in the model's conversation; PantherClaw decides on the actions that follow. |
 | [T1675](https://attack.mitre.org/techniques/T1675) | ESXi Administration Command | Outside PantherClaw: covered by cloud security | It needs cloud infrastructure. |
 | [T1203](https://attack.mitre.org/techniques/T1203) | Exploitation for Client Execution | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1574](https://attack.mitre.org/techniques/T1574) | Hijack Execution Flow | Outside PantherClaw: covered by EDR | It needs an endpoint. |
-| [T1698](https://attack.mitre.org/techniques/T1698) | Indirect Prompt Injection | Mapped | prevent `prevent.content_hold`; rules `pc.tools.description_injection`; kinds `content.injection_phrase`; Hub playbooks `pc.playbook.poisoned-mcp-server`; scenarios `RT-158`, `RT-159`, `RT-163`; campaigns `RT-140`, `RT-141`, `RT-142`, `RT-143`, `RT-144`, `RT-145`, `RT-146`, `RT-147` |
+| [T1698](https://attack.mitre.org/techniques/T1698) | Indirect Prompt Injection | Mapped | prevent `prevent.content_hold`; rules `pc.tools.description_injection`; kinds `content.injection_phrase`; Hub playbooks `pc.playbook.poisoned-mcp-server`; scenarios `RT-158`, `RT-159`, `RT-163`, `RT-200`; campaigns `RT-140`, `RT-141`, `RT-142`, `RT-143`, `RT-144`, `RT-145`, `RT-146`, `RT-147` |
 | [T1674](https://attack.mitre.org/techniques/T1674) | Input Injection | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1559](https://attack.mitre.org/techniques/T1559) | Inter-Process Communication | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1106](https://attack.mitre.org/techniques/T1106) | Native API | Outside PantherClaw: covered by EDR | It needs an endpoint. |
@@ -355,7 +355,7 @@ Mapping digest: `f2e73ba571b82c6273ca48e76d04358b7b1b742c1cd38ce7fe8a103978543a7
 | [T1037](https://attack.mitre.org/techniques/T1037) | Boot or Logon Initialization Scripts | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1543](https://attack.mitre.org/techniques/T1543) | Create or Modify System Process | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1484](https://attack.mitre.org/techniques/T1484) | Domain or Tenant Policy Modification | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
-| [T1611](https://attack.mitre.org/techniques/T1611) | Escape to Host | Mapped | prevent `prevent.sandbox_closure`; scenarios `RT-015` |
+| [T1611](https://attack.mitre.org/techniques/T1611) | Escape to Host | Mapped | prevent `prevent.sandbox_closure`; scenarios `RT-015`, `RT-215` |
 | [T1546](https://attack.mitre.org/techniques/T1546) | Event Triggered Execution | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1068](https://attack.mitre.org/techniques/T1068) | Exploitation for Privilege Escalation | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1055](https://attack.mitre.org/techniques/T1055) | Process Injection | Outside PantherClaw: covered by EDR | It needs an endpoint. |
@@ -381,7 +381,7 @@ Mapping digest: `f2e73ba571b82c6273ca48e76d04358b7b1b742c1cd38ce7fe8a103978543a7
 | [T1070](https://attack.mitre.org/techniques/T1070) | Indicator Removal | Mapped | rules `pc.integrity.evidence_integrity_failed` |
 | [T1202](https://attack.mitre.org/techniques/T1202) | Indirect Command Execution | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1036](https://attack.mitre.org/techniques/T1036) | Masquerading | Outside PantherClaw: covered by EDR | It needs an endpoint. |
-| [T1027](https://attack.mitre.org/techniques/T1027) | Obfuscated Files or Information | Outside PantherClaw: covered by EDR | It needs an endpoint. |
+| [T1027](https://attack.mitre.org/techniques/T1027) | Obfuscated Files or Information | Mapped | scenarios `RT-197` |
 | [T1542](https://attack.mitre.org/techniques/T1542) | Pre-OS Boot | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1055](https://attack.mitre.org/techniques/T1055) | Process Injection | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1620](https://attack.mitre.org/techniques/T1620) | Reflective Code Loading | Outside PantherClaw: covered by EDR | It needs an endpoint. |
@@ -442,7 +442,7 @@ Mapping digest: `f2e73ba571b82c6273ca48e76d04358b7b1b742c1cd38ce7fe8a103978543a7
 | [T1539](https://attack.mitre.org/techniques/T1539) | Steal Web Session Cookie | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1649](https://attack.mitre.org/techniques/T1649) | Steal or Forge Authentication Certificates | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
 | [T1558](https://attack.mitre.org/techniques/T1558) | Steal or Forge Kerberos Tickets | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
-| [T1552](https://attack.mitre.org/techniques/T1552) | Unsecured Credentials | Mapped | kinds `content.secret_format`; Hub rules `org.hub.secret_outbound_refused`; Hub playbooks `pc.playbook.leaked-key`<br>T1552.001: prevent `prevent.edge_credential_strip`, `prevent.secret_outbound`; scenarios `RT-004`; campaigns `RT-144`, `RT-148`, `RT-149`<br>T1552.004: prevent `prevent.sandbox_closure`, `prevent.secret_outbound`; scenarios `RT-005`<br>T1552.005: prevent `prevent.egress_guard`, `prevent.kubernetes_closure`, `prevent.sandbox_closure`; scenarios `RT-015`, `RT-031` |
+| [T1552](https://attack.mitre.org/techniques/T1552) | Unsecured Credentials | Mapped | kinds `content.secret_format`; Hub rules `org.hub.secret_outbound_refused`; Hub playbooks `pc.playbook.leaked-key`<br>T1552.001: prevent `prevent.edge_credential_strip`, `prevent.secret_outbound`; scenarios `RT-004`, `RT-190`, `RT-193`; campaigns `RT-144`, `RT-148`, `RT-149`<br>T1552.004: prevent `prevent.sandbox_closure`, `prevent.secret_outbound`; scenarios `RT-005`<br>T1552.005: prevent `prevent.egress_guard`, `prevent.kubernetes_closure`, `prevent.sandbox_closure`; scenarios `RT-015`, `RT-031`<br>T1552.007: scenarios `RT-217` |
 
 ### Discovery (TA0007)
 
@@ -495,7 +495,7 @@ Mapping digest: `f2e73ba571b82c6273ca48e76d04358b7b1b742c1cd38ce7fe8a103978543a7
 | [T1091](https://attack.mitre.org/techniques/T1091) | Replication Through Removable Media | Outside PantherClaw: covered by physical security | It needs physical access. |
 | [T1072](https://attack.mitre.org/techniques/T1072) | Software Deployment Tools | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1080](https://attack.mitre.org/techniques/T1080) | Taint Shared Content | No PantherClaw control yet | Taint shared content (T1080): granted writes to a shared repository are allowed; PantherClaw does not judge their content. |
-| [T1550](https://attack.mitre.org/techniques/T1550) | Use Alternate Authentication Material | Mapped | T1550.001: prevent `prevent.mcp_token_binding`, `prevent.workload_proof`; rules `pc.identity.key_new_network`, `pc.integrity.effect_without_receipt`; Hub playbooks `pc.playbook.leaked-key`; scenarios `RT-012`, `RT-013`, `RT-032`, `RT-036`, `RT-048`, `RT-151`, `RT-152`, `RT-153` |
+| [T1550](https://attack.mitre.org/techniques/T1550) | Use Alternate Authentication Material | Mapped | T1550.001: prevent `prevent.mcp_token_binding`, `prevent.workload_proof`; rules `pc.identity.key_new_network`, `pc.identity.workload_proof_refused`, `pc.integrity.effect_without_receipt`; Hub playbooks `pc.playbook.leaked-key`; scenarios `RT-012`, `RT-013`, `RT-032`, `RT-036`, `RT-048`, `RT-151`, `RT-152`, `RT-153`, `RT-202`, `RT-260` |
 
 ### Collection (TA0009)
 
@@ -553,9 +553,9 @@ Mapping digest: `f2e73ba571b82c6273ca48e76d04358b7b1b742c1cd38ce7fe8a103978543a7
 | [T1041](https://attack.mitre.org/techniques/T1041) | Exfiltration Over C2 Channel | Mapped | prevent `prevent.sandbox_closure` |
 | [T1011](https://attack.mitre.org/techniques/T1011) | Exfiltration Over Other Network Medium | Outside PantherClaw: covered by network security | It needs a network. |
 | [T1052](https://attack.mitre.org/techniques/T1052) | Exfiltration Over Physical Medium | Outside PantherClaw: covered by physical security | It needs physical access. |
-| [T1567](https://attack.mitre.org/techniques/T1567) | Exfiltration Over Web Service | Mapped | prevent `prevent.data_flow_hold`, `prevent.destination_grant`; rules `pc.drift.behavior`, `pc.sequence.read_then_disclose`; kinds `behavior.NEW_DESTINATION`; Hub rules `org.hub.external_disclosure_repeat`; scenarios `RT-046`, `RT-120`<br>T1567.001: prevent `prevent.grant_scope`, `prevent.secret_outbound`; scenarios `RT-009`, `RT-010`, `RT-011` |
+| [T1567](https://attack.mitre.org/techniques/T1567) | Exfiltration Over Web Service | Mapped | prevent `prevent.data_flow_hold`, `prevent.destination_grant`; rules `pc.drift.behavior`, `pc.sequence.read_then_disclose`; kinds `behavior.NEW_DESTINATION`; Hub rules `org.hub.external_disclosure_repeat`; scenarios `RT-046`, `RT-120`, `RT-191`, `RT-196`<br>T1567.001: prevent `prevent.grant_scope`, `prevent.secret_outbound`; scenarios `RT-009`, `RT-010`, `RT-011`<br>T1567.002: scenarios `RT-212` |
 | [T1029](https://attack.mitre.org/techniques/T1029) | Scheduled Transfer | Outside PantherClaw: covered by network security | It needs a network. |
-| [T1537](https://attack.mitre.org/techniques/T1537) | Transfer Data to Cloud Account | Mapped | prevent `prevent.share_accounts` |
+| [T1537](https://attack.mitre.org/techniques/T1537) | Transfer Data to Cloud Account | Mapped | prevent `prevent.share_accounts`; scenarios `RT-201` |
 
 ### Impact (TA0040)
 
@@ -568,12 +568,12 @@ Mapping digest: `f2e73ba571b82c6273ca48e76d04358b7b1b742c1cd38ce7fe8a103978543a7
 | [T1491](https://attack.mitre.org/techniques/T1491) | Defacement | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1561](https://attack.mitre.org/techniques/T1561) | Disk Wipe | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1667](https://attack.mitre.org/techniques/T1667) | Email Bombing | Outside PantherClaw: covered by email security | It needs a mailbox. |
-| [T1499](https://attack.mitre.org/techniques/T1499) | Endpoint Denial of Service | Outside PantherClaw: covered by EDR | It needs an endpoint. |
+| [T1499](https://attack.mitre.org/techniques/T1499) | Endpoint Denial of Service | Mapped | T1499.003: scenarios `RT-194` |
 | [T1657](https://attack.mitre.org/techniques/T1657) | Financial Theft | Mapped | prevent `prevent.budgets`; rules `pc.budget.splitting`; kinds `behavior.SPEND_SPIKE`; Hub rules `org.hub.refund_burst`, `org.hub.refund_cap_probing`; scenarios `RT-026`, `RT-027`, `RT-040`, `RT-041` |
 | [T1495](https://attack.mitre.org/techniques/T1495) | Firmware Corruption | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1490](https://attack.mitre.org/techniques/T1490) | Inhibit System Recovery | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1498](https://attack.mitre.org/techniques/T1498) | Network Denial of Service | Outside PantherClaw: covered by network security | It needs a network. |
-| [T1496](https://attack.mitre.org/techniques/T1496) | Resource Hijacking | Outside PantherClaw: covered by cloud security | It needs cloud infrastructure. |
+| [T1496](https://attack.mitre.org/techniques/T1496) | Resource Hijacking | Mapped | T1496.004: scenarios `RT-192` |
 | [T1489](https://attack.mitre.org/techniques/T1489) | Service Stop | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1529](https://attack.mitre.org/techniques/T1529) | System Shutdown/Reboot | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 
@@ -622,3 +622,20 @@ Abuse cases from [THREAT_MODEL](THREAT_MODEL.md) that no library range scenario 
 | T-273 | AML.T0051.001, AML.T0093 | — |
 | T-276 | AML.T0051.001 | T1698 |
 | T-281 | AML.T0051.001, AML.T0099 | T1698 |
+| T-310 | AML.T0024, AML.T0055 | T1552.001, T1567 |
+| T-311 | AML.T0034 | T1027 |
+| T-312 | AML.T0029 | T1499.003 |
+| T-313 | AML.T0034 | T1496.004 |
+| T-314 | AML.T0024 | T1552.001 |
+| T-316 | AML.T0086 | T1567 |
+| T-320 | AML.T0091.000 | T1550.001 |
+| T-321 | AML.T0051.001, AML.T0068 | T1698 |
+| T-324 | — | T1537 |
+| T-325 | AML.T0081 | — |
+| T-331 | AML.T0053 | — |
+| T-332 | AML.T0053 | T1567.002 |
+| T-333 | AML.T0053 | — |
+| T-335 | — | T1609, T1610, T1611 |
+| T-336 | — | T1078.001 |
+| T-337 | — | T1199, T1552.007 |
+| T-338 | — | T1562.001 |

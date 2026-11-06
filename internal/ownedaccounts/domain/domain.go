@@ -42,6 +42,16 @@ var (
 	domainRe = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 )
 
+// Normalize is v as the list stores it: a GitHub organization in lower
+// case, since GitHub names are case-insensitive (G0 M30 D1211); every
+// other kind as given.
+func Normalize(k Kind, v string) string {
+	if k == KindGitHubOrg {
+		return strings.ToLower(v)
+	}
+	return v
+}
+
 // ValidValue reports whether v is a well-formed value of kind k (D933).
 func ValidValue(k Kind, v string) bool {
 	if v == "" || len(v) > 253 {

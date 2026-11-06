@@ -79,14 +79,11 @@ func newPermitVerifier(jwksURL string, client *http.Client, gatewayID, org strin
 	return &permitVerifier{jwksURL: jwksURL, client: client, gatewayID: gatewayID, org: org, now: time.Now}
 }
 
-// verify checks the signature, typ, audience, expiry and every binding,
-// and returns the approval the permit carries, if any.
-func (pv *permitVerifier) verify(ctx context.Context, token string, want permitWant) (*proof.Approval, error) {
-	c, err := pv.claims(ctx, token, want)
-	if err != nil {
-		return nil, err
-	}
-	return c.Pap.Approval, nil
+// verify checks the signature, typ, audience, expiry and every binding.
+// Dispatch reads the approval through claims (G0 M30 D923a).
+func (pv *permitVerifier) verify(ctx context.Context, token string, want permitWant) error {
+	_, err := pv.claims(ctx, token, want)
+	return err
 }
 
 // claims is verify, returning every verified claim.

@@ -92,7 +92,8 @@ func TestHR524_TheHomeTenantIsPinnedByTheTokenEndpoint(t *testing.T) {
 // whose token endpoint pins no tenant is refused at seal, with an error that
 // says so, since every post would otherwise fail on a missing fact; another
 // OAuth client needs no tenant. A credential already sealed still opens, and
-// its facts stay unread (D279).
+// its facts stay unread (D279). Since G0 M31 D951 another client is one of
+// the provider list's (here Salesforce's).
 // Covers: HR-524
 func TestHR524_ATeamsBotIsSealedOnlyWithItsHomeTenant(t *testing.T) {
 	for _, u := range []string{
@@ -111,7 +112,7 @@ func TestHR524_ATeamsBotIsSealedOnlyWithItsHomeTenant(t *testing.T) {
 		}
 	}
 	o := validOAuthClient()
-	o.Scope, o.TokenURL = "https://example.com/.default", "https://auth.example.com/token"
+	o.Scope, o.TokenURL = "api", "https://acme.my.salesforce.com/services/oauth2/token"
 	if _, err := o.Encode(); err != nil {
 		t.Errorf("another client: %v", err)
 	}

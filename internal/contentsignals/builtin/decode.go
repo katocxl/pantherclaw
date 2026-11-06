@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -100,7 +101,7 @@ func (d *decoder) expand(s string, path []string, out *[]candidate) {
 				return
 			}
 			d.left -= len(t)
-			next := append(path[:len(path):len(path)], l.name)
+			next := slices.Concat(path, []string{l.name})
 			*out = append(*out, candidate{text: t, enc: encoding(next)})
 			d.expand(t, next, out)
 		}
@@ -206,12 +207,16 @@ func unescapeBackslash(s string) string {
 		return s
 	}
 	out := backslashRe.ReplaceAllStringFunc(s, func(m string) string {
-		v, err := strconv.ParseUint(m[2:], 16, 32)
+		if m[1] == 'x' {
+			v, err := strconv.ParseUint(m[2:], 16, 8)
+			if err != nil {
+				return m
+			}
+			return string([]byte{uint8(v)})
+		}
+		v, err := strconv.ParseInt(m[2:], 16, 32)
 		if err != nil {
 			return m
-		}
-		if m[1] == 'x' {
-			return string([]byte{byte(v)})
 		}
 		return string(rune(v))
 	})
@@ -256,56 +261,126 @@ func unescapeEntities(s string) string {
 	})
 }
 
+// minRun is the fewest characters a base64 or hex run is read from.
+const minRun = 16
+
 // decodeBase64Runs decodes every run in s that reads as base64 (standard or
-// URL alphabet, padding optional) into mostly printable text.
+// URL alphabet, padding optional) into mostly printable text. A run that
+// mixes the two alphabets is split at the other alphabet's characters, and
+// each run is also read from offsets 1..3 and cut to whole quanta, so one
+// character glued to either end does not hide it (G0 M30 D1215). Every
+// reading is a candidate, charged to the scan's budget.
 func decodeBase64Runs(s string) []string {
 	var out []string
+	add := func(enc *base64.Encoding, r string) {
+		b, err := enc.DecodeString(r)
+		if t, ok := readable(b); err == nil && ok && !slices.Contains(out, t) {
+			out = append(out, t)
+		}
+	}
 	for _, run := range base64Re.FindAllString(s, -1) {
 		run = strings.TrimRight(run, "=")
-		enc := base64.RawStdEncoding
-		if strings.ContainsAny(run, "-_") {
-			if strings.ContainsAny(run, "+/") {
-				continue
+		var pieces []piece64
+		switch std, url := strings.ContainsAny(run, "+/"), strings.ContainsAny(run, "-_"); {
+		case std && url:
+			for _, p := range strings.FieldsFunc(run, func(r rune) bool { return r == '-' || r == '_' }) {
+				pieces = append(pieces, piece64{base64.RawStdEncoding, p})
 			}
-			enc = base64.RawURLEncoding
+			for _, p := range strings.FieldsFunc(run, func(r rune) bool { return r == '+' || r == '/' }) {
+				pieces = append(pieces, piece64{base64.RawURLEncoding, p})
+			}
+		case url:
+			pieces = []piece64{{base64.RawURLEncoding, run}}
+		default:
+			pieces = []piece64{{base64.RawStdEncoding, run}}
 		}
-		b, err := enc.DecodeString(run)
-		if err != nil || !printable(b) {
-			continue
+		for _, p := range pieces {
+			for off := 0; off < 4 && len(p.run)-off >= minRun; off++ {
+				r := p.run[off:]
+				if len(r)%4 != 1 {
+					add(p.enc, r)
+				}
+				if whole := r[:len(r)-len(r)%4]; whole != r {
+					add(p.enc, whole)
+				}
+			}
 		}
-		out = append(out, string(b))
 	}
 	return out
 }
 
-// decodeHexRuns decodes every even-length run of 16 or more hex digits into
-// mostly printable text.
+// piece64 is a base64 run in one alphabet.
+type piece64 struct {
+	enc *base64.Encoding
+	run string
+}
+
+// decodeHexRuns decodes every run of 16 or more hex digits into mostly
+// printable text; a run of odd length is read without its first and
+// without its last digit (G0 M30 D1215).
 func decodeHexRuns(s string) []string {
 	var out []string
 	for _, run := range hexRe.FindAllString(s, -1) {
+		reads := []string{run}
 		if len(run)%2 != 0 {
-			continue
+			reads = []string{run[1:], run[:len(run)-1]}
 		}
-		b, err := hex.DecodeString(run)
-		if err != nil || !printable(b) {
-			continue
+		for _, r := range reads {
+			b, err := hex.DecodeString(r)
+			if t, ok := readable(b); err == nil && ok && !slices.Contains(out, t) {
+				out = append(out, t)
+			}
 		}
-		out = append(out, string(b))
 	}
 	return out
 }
 
-// printable reports whether b is UTF-8 with at least 80% printable runes.
-func printable(b []byte) bool {
-	if len(b) == 0 || !utf8.Valid(b) {
-		return false
+// readable is b as text, each byte that is not UTF-8 replaced with U+FFFD,
+// and whether at least 80% of it is printable runes, an invalid byte
+// counting as one unprintable rune. A few junk bytes from a glued prefix
+// or suffix thus do not hide the text after them (G0 M30 D1215a).
+//
+// Otherwise a reading is still kept when it holds a printable stretch of
+// at least minStretch runes (split at invalid bytes and at unprintable
+// runes other than \n, \r and \t): only those stretches are passed on,
+// joined with "\n", so text inside much junk is still read (D1215b).
+func readable(b []byte) (string, bool) {
+	if len(b) == 0 {
+		return "", false
 	}
 	n, ok := 0, 0
-	for _, r := range string(b) {
-		n++
-		if unicode.IsPrint(r) || r == '\n' || r == '\r' || r == '\t' {
-			ok++
+	var stretches []string
+	start, runes := 0, 0
+	end := func(at int) {
+		if runes >= minStretch {
+			stretches = append(stretches, string(b[start:at]))
 		}
+		runes = 0
 	}
-	return ok*5 >= n*4
+	for i := 0; i < len(b); {
+		r, size := utf8.DecodeRune(b[i:])
+		n++
+		if (r != utf8.RuneError || size != 1) && (unicode.IsPrint(r) || r == '\n' || r == '\r' || r == '\t') {
+			ok++
+			if runes == 0 {
+				start = i
+			}
+			runes++
+		} else {
+			end(i)
+		}
+		i += size
+	}
+	end(len(b))
+	if ok*5 >= n*4 {
+		return strings.ToValidUTF8(string(b), string(utf8.RuneError)), true
+	}
+	if len(stretches) > 0 {
+		return strings.Join(stretches, "\n"), true
+	}
+	return "", false
 }
+
+// minStretch is the fewest printable runes a stretch inside junk is read
+// from (D1215b).
+const minStretch = 16

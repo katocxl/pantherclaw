@@ -63,7 +63,7 @@ const SourceConfigFile = "config_file"
 // configuration file (the gateway's outbound formats, outbound.Formats):
 // submitted as env_secret with source config_file, never the value (G0 M30
 // D942, D943a).
-var ConfigSecretKinds = []string{"aws_access_key", "github_token", "pantherclaw_token", "private_key", "slack_token"}
+var ConfigSecretKinds = []string{"anthropic", "aws_access_key", "github_token", "openai", "pantherclaw_token", "private_key", "slack_token"}
 
 // envSecretOK reports whether an env_secret finding names a kind the server
 // takes: one of ScanSecretKinds, or with source config_file one of

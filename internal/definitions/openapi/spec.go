@@ -95,7 +95,7 @@ func Parse(raw []byte) (*Spec, error) {
 	}
 	var doc any
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrSpec, err)
+		return nil, fmt.Errorf("%w: %w", ErrSpec, err)
 	}
 	root, ok := normalize(doc, 0).(map[string]any)
 	if !ok {
@@ -497,7 +497,7 @@ func intOf(v any) int {
 	case int64:
 		return int(n)
 	case uint64:
-		return int(min(n, 1<<31)) //nolint:gosec // bounded above
+		return int(min(n, 1<<31))
 	case float64:
 		if n >= 0 && n < 1<<31 && n == float64(int(n)) {
 			return int(n)

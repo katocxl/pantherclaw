@@ -1,0 +1,19 @@
+apiVersion: pantherclaw.range/v1
+id: RT-195
+title: A cut model stream is UNKNOWN and its token reservation stays held
+category: recovery
+suite: coding-agent
+tier: community
+attacker: A11
+threats: [T-312, T-313]
+rules: [HR-692, HR-693, HR-003]
+techniques_none: "Tests how PantherClaw records a model answer the provider cut off: UNKNOWN, the reservation kept."
+requires: [model]
+harness_only: true
+steps:
+  - id: cut-stream
+    do: model.call
+    with: {attack: cut_stream}
+    expect:
+      outcome: UNKNOWN
+      decisive_control: HR-692

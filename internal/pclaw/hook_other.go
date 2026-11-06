@@ -5,7 +5,18 @@
 
 package pclaw
 
-import "path/filepath"
+import (
+	"path/filepath"
+	"runtime"
+)
 
-// resolveFinal resolves the symbolic links in an existing directory's path.
-func resolveFinal(abs string) (string, error) { return filepath.EvalSymlinks(abs) }
+// resolveFinal resolves the symbolic links in an existing directory's path;
+// on macOS, whose file systems fold case, it also takes the names as the
+// file system spells them (G0 M30 D1215).
+func resolveFinal(abs string) (string, error) {
+	p, err := filepath.EvalSymlinks(abs)
+	if err != nil || runtime.GOOS != "darwin" {
+		return p, err
+	}
+	return onDiskSpelling(p), nil
+}

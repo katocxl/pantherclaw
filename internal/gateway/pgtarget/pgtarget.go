@@ -255,7 +255,7 @@ func newPool(ctx context.Context, ep Endpoint, password string, allowed []netip.
 		return nil, err
 	}
 	cc := pc.ConnConfig
-	cc.Host, cc.Port, cc.Database, cc.User, cc.Password = ep.Host, uint16(ep.Port), ep.Database, ep.User, password
+	cc.Host, cc.Port, cc.Database, cc.User, cc.Password = ep.Host, uint16(ep.Port), ep.Database, ep.User, password //nolint:gosec // G115: Port is checked to 1..65535 above
 	cc.TLSConfig, cc.Fallbacks, cc.SSLNegotiation = tc, nil, "postgres"
 	cc.ConnectTimeout = ConnectTimeout
 	cc.DialFunc = dialer(ep.Internal, allowed).DialContext

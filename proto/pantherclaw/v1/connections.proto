@@ -390,10 +390,10 @@ message VectorstoreConfig {
   string schema_name = 8 [(buf.validate.field).string.pattern = "^[a-z_][a-z0-9_]{0,62}$"];
   // The table's name.
   string table_name = 9 [(buf.validate.field).string.pattern = "^[a-z_][a-z0-9_]{0,62}$"];
-  // The embedding's dimensions (1..16000).
+  // The embedding's dimensions (1..12288).
   int32 dimensions = 10 [(buf.validate.field).int32 = {
     gte: 1
-    lte: 16000
+    lte: 12288
   }];
   // The distance metric: cosine, l2 or inner_product.
   string distance = 11 [(buf.validate.field).string = {

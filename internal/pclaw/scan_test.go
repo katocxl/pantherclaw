@@ -59,7 +59,8 @@ func TestF015_ScanStaysLocalUnlessSubmitted(t *testing.T) {
 		t.Fatalf("scan = %d %q %q", code, out, errs)
 	}
 	code, out, errs = run(t, env, "scan", "--path", dir, "--no-user-config", "--no-env", "--submit")
-	if code != 0 || !strings.Contains(out, "3 new discovered agents") || len(rec.req.GetFindings()) != 3 {
+	// .mcp.json is also reported by its digest (agent_config, G0 M30 D941).
+	if code != 0 || !strings.Contains(out, "4 new discovered agents") || len(rec.req.GetFindings()) != 4 {
 		t.Fatalf("scan --submit = %d %q %q, request %v", code, out, errs, rec.req)
 	}
 	if strings.Contains(rec.req.String(), "LEAKCHECK") {
@@ -71,6 +72,9 @@ func TestF015_ScanStaysLocalUnlessSubmitted(t *testing.T) {
 		}
 		if f.GetKind() == "env_secret" && (len(f.GetAttributes()) != 1 || f.GetAttributes()["secret_kind"] != "openai_api_key") {
 			t.Errorf("a credential carries more than its kind: %v", f)
+		}
+		if f.GetKind() == "agent_config" && (len(f.GetAttributes()) != 5 || f.GetAttributes()["path_class"] != "mcp") {
+			t.Errorf("a configuration file carries more than its digest: %v", f)
 		}
 	}
 }

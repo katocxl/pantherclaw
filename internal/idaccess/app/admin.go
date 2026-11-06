@@ -431,13 +431,16 @@ var ErrDocumentSame = pcerr.New(pcerr.FailedPrecondition, "CLIENT_DOCUMENT_UNCHA
 
 // DocumentDigest is the SHA-256 of a metadata document's fields that the
 // flow uses, over a fixed encoding: two documents with the same digest name
-// the same client, name and redirect URIs.
+// the same client, name, redirect URIs and DPoP binding. A change of
+// "dpop_bound_access_tokens" is a changed document (G0 M30 D1211); an
+// unbound document keeps the digest it had before the field was added.
 func DocumentDigest(md ports.ClientMetadata) []byte {
 	b, _ := json.Marshal(struct {
 		ClientID     string   `json:"client_id"`
 		Name         string   `json:"client_name"`
 		RedirectURIs []string `json:"redirect_uris"`
-	}{md.ClientID, md.Name, md.RedirectURIs})
+		DPoPBound    bool     `json:"dpop_bound_access_tokens,omitzero"`
+	}{md.ClientID, md.Name, md.RedirectURIs, md.DPoPBound})
 	h := sha256.Sum256(b)
 	return h[:]
 }

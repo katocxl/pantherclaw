@@ -6,7 +6,13 @@ This document says how PantherClaw is explained, demonstrated and sold to securi
 
 ## 1. Positioning
 
-**Category:** the identity and runtime firewall for AI agents (the reference specification calls it an agent transaction firewall).
+**Category:** Agent identity protection and a runtime firewall for AI agents (the reference specification calls it an agent transaction firewall).
+
+These are two separate things:
+
+- **Agent identity protection** (Badge) is the actions that keep an agent's identity from being stolen, faked or misused: verifying which workload is acting and for whom, binding its tokens to its own key (DPoP), attesting where it runs, rotating and revoking its credentials, and detecting a stolen or replayed token. It answers "is this really that agent, and acting for whom?"
+- **Runtime firewall** (Pass, Guardrails, Checkpoint, Stash) decides and enforces every action an agent takes on your systems: tool and API calls, egress and content. Each action is allowed, held for a person or refused, with route-by-route proof that it can't be bypassed. It answers "may this agent do this, here, now?"
+- Reflex and Trail serve both: Reflex can revoke an identity or stop a run, and Trail proves both.
 
 **Headline:** Know who's acting. Control what they can do. Prove what happened.
 
@@ -41,7 +47,7 @@ Naming follows one rule: a short brand word the admin remembers, always shown wi
 
 | Component | Tagline | Category | Question it answers | Main owner | Pillars | Main milestones |
 |---|---|---|---|---|---|---|
-| **Badge** | Know who's acting | Agent identity | Which agents do we have, who is accountable, and is this request really from that agent, acting for whom? | IAM / platform | 1, 2, 3, 4 | M3 |
+| **Badge** | Know who's acting | Agent identity protection | Which agents do we have, who is accountable, and is this request really from that agent, acting for whom? | IAM / platform | 1, 2, 3, 4 | M3 |
 | **Pass** | Authorize the task | Task-scoped access and approvals | Who allowed this agent to do what, on which resources, for which task, until when? | Agent owners, IAM, business approvers | 5A, 7 | M4, M5 |
 | **Guardrails** | Keep agents within limits | Policy and limits | What may agents never do, what limits apply across a task, and what changes if we tighten a rule? | Security engineering | 5B, 5C, 8 | M4, M11 |
 | **Checkpoint** | Enforce the boundary | Agent firewall | Does every route from this agent to our systems go through the checkpoint? | Platform / security engineering | 6A, 6C, 6D, 16 | M4, M6, M8, M9 |
