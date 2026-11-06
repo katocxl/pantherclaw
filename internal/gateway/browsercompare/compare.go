@@ -247,7 +247,7 @@ func (c *Comparer) Run(ctx context.Context) error {
 type page struct {
 	status int32
 	bytes  int64
-	print  Fingerprint
+	sig    Fingerprint
 }
 
 func (c *Comparer) compare(ctx context.Context, j Job) {
@@ -264,7 +264,7 @@ func (c *Comparer) compare(ctx context.Context, j Job) {
 			slog.String("host", j.Host), slog.Bool("agent_failed", errA != nil), slog.Bool("plain_failed", errB != nil))
 		return
 	}
-	sim := Similarity(a.print, b.print)
+	sim := Similarity(a.sig, b.sig)
 	if sim >= mismatchBelow && ok2xx(a.status) == ok2xx(b.status) {
 		return
 	}
@@ -328,7 +328,7 @@ func (c *Comparer) fetch(ctx context.Context, u *url.URL, userAgent, acceptLangu
 		if res.StatusCode < 100 || res.StatusCode > 599 {
 			return page{}, errStatus
 		}
-		return page{status: int32(res.StatusCode), bytes: int64(len(body)), print: Sign(Text(body))}, nil
+		return page{status: int32(res.StatusCode), bytes: int64(len(body)), sig: Sign(Text(body))}, nil
 	}
 }
 

@@ -113,6 +113,7 @@ func TestPackCoversD11(t *testing.T) {
 		"pc.integrity.action_tampered", "pc.integrity.evidence_integrity_failed", "pc.containment.kill_switch_engaged",
 		"pc.coverage.lost", "pc.live.first_sensitive_use", "pc.live.significant_write", "pc.live.authority_expanded",
 		"pc.live.unexpected_denial",
+		"pc.browser.cloaking", // G0 M33 D986
 	}
 	business := []string{
 		"pc.probing.denial_burst", "pc.sequence.read_then_disclose", "pc.budget.splitting", "pc.delegation.depth_anomaly",
