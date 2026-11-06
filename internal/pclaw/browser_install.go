@@ -158,7 +158,7 @@ func browserInstallHost(_ context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	written, err := registerBrowserHost(dir, browsers, *system, manifest)
+	written, err := registerBrowserHostFn(dir, browsers, *system, manifest)
 	if err != nil {
 		return err
 	}
@@ -169,6 +169,10 @@ func browserInstallHost(_ context.Context, a *app, args []string) error {
 	}
 	return nil
 }
+
+// registerBrowserHostFn registers the manifest; a variable so tests do not
+// write the machine's registry or browser directories.
+var registerBrowserHostFn = registerBrowserHost
 
 // writeFileMode writes a file and sets its mode (WriteFile keeps the mode
 // of a file that already exists).

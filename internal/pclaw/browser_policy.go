@@ -5,6 +5,7 @@ package pclaw
 
 import (
 	"context"
+	binenc "encoding/binary"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
@@ -155,7 +156,7 @@ func utf16LE(s string) []byte {
 	b := make([]byte, 0, 2+2*len(units))
 	b = append(b, 0xFF, 0xFE)
 	for _, u := range units {
-		b = append(b, byte(u), byte(u>>8))
+		b = binenc.LittleEndian.AppendUint16(b, u)
 	}
 	return b
 }
