@@ -209,7 +209,7 @@ func TestHR194_AResetOrgWithBrokenEvidenceFailsAgain(t *testing.T) {
 		if _, err := f.svc.Verify(ctx, f.org); err != nil {
 			t.Fatal(err)
 		}
-		f.d.AdminExec(t, `UPDATE pc.ledger_tiles SET hashes = overlay(hashes placing '\xff'::bytea from 1 for 1)
+		f.d.AdminExec(t, `UPDATE pc.ledger_tiles SET hashes = set_byte(hashes, 0, get_byte(hashes, 0) # 255)
 			WHERE org_id = $1 AND level = 0 AND tile_index = 0`, f.org)
 		_, err := f.svc.Verify(ctx, f.org)
 		f.wantFailure(t, err, checkpoints.CodeTreeMismatch, 0)

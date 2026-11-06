@@ -14,7 +14,7 @@ ALTER TABLE pc.trusted_issuers ADD COLUMN run_grant_id uuid;
 -- squawk-ignore adding-foreign-key-constraint
 ALTER TABLE pc.trusted_issuers
     -- squawk-ignore constraint-missing-not-valid, adding-foreign-key-constraint
-    ADD CONSTRAINT trusted_issuers_run_grant_fkey FOREIGN KEY (org_id, run_grant_id) REFERENCES pc.grants (org_id, id);
+    ADD CONSTRAINT trusted_issuers_run_grant_fkey FOREIGN KEY (org_id, run_grant_id) REFERENCES pc.grants (org_id, id) DEFERRABLE INITIALLY IMMEDIATE;
 
 -- +goose Down
 ALTER TABLE pc.trusted_issuers DROP CONSTRAINT trusted_issuers_run_grant_fkey;
