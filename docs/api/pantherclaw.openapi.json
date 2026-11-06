@@ -52488,7 +52488,8 @@
           "CONNECTION_KIND_POSTGRES",
           "CONNECTION_KIND_A2A",
           "CONNECTION_KIND_MODEL",
-          "CONNECTION_KIND_VECTORSTORE"
+          "CONNECTION_KIND_VECTORSTORE",
+          "CONNECTION_KIND_SNOWFLAKE"
         ],
         "description": "ConnectionKind is what a connection reaches."
       },
@@ -53146,6 +53147,11 @@
             "title": "vectorstore",
             "description": "vectorstore is a vectorstore connection's settings (G0 M30 D922).",
             "$ref": "#/components/schemas/pantherclaw.v1.VectorstoreConfig"
+          },
+          "snowflake": {
+            "title": "snowflake",
+            "description": "snowflake is a snowflake connection's configuration and manifest (G0\n M31 D962).",
+            "$ref": "#/components/schemas/pantherclaw.v1.SnowflakeConfig"
           }
         },
         "title": "Connection",
@@ -53915,6 +53921,18 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/pantherclaw.v1.VectorstoreConfigInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "snowflake": {
+            "title": "snowflake",
+            "description": "snowflake is required for, and only for, a snowflake connection (G0\n M31 D962).",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.SnowflakeConfigInput"
               },
               {
                 "type": "null"
@@ -55568,6 +55586,178 @@
         "additionalProperties": false,
         "description": "SetRouteModeResponse returns the connection."
       },
+      "pantherclaw.v1.SnowflakeConfig": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "title": "account",
+            "maxLength": 255,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,254}(\\.[A-Za-z0-9_-]{1,64}){0,2}$",
+            "description": "The account identifier (orgname-account_name, or a locator with its\n region and cloud)."
+          },
+          "warehouse": {
+            "type": "string",
+            "title": "warehouse",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The warehouse every statement runs on."
+          },
+          "database": {
+            "type": "string",
+            "title": "database",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The database every statement runs in."
+          },
+          "schema": {
+            "type": "string",
+            "title": "schema",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The schema statements name by default."
+          },
+          "tables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PostgresTable"
+            },
+            "title": "tables",
+            "maxItems": 64,
+            "minItems": 1,
+            "description": "Tables the gateway may read."
+          },
+          "maxRows": {
+            "type": "integer",
+            "title": "max_rows",
+            "maximum": 1000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Row cap per query (default 200, at most 1000)."
+          },
+          "statementTimeoutMs": {
+            "type": "integer",
+            "title": "statement_timeout_ms",
+            "maximum": 60000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Statement timeout in milliseconds (default 30000, at most 60000)."
+          },
+          "maxResultBytes": {
+            "type": "integer",
+            "title": "max_result_bytes",
+            "maximum": 4194304,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Answer cap in bytes (default 1 MiB, at most 4 MiB)."
+          },
+          "minGroupSize": {
+            "type": "integer",
+            "title": "min_group_size",
+            "maximum": 1000000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Smallest group an aggregate returns (default 5, at least 2)."
+          }
+        },
+        "title": "SnowflakeConfig",
+        "additionalProperties": false,
+        "description": "SnowflakeConfig is a snowflake connection (G0 M31 D962): the account,\n warehouse, database and schema the gateway names on each statement, and\n the reviewed manifest of what it may read, kept and confirmed as a\n postgres manifest is. Its credential is a snowflake_keypair. Identifiers\n are lower-case, as in a postgres manifest; the gateway upper-cases them,\n as Snowflake stores unquoted names. The account, warehouse, database and\n schema are fixed once the connection exists (SNOWFLAKE_ENDPOINT_IMMUTABLE)."
+      },
+      "pantherclaw.v1.SnowflakeConfigInput": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "title": "account",
+            "maxLength": 255,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,254}(\\.[A-Za-z0-9_-]{1,64}){0,2}$",
+            "description": "The account identifier (orgname-account_name, or a locator with its\n region and cloud)."
+          },
+          "warehouse": {
+            "type": "string",
+            "title": "warehouse",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The warehouse every statement runs on."
+          },
+          "database": {
+            "type": "string",
+            "title": "database",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The database every statement runs in."
+          },
+          "schema": {
+            "type": "string",
+            "title": "schema",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The schema statements name by default."
+          },
+          "tables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PostgresTableInput"
+            },
+            "title": "tables",
+            "maxItems": 64,
+            "minItems": 1,
+            "description": "Tables the gateway may read."
+          },
+          "maxRows": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "max_rows",
+            "maximum": 1000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Row cap per query (default 200, at most 1000)."
+          },
+          "statementTimeoutMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "statement_timeout_ms",
+            "maximum": 60000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Statement timeout in milliseconds (default 30000, at most 60000)."
+          },
+          "maxResultBytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "max_result_bytes",
+            "maximum": 4194304,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Answer cap in bytes (default 1 MiB, at most 4 MiB)."
+          },
+          "minGroupSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "min_group_size",
+            "maximum": 1000000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Smallest group an aggregate returns (default 5, at least 2)."
+          }
+        },
+        "title": "SnowflakeConfig",
+        "additionalProperties": false,
+        "description": "SnowflakeConfig is a snowflake connection (G0 M31 D962): the account,\n warehouse, database and schema the gateway names on each statement, and\n the reviewed manifest of what it may read, kept and confirmed as a\n postgres manifest is. Its credential is a snowflake_keypair. Identifiers\n are lower-case, as in a postgres manifest; the gateway upper-cases them,\n as Snowflake stores unquoted names. The account, warehouse, database and\n schema are fixed once the connection exists (SNOWFLAKE_ENDPOINT_IMMUTABLE).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.SnowflakeConfig",
+        "required": [
+          "account",
+          "warehouse",
+          "database",
+          "schema",
+          "tables"
+        ]
+      },
       "pantherclaw.v1.TestConnectionRequest": {
         "type": "object",
         "properties": {
@@ -55828,6 +56018,18 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/pantherclaw.v1.VectorstoreConfigInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "snowflake": {
+            "title": "snowflake",
+            "description": "snowflake replaces a snowflake connection's manifest (G0 M31 D962): its\n account, warehouse, database and schema must stay as they are; a\n widening manifest change weakens and waits for confirmation.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.SnowflakeConfigInput"
               },
               {
                 "type": "null"
@@ -68368,6 +68570,11 @@
             "title": "vectorstore",
             "description": "A vectorstore connection's settings (G0 M30 D922): its database, its\n table and the agents that may write without a person.",
             "$ref": "#/components/schemas/pantherclaw.v1.VectorstoreConfig"
+          },
+          "snowflake": {
+            "title": "snowflake",
+            "description": "A snowflake connection's confirmed configuration and manifest (G0 M31\n D962); unset until a first one is confirmed, and nothing is sent.",
+            "$ref": "#/components/schemas/pantherclaw.v1.SnowflakeConfig"
           }
         },
         "title": "GatewayConnection",

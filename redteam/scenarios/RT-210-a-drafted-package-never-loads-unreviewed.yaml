@@ -1,0 +1,31 @@
+apiVersion: pantherclaw.range/v1
+id: RT-210
+title: A package drafted from an OpenAPI spec is never imported until a person reviews it
+category: boundary
+suite: platform
+tier: business
+attacker: A5
+threats: [T-330]
+rules: [HR-720]
+techniques_none: "Tests PantherClaw's own importer: a drafted package still carrying review_required is refused by the decoder, whoever signed it."
+requires: []
+# The step registers an org package key and signs the draft itself, which a
+# person never does for a draft.
+harness_only: true
+steps:
+  # The draft as pclaw package draft openapi wrote it, signed with the org's
+  # key: the decoder refuses it, so it never becomes a package.
+  - id: draft
+    do: package.import
+    with:
+      file: draft
+    expect:
+      outcome: REFUSED
+      reason: DRAFT_NOT_REVIEWED
+  # The same draft once a person removed review_required imports.
+  - id: reviewed
+    do: package.import
+    with:
+      file: reviewed
+    expect:
+      outcome: ALLOW

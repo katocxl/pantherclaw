@@ -944,6 +944,28 @@ The follow-ups to M29's model connections (F1002, F1003) and the threat-map upda
 | F1003 | Resume an approved hold | An identical request through the edge after approval within 24 hours reuses its action id, so the approved hold releases it and no other request. | Next | Community | M30 | new |
 | F1004 | Threat-map updates | Seven Prevent controls for the M30 checks and M29's token caps, decoded content in the content hold, `prevent.query_scope` counting connector refusals, and `NARROWED_TRIGGER` for automations whose trigger tests more than the rule. | Next | Community | M30 | F960 |
 
+### M31 rows: Connector breadth
+
+Connectors for the mail, files, CRM, docs, issues, model clouds and warehouse agents already reach, on three shared contracts, and an importer that drafts a package a person must review and sign ([G0 M31](g0/M31.md), [ADR-0058](adr/0058-connector-breadth-and-openapi-importer.md)). F-ids now have four digits.
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F1005 | Richer HTTP dispatch | JSON bodies with array indices and one object per list item, fixed GraphQL documents with mapped variables, RFC 5322 mail built by the gateway, literal fixed headers for any package. | Next | Community | M31 | new |
+| F1006 | Provider token URLs | An OAuth client credential's token endpoint must be Microsoft's or Salesforce's, derived from the URL; any other is refused when sealed and when opened. | Next | Community | M31 | new |
+| F1007 | Google service accounts | A credential kind minted per dispatch from a signed assertion, with domain-wide delegation and up to 8 scopes; `pclaw seal --google-service-account`. | Next | Community | M31 | new |
+| F1008 | OpenAPI importer | `pclaw package draft openapi` drafts an unsigned package from an OpenAPI 3 spec; it never loads until a person removes `review_required` and signs it. | Next | Community | M31 | new |
+| F1009 | Spec simulator | `pantherclaw-sim openapi --spec FILE` serves every operation's first example and records calls, for tests and demos. | Next | Community | M31 | new |
+| F1010 | Gmail | `pc.gmail`: send plain-text mail as a disclosure, list and read messages, through a Google service account. | Next | Community | M31 | new |
+| F1011 | Google Drive | `pc.google-workspace`: list and read file metadata, create and delete permissions, with public and domain shares named as share destinations. | Next | Community | M31 | new |
+| F1012 | Google Calendar | `pc.google-workspace`: list events and create events with up to 50 attendees. | Next | Community | M31 | new |
+| F1013 | Microsoft 365 mail | `pc.m365`: send and list mail through Microsoft Graph with an app-only OAuth client. | Next | Community | M31 | new |
+| F1014 | Microsoft 365 files | `pc.m365`: list drive items, invite people and create sharing links, with anonymous links and outside domains named as share destinations. | Next | Community | M31 | new |
+| F1015 | Salesforce | `pc.salesforce`: read records, run reports and read API limits, with customer data classed in answers. | Next | Community | M31 | new |
+| F1016 | Notion | `pc.notion`: read and search pages, create pages and append blocks, with a pinned API version. | Next | Community | M31 | new |
+| F1017 | Linear | `pc.linear`: read, create, update and comment on issues through fixed GraphQL documents. | Next | Community | M31 | new |
+| F1018 | Model clouds | `pc.bedrock` and `pc.vertex`: Anthropic models on Amazon Bedrock and Google Vertex, checked like other model connections. | Next | Community | M31 | new |
+| F1019 | Snowflake | `pc.snowflake`: allow-listed reads over the Snowflake SQL API with a key-pair credential, like `pc.postgres`. | Next | Community | M31 | new |
+
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
 These boundaries constrain every pillar above. A feature request that conflicts with one of them needs an explicit product decision; it is never a silent exception.

@@ -47,7 +47,13 @@ Usage:
   pantherclaw-sim okta [--addr 127.0.0.1:9101] [--base-url URL] [--expired] [--wrong-audience] [--cnf]
   pantherclaw-sim copilot-studio [--addr 127.0.0.1:9100] [--deny-components]
   pantherclaw-sim chatgpt-enterprise [--addr 127.0.0.1:9102] [--key-file FILE] [--deny]
+  pantherclaw-sim google [--addr 127.0.0.1:9104] [--service-account-file FILE] [--rate-limit 0] [--invalid-grant] [--not-found]
+  pantherclaw-sim m365 [--addr 127.0.0.1:9105] [--client-file FILE] [--rate-limit 0] [--invalid-client] [--not-found]
   pantherclaw-sim model [--addr 127.0.0.1:9103] [--key KEY] [--stream-delay 0s] [--status 0]
+  pantherclaw-sim salesforce [--addr 127.0.0.1:9106] [--client-file FILE] [--invalid-client] [--expire-tokens] [--rate-limit 0]
+  pantherclaw-sim notion [--addr 127.0.0.1:9107] [--token-file FILE] [--rate-limit 0] [--unauthorized]
+  pantherclaw-sim linear [--addr 127.0.0.1:9108] [--key-file FILE] [--rate-limit 0] [--unauthorized]
+  pantherclaw-sim snowflake [--addr 127.0.0.1:9109] [--public-key-file FILE] [--async 0] [--rate-limit 0] [--unauthorized]
   pantherclaw-sim aws --secret-file FILE [--addr 127.0.0.1:9099] [--external-id ID] [--role-actions *] [--throttle 0] [--deny-assume-role]
                       [--long-sessions]
   pantherclaw-sim load --workload-file FILE [--token-file FILE] [--run ID] [--gateway URL] [--connection payments] [--rate 1000] [--duration 30s]
@@ -55,6 +61,7 @@ Usage:
   pantherclaw-sim a2a [--addr 127.0.0.1:9093] [--base-url URL] [--name NAME] [--token-file FILE] [--sign-key FILE [--jwks-out FILE]]
                       [--latency 0s] [--complete-after 0s] [--stream-delay 0s] [--oversize 0] [--auth-required] [--fail] [--description TEXT]
                       [--require-peer-tokens --jwks-url URL --audience URL]
+  pantherclaw-sim openapi --spec FILE [--addr 127.0.0.1:9112]
   pantherclaw-sim canary [--host 127.0.0.1] [--dns-port 18453] [--https-port 18443] [--ssh-port 18422] [--query-addr 127.0.0.1:18433]
   pantherclaw-sim version
 `
@@ -76,7 +83,14 @@ var defaultAddrs = map[string]string{
 	"copilot-studio":     "127.0.0.1:9100",
 	"okta":               "127.0.0.1:9101",
 	"chatgpt-enterprise": "127.0.0.1:9102",
+	"google":             "127.0.0.1:9104",
+	"m365":               "127.0.0.1:9105",
 	"model":              "127.0.0.1:9103",
+	"salesforce":         "127.0.0.1:9106",
+	"notion":             "127.0.0.1:9107",
+	"linear":             "127.0.0.1:9108",
+	"snowflake":          "127.0.0.1:9109",
+	"openapi":            "127.0.0.1:9112", // G0 M31 D954
 	"canary":             "127.0.0.1:18433",
 }
 
@@ -113,14 +127,28 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = runCopilotStudio(ctx, args[1:], stderr)
 	case "chatgpt-enterprise":
 		err = runChatGPTEnterprise(ctx, args[1:], stderr)
+	case "google":
+		err = runGoogle(ctx, args[1:], stderr)
+	case "m365":
+		err = runM365(ctx, args[1:], stderr)
 	case "model":
 		err = runModel(ctx, args[1:], stderr)
 	case "aws":
 		err = runAWS(ctx, args[1:], stderr)
+	case "salesforce":
+		err = runSalesforce(ctx, args[1:], stderr)
+	case "notion":
+		err = runNotion(ctx, args[1:], stderr)
+	case "linear":
+		err = runLinear(ctx, args[1:], stderr)
+	case "snowflake":
+		err = runSnowflake(ctx, args[1:], stderr)
 	case "load":
 		err = runLoad(ctx, args[1:], stdout, stderr)
 	case "a2a":
 		err = runA2A(ctx, args[1:], stderr)
+	case "openapi":
+		err = runOpenAPI(ctx, args[1:], stderr)
 	case "canary":
 		err = runCanary(ctx, args[1:], stderr)
 	default:

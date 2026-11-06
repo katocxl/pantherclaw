@@ -30,18 +30,27 @@ import (
 	pcaws "github.com/katocxl/pantherclaw/packages/pc-aws"
 	pcawsecs "github.com/katocxl/pantherclaw/packages/pc-aws-ecs"
 	pcawss3 "github.com/katocxl/pantherclaw/packages/pc-aws-s3"
+	pcbedrock "github.com/katocxl/pantherclaw/packages/pc-bedrock"
 	pcchatgptenterprise "github.com/katocxl/pantherclaw/packages/pc-chatgpt-enterprise"
 	pccopilotstudio "github.com/katocxl/pantherclaw/packages/pc-copilot-studio"
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
 	pcgitlab "github.com/katocxl/pantherclaw/packages/pc-gitlab"
+	pcgmail "github.com/katocxl/pantherclaw/packages/pc-gmail"
+	pcgoogleworkspace "github.com/katocxl/pantherclaw/packages/pc-google-workspace"
 	pcjira "github.com/katocxl/pantherclaw/packages/pc-jira"
+	pclinear "github.com/katocxl/pantherclaw/packages/pc-linear"
+	pcm365 "github.com/katocxl/pantherclaw/packages/pc-m365"
+	pcnotion "github.com/katocxl/pantherclaw/packages/pc-notion"
 	pcopenai "github.com/katocxl/pantherclaw/packages/pc-openai"
 	pcpostgres "github.com/katocxl/pantherclaw/packages/pc-postgres"
+	pcsalesforce "github.com/katocxl/pantherclaw/packages/pc-salesforce"
 	pcshell "github.com/katocxl/pantherclaw/packages/pc-shell"
 	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
+	pcsnowflake "github.com/katocxl/pantherclaw/packages/pc-snowflake"
 	pcstripe "github.com/katocxl/pantherclaw/packages/pc-stripe"
 	pcteams "github.com/katocxl/pantherclaw/packages/pc-teams"
 	pcvectorstore "github.com/katocxl/pantherclaw/packages/pc-vectorstore"
+	pcvertex "github.com/katocxl/pantherclaw/packages/pc-vertex"
 )
 
 // Bounds of what one check reads. A check runs on a pull request's own
@@ -100,6 +109,8 @@ func builtin() [][]byte {
 		mockpayments.Package, pca2a.Package, pcaws.Package, pcawsecs.Package, pcawss3.Package, pcgithub.Package, pcgitlab.Package, pcjira.Package,
 		pcpostgres.Package, pcshell.Package, pcslack.Package, pcstripe.Package, pcteams.Package, pccopilotstudio.Package,
 		pcchatgptenterprise.Package, pcanthropic.Package, pcopenai.Package, pcvectorstore.Package,
+		pcgmail.Package, pcgoogleworkspace.Package, pcm365.Package,
+		pcsalesforce.Package, pcnotion.Package, pclinear.Package, pcvertex.Package, pcbedrock.Package, pcsnowflake.Package,
 	}
 }
 

@@ -184,6 +184,18 @@ const (
 	PackageAWS    = "pc.aws"
 	// PackageAWSECS is an AWS connection too (D284: one host per connection).
 	PackageAWSECS = "pc.aws.ecs"
+	// The Google and Microsoft 365 packages (G0 M31 D956).
+	PackageGmail           = "pc.gmail"
+	PackageGoogleWorkspace = "pc.google-workspace"
+	PackageM365            = "pc.m365"
+	// The M31 software-as-a-service packages (G0 M31 D960).
+	PackageSalesforce = "pc.salesforce"
+	PackageNotion     = "pc.notion"
+	PackageLinear     = "pc.linear"
+	// The M31 cloud model and data packages (G0 M31 D961, D962, D962a).
+	PackageVertex    = "pc.vertex"
+	PackageBedrock   = "pc.bedrock"
+	PackageSnowflake = "pc.snowflake"
 )
 
 // Procedures that list evidence.

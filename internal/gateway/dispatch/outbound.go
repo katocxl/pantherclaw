@@ -40,7 +40,9 @@ func (e *Engine) simulatorRefusal(ctx context.Context, conn *control.Connection)
 		return e.modelSimRefusal(ctx, conn) // G0 M29 D812, D826
 	case "postgres":
 		return e.pgSimVerify(ctx, conn) // D110
-	case "http", "mcp", "a2a":
+	case "http", "mcp", "a2a", KindSnowflake:
+		// A snowflake simulator answers the handshake at its base URL (G0
+		// M31 D962).
 		// An a2a simulator answers the handshake at its interface URL
 		// (G0 M14 D100); a postgres target has no HTTP handshake, so a
 		// simulated one stays unverified (fail closed).

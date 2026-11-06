@@ -61,6 +61,9 @@ func (d *Definition) DecodeParams(raw jsontext.Value) (Values, error) {
 			return nil, ambiguous("missing required param %q", name)
 		}
 	}
+	if err := d.CheckMailHeaders(out); err != nil { // G0 M31 D950 d
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -277,6 +280,18 @@ func (d *Definition) EncodeParams(vals Values) (jsontext.Value, error) {
 	return raw, nil
 }
 
+// emptyCollection reports an identifier list or string map with no
+// entries.
+func emptyCollection(v Value) bool {
+	switch v.Type { //nolint:exhaustive // only collections can be empty
+	case TypeIdentifierList:
+		return len(v.List) == 0
+	case TypeStringMap:
+		return len(v.Map) == 0
+	}
+	return false
+}
+
 func ambiguous(format string, args ...any) error {
 	return fmt.Errorf("%w: "+format, append([]any{actionir.ErrAmbiguous}, args...)...)
 }
@@ -284,7 +299,11 @@ func ambiguous(format string, args ...any) error {
 // DedupeKey computes the semantic dedupe key of an action (HR-007):
 // "sha256:" + SHA-256 of the canonical JSON of the operation and the
 // declared fields' canonical values. It is empty when the definition
-// declares no key. A declared field without a value is ambiguous.
+// declares no key. An optional param the action leaves out, or gives as
+// an empty list or map, is null in the key, which no value equals (G0 M31
+// D1208, D1209): cc: [] sends the same mail as no cc. An empty string is a
+// value, and lists keep their order. Any other declared field
+// without a value is ambiguous.
 func (d *Definition) DedupeKey(target actionir.Target, vals Values) (string, error) {
 	if len(d.Dedupe) == 0 {
 		return "", nil
@@ -302,6 +321,10 @@ func (d *Definition) DedupeKey(target actionir.Target, vals Values) (string, err
 		default:
 			name, _ := strings.CutPrefix(f, "params.")
 			pv, ok := vals[name]
+			if p, declared := d.Params[name]; declared && !p.Required && (!ok || emptyCollection(pv)) {
+				fields[f] = nil
+				continue
+			}
 			if !ok || d.Params[name].Type != pv.Type {
 				return "", ambiguous("dedupe key field %s has no value", f)
 			}

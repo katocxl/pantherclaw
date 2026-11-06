@@ -106,6 +106,11 @@ func (d *Definition) validateAWSDispatch(at string, h *HTTPDispatch) error {
 // method and subresource (G0 M30 D934a). A session for the
 // dispatch is narrowed to exactly this action (HR-525).
 func (d *Definition) AWSAction() (string, bool) {
+	if d.IsModel() {
+		// A Bedrock model call's one action (G0 M31 D961).
+		a := d.Dispatch.Model.AWSAction
+		return a, a != ""
+	}
 	if d.Dispatch == nil || d.Dispatch.HTTP == nil {
 		return "", false
 	}
@@ -258,7 +263,10 @@ func (d *Definition) validateAWSResource(at, t string) error {
 // character outside an ARN's, or a missing part, builds nothing.
 func (d *Definition) AWSResourceARN(target actionir.Target, account, region, partition string) (string, error) {
 	t := ""
-	if d.Dispatch != nil && d.Dispatch.HTTP != nil {
+	switch {
+	case d.IsModel():
+		t = d.Dispatch.Model.AWSResource // G0 M31 D961
+	case d.Dispatch != nil && d.Dispatch.HTTP != nil:
 		t = d.Dispatch.HTTP.AWSResource
 	}
 	if t == "" {

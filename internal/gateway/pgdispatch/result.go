@@ -110,6 +110,11 @@ func (e *Encoder) Rows() int       { return e.n }
 func (e *Encoder) Redactions() int { return e.redacted }
 func (e *Encoder) Truncated() bool { return e.truncated }
 
+// MarkTruncated flags the answer truncated when the source held rows it
+// did not pass on: a Snowflake answer in more than one partition, of which
+// only the first is read (G0 M31 D962).
+func (e *Encoder) MarkTruncated() { e.truncated = true }
+
 // TruncatedValues reports whether a value was cut to MaxValueChars.
 func (e *Encoder) TruncatedValues() bool { return e.cut }
 

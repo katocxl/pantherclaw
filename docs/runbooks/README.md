@@ -68,3 +68,4 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [shares-and-read-limits.md](shares-and-read-limits.md) | M30 | Share checks on bucket policies, ACLs, repository visibility and transfers; owned accounts as a protected change; read limits; enumeration and scheduled-send alerts |
 | [agent-config.md](agent-config.md) | M30 | Agent configuration and memory files: digests and drift alerts from scans, the hook's `agent_config.write`, read-only files in the sandbox |
 | [vectorstore.md](vectorstore.md) | M30 | The pgvector connector: the table DDL, writers and holds, provenance from the permit, a fixed endpoint, bounds |
+| [connector-breadth.md](connector-breadth.md) | M31 | Google Workspace, Microsoft 365, Salesforce, Notion, Linear, Bedrock, Vertex and Snowflake: sealing, shares that hold, and drafting a package from an OpenAPI spec |

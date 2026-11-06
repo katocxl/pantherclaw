@@ -163,6 +163,9 @@ type Connection struct {
 	// Vectorstore is a vectorstore connection's settings (G0 M30 D922);
 	// nil otherwise.
 	Vectorstore *VectorstoreConfig
+	// Snowflake is a snowflake connection's configuration, the serving one
+	// or else the proposed one (G0 M31 D962); nil otherwise.
+	Snowflake *SnowflakeConfig
 }
 
 // CreateInput is a new connection. Zero values take the defaults.
@@ -193,6 +196,8 @@ type CreateInput struct {
 	Model *ModelConfig
 	// Vectorstore is a vectorstore connection's settings (G0 M30 D922).
 	Vectorstore *VectorstoreConfig
+	// Snowflake is a snowflake connection's configuration (G0 M31 D962).
+	Snowflake *SnowflakeConfig
 }
 
 // actor is who makes a change: a person holding the permission, or the
@@ -346,7 +351,7 @@ func servedRoutes(kind string, d *domain.Definition) []string {
 			// A model provider's API (G0 M29 D813): its params come from the
 			// model API parser, never a mapping's extraction.
 			serves = d.IsModel() && m.Channel == domain.ChannelHTTP
-		case KindPostgres:
+		case KindPostgres, KindSnowflake:
 			// Structured reads, served natively on the gateway's MCP and HTTP
 			// faces (D17, D64).
 			serves = d.Dispatch != nil && d.Dispatch.SQL != nil && !slices.Contains(domain.VectorOperations, d.Dispatch.SQL.Operation) &&
@@ -449,6 +454,10 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 	}
 	// A vectorstore connection's package and access (G0 M30 D922).
 	if err := checkVectorstoreCreate(&in); err != nil {
+		return Connection{}, err
+	}
+	// A snowflake connection's package and access (G0 M31 D962).
+	if err := checkSnowflakeCreate(&in); err != nil {
 		return Connection{}, err
 	}
 	in.DestinationClass = orDefault(in.DestinationClass, ClassPublic)
@@ -608,6 +617,9 @@ func load(ctx context.Context, q *dbq.Queries, conn dbq.PcConnection) (Connectio
 		return Connection{}, err
 	}
 	if out.Vectorstore, err = loadVectorstore(ctx, q, conn); err != nil {
+		return Connection{}, err
+	}
+	if out.Snowflake, err = loadSnowflake(ctx, q, conn); err != nil {
 		return Connection{}, err
 	}
 	return out, nil

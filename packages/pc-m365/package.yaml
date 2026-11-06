@@ -1,0 +1,431 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agents that work in Microsoft 365 through
+# Microsoft Graph (G0 M31 D956). It reaches graph.microsoft.com through an
+# http connection whose credential is of kind oauth_client with the scope
+# https://graph.microsoft.com/.default: app-only access. PantherClaw holds
+# the app's client secret and mints an access token for every dispatch at
+# the Microsoft Entra token endpoint of the app's home tenant; the token,
+# never the secret, is placed on the request, and the agent holds neither.
+# What the app may reach is what its Graph application permissions allow,
+# so grant it only the ones these operations need (Mail.Send, Mail.Read,
+# Files.ReadWrite.All or Sites.Selected).
+#
+# A mailbox is a user's object id, never an address: a path value may never
+# carry "@" (HR-073). A drive item is DRIVE_ID:ITEM_ID (ITEM_ID may be
+# root), split into its two path segments by the template.
+#
+# Mail and invitations leave the organization: their text is a disclosure
+# param (HR-079) and type content, never dispatched as text (HR-023).
+# Sharing links and invitations are irreversible once anyone has opened
+# them, so they are irreversible here.
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.m365
+version: 1.0.0
+publisher: pantherclaw
+summary: Send and list Microsoft 365 mail, list OneDrive and SharePoint items, and share them
+
+definitions:
+  - operation: m365.mail.send
+    summary: Send an email as a Microsoft 365 user
+    access: write
+    target:
+      type: m365_user
+      id_pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      account: none
+    params:
+      to:
+        type: identifier_list
+        material: true
+        required: true
+        max_items: 50
+        pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+      subject:
+        type: content
+        material: true
+        required: true
+        max_length: 998
+        # The subject leaves the organization with the message.
+        disclosure: true
+        max_bytes: 998
+      text:
+        type: content
+        material: true
+        required: true
+        max_length: 8000
+        # The message body leaves the organization: a disclosure param,
+        # capped at 8000 bytes.
+        disclosure: true
+        max_bytes: 8000
+    constraints:
+      - kind: target_set
+      - kind: allowed_values
+        param: to
+    effects:
+      - kind: message.send
+        description: Sends an email that every recipient can read and forward
+    reversibility: irreversible
+    dedupe_key: [target.id, params.to, params.subject, params.text]
+    retry:
+      safe: false
+      # Graph answers 202 with no message id, so no read confirms a send;
+      # an irreversible send is never retried, and an unknown outcome goes
+      # to reconciliation by a person (HR-007, G0 M34 D1002).
+      on_unknown: reconcile
+    approval:
+      title: Send an email as Microsoft 365 user {target.id}
+      fields:
+        - target.id
+        - params.to
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: m365_send_mail
+        route: m365-mail-send
+        description: >-
+          Send a plain-text email as a Microsoft 365 user, by the user's
+          object id, to at most 50 addresses. The subject is at most 998
+          bytes and the text at most 8000 bytes.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [user_id, to, subject, text]
+          properties:
+            user_id:
+              type: string
+              description: The sending user's Microsoft Entra object id
+              pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            to:
+              type: array
+              description: The recipients' email addresses
+              maxItems: 50
+              items:
+                type: string
+                pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+            subject:
+              type: string
+              description: The subject
+              maxLength: 998
+            text:
+              type: string
+              description: The message text, plain text
+              maxLength: 8000
+        extract:
+          target_id: input.user_id
+          params:
+            to: input.to
+            subject: input.subject
+            text: input.text
+    dispatch:
+      http:
+        method: POST
+        path: /v1.0/users/{target.id}/sendMail
+        body:
+          message[subject]: params.subject
+          message[body][contentType]: literal.Text
+          message[body][content]: params.text
+          # One recipient object per address (G0 M31 D950 a).
+          message[toRecipients][*][emailAddress][address]: params.to
+
+  - operation: m365.mail.list
+    summary: List a Microsoft 365 user's messages
+    access: read
+    target:
+      type: m365_user
+      id_pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      account: none
+    params:
+      top:
+        type: integer
+        material: true
+        unit: count
+        min: '1'
+        max: '100'
+    constraints:
+      - kind: target_set
+      - kind: count_max
+        param: top
+        clamp: true
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: m365_list_mail
+        route: m365-mail-list
+        description: >-
+          List a Microsoft 365 user's most recent messages, by the user's
+          object id: at most top messages, 1 to 100.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [user_id]
+          properties:
+            user_id:
+              type: string
+              description: The user's Microsoft Entra object id
+              pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            top:
+              type: integer
+              description: How many messages, 1 to 100
+              minimum: 1
+              maximum: 100
+        extract:
+          target_id: input.user_id
+          params:
+            top: input.?top
+    dispatch:
+      http:
+        method: GET
+        path: /v1.0/users/{target.id}/messages
+        # Graph v1.0 takes its query options without the $ prefix.
+        query:
+          top: params.top
+
+  - operation: m365.drive.item.list
+    summary: List the children of a OneDrive or SharePoint folder
+    access: read
+    target:
+      type: m365_drive_item
+      id_pattern: '^(?P<drive>[A-Za-z0-9!_-]{1,128}):(?P<item>root|[A-Za-z0-9!_-]{1,128})$'
+      account: none
+    params: {}
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: m365_list_drive_items
+        route: m365-drive-item-list
+        description: >-
+          List the children of a folder in a OneDrive or SharePoint drive,
+          by the drive id and the folder's item id, or root for the drive's
+          top folder.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [drive_id, item_id]
+          properties:
+            drive_id:
+              type: string
+              description: The drive id
+              pattern: '^[A-Za-z0-9!_-]{1,128}$'
+            item_id:
+              type: string
+              description: The folder's item id, or root
+              pattern: '^(root|[A-Za-z0-9!_-]{1,128})$'
+        extract:
+          target_id: input.drive_id + ':' + input.item_id
+          params: {}
+    dispatch:
+      http:
+        method: GET
+        path: /v1.0/drives/{target.id.drive}/items/{target.id.item}/children
+
+  - operation: m365.drive.item.invite
+    summary: Invite people to a OneDrive or SharePoint item
+    access: write
+    target:
+      type: m365_drive_item
+      id_pattern: '^(?P<drive>[A-Za-z0-9!_-]{1,128}):(?P<item>[A-Za-z0-9!_-]{1,128})$'
+      account: none
+    params:
+      recipients:
+        type: identifier_list
+        material: true
+        required: true
+        max_items: 50
+        pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+        # Each recipient's domain is an email_domain share (G0 M31 D958).
+        share: email_recipients
+      role:
+        type: enum
+        material: true
+        required: true
+        values: [read, write]
+    constraints:
+      - kind: target_set
+      - kind: allowed_values
+        param: recipients
+      - kind: allowed_values
+        param: role
+    effects:
+      - kind: file.share
+        description: Gives each recipient access to the item, signed in
+    reversibility: irreversible
+    dedupe_key: [target.id, params.recipients, params.role]
+    retry:
+      safe: false
+      # An irreversible share is never retried: an unknown outcome goes to
+      # reconciliation (HR-007, G0 M34 D1002).
+      on_unknown: reconcile
+    approval:
+      title: Invite people to drive item {target.id}
+      fields:
+        - target.id
+        - params.recipients
+        - params.role
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: m365_invite_to_drive_item
+        route: m365-drive-item-invite
+        description: >-
+          Invite at most 50 people, by email address, to a OneDrive or
+          SharePoint item, by the drive id and the item id, with read or
+          write access. Recipients must sign in to open it.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [drive_id, item_id, recipients, role]
+          properties:
+            drive_id:
+              type: string
+              description: The drive id
+              pattern: '^[A-Za-z0-9!_-]{1,128}$'
+            item_id:
+              type: string
+              description: The item id
+              pattern: '^[A-Za-z0-9!_-]{1,128}$'
+            recipients:
+              type: array
+              description: The recipients' email addresses
+              maxItems: 50
+              items:
+                type: string
+                pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+            role:
+              type: string
+              description: read or write
+              enum: [read, write]
+        extract:
+          target_id: input.drive_id + ':' + input.item_id
+          params:
+            recipients: input.recipients
+            role: input.role
+    dispatch:
+      http:
+        method: POST
+        path: /v1.0/drives/{target.id.drive}/items/{target.id.item}/invite
+        body:
+          # One recipient object per address and the one role as the
+          # roles array (G0 M31 D950 a, b).
+          recipients[*][email]: params.recipients
+          roles[0]: params.role
+          requireSignIn: bool.true
+
+  - operation: m365.drive.item.create_link
+    summary: Create a sharing link to a OneDrive or SharePoint item
+    access: write
+    target:
+      type: m365_drive_item
+      id_pattern: '^(?P<drive>[A-Za-z0-9!_-]{1,128}):(?P<item>[A-Za-z0-9!_-]{1,128})$'
+      account: none
+    params:
+      type:
+        type: enum
+        material: true
+        required: true
+        values: [view, edit]
+      scope:
+        type: enum
+        material: true
+        required: true
+        values: [anonymous, organization]
+        # An anonymous link is a public share; an organization link shares
+        # to no one outside (G0 M31 D958).
+        share: m365_link_scope
+    constraints:
+      - kind: target_set
+      - kind: allowed_values
+        param: type
+      - kind: allowed_values
+        param: scope
+    effects:
+      - kind: file.share
+        description: Creates a link that opens the item for whoever holds it within the link's scope
+    reversibility: irreversible
+    dedupe_key: [target.id, params.type, params.scope]
+    retry:
+      safe: false
+      # An irreversible share is never retried: an unknown outcome goes to
+      # reconciliation (HR-007, G0 M34 D1002).
+      on_unknown: reconcile
+    approval:
+      title: Create a {params.scope} {params.type} link to drive item {target.id}
+      fields:
+        - target.id
+        - params.type
+        - params.scope
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: m365_create_sharing_link
+        route: m365-drive-item-create-link
+        description: >-
+          Create a sharing link to a OneDrive or SharePoint item, by the
+          drive id and the item id: a view or edit link, for anyone with the
+          link (anonymous) or for people in the organization.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [drive_id, item_id, type, scope]
+          properties:
+            drive_id:
+              type: string
+              description: The drive id
+              pattern: '^[A-Za-z0-9!_-]{1,128}$'
+            item_id:
+              type: string
+              description: The item id
+              pattern: '^[A-Za-z0-9!_-]{1,128}$'
+            type:
+              type: string
+              description: view or edit
+              enum: [view, edit]
+            scope:
+              type: string
+              description: anonymous (anyone with the link) or organization
+              enum: [anonymous, organization]
+        extract:
+          target_id: input.drive_id + ':' + input.item_id
+          params:
+            type: input.type
+            scope: input.scope
+    dispatch:
+      http:
+        method: POST
+        path: /v1.0/drives/{target.id.drive}/items/{target.id.item}/createLink
+        body:
+          type: params.type
+          scope: params.scope

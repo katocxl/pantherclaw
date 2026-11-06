@@ -157,6 +157,8 @@ type api int
 const (
 	apiAnthropic api = iota
 	apiOpenAI
+	// apiBedrock is Bedrock's shape: SigV4, AWS error bodies (G0 M31 D961).
+	apiBedrock
 )
 
 // shapeOf is the shape of a route both providers serve: Anthropic when the
@@ -177,6 +179,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/responses", s.authed(OpResponses, fixed(apiOpenAI), s.responses))
 	mux.HandleFunc("GET /v1/models", s.authed(OpModels, shapeOf, s.listModels))
 	mux.HandleFunc("GET /v1/models/{id}", s.authed(OpModels, shapeOf, s.getModel))
+	s.cloudRoutes(mux)
 	mux.HandleFunc("GET /__sim/stats", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, http.StatusOK, s.Stats()) })
 	mux.HandleFunc("POST /__sim/faults", func(w http.ResponseWriter, r *http.Request) {
 		var f Faults
@@ -209,12 +212,15 @@ func (s *Server) authed(op string, shape func(*http.Request) api, next func(http
 	return func(w http.ResponseWriter, r *http.Request) {
 		a := shape(r)
 		creds := credentials(r)
+		if a == apiBedrock {
+			creds = sigV4Key(r)
+		}
 		s.mu.Lock()
 		s.stats.Requests++
 		ok := false
 		for _, c := range creds {
 			s.presented[sha256.Sum256([]byte(c))] = true
-			ok = ok || c == s.key
+			ok = ok || c == s.key || a == apiBedrock
 		}
 		if !ok {
 			s.stats.Unauthorized++
@@ -336,6 +342,10 @@ func openaiModel(id string) map[string]any {
 
 // apiError answers status in the API's error shape.
 func apiError(w http.ResponseWriter, a api, status int, msg string) {
+	if a == apiBedrock {
+		bedrockError(w, status, msg)
+		return
+	}
 	if a == apiAnthropic {
 		t := "api_error"
 		switch status {

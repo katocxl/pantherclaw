@@ -195,6 +195,8 @@ type Rows struct {
 	Clamp  int
 	Access Access
 	Scope  *RecordScope
+	// Dialect is the SQL to write (G0 M31 D962); zero is Postgres.
+	Dialect Dialect
 }
 
 // Aggregate is a postgres.rows.aggregate query.
@@ -207,6 +209,8 @@ type Aggregate struct {
 	Clamp    int
 	Access   Access
 	Scope    *RecordScope
+	// Dialect is the SQL to write (G0 M31 D962); zero is Postgres.
+	Dialect Dialect
 }
 
 // Output is one answer column: either the next selected SQL column, read
@@ -252,9 +256,10 @@ type builder struct {
 	acc   Access
 	args  []any
 	where []string
+	d     Dialect
 }
 
-func newBuilder(m Manifest, ref string, acc Access) (*builder, error) {
+func newBuilder(m Manifest, ref string, acc Access, d Dialect) (*builder, error) {
 	n, err := m.Normalized()
 	if err != nil {
 		return nil, err
@@ -271,13 +276,16 @@ func newBuilder(m Manifest, ref string, acc Access) (*builder, error) {
 			return nil, queryErr("unknown class %q", c)
 		}
 	}
-	return &builder{m: &n, t: t, acc: acc}, nil
+	if d != DialectPostgres && d != DialectSnowflake {
+		return nil, queryErr("unknown dialect")
+	}
+	return &builder{m: &n, t: t, acc: acc, d: d}, nil
 }
 
 // col is a column qualified by its table, so ORDER BY and GROUP BY bind
 // to the typed source column and never to a ::text output column of the
 // same name (D72).
-func (b *builder) col(c Column) string { return quote(b.t.Schema, b.t.Name, c.Name) }
+func (b *builder) col(c Column) string { return b.ident(b.t.Schema, b.t.Name, c.Name) }
 
 // selected is a value expression as the statement returns it.
 func selected(expr string) string {
@@ -286,6 +294,9 @@ func selected(expr string) string {
 
 func (b *builder) arg(v any) string {
 	b.args = append(b.args, v)
+	if b.d == DialectSnowflake {
+		return "?"
+	}
 	return "$" + strconv.Itoa(len(b.args))
 }
 
@@ -321,7 +332,7 @@ func (b *builder) filters(fs []Filter) error {
 		if err != nil {
 			return err
 		}
-		col, typ := b.col(c), sqlType[c.Type]
+		col := b.col(c)
 		hasValue, hasValues := f.Value != nil, f.Values != nil
 		switch f.Op {
 		case OpEq, OpNe, OpLt, OpLe, OpGt, OpGe:
@@ -331,7 +342,7 @@ func (b *builder) filters(fs []Filter) error {
 			if err := checkValue(c, *f.Value); err != nil {
 				return err
 			}
-			b.where = append(b.where, fmt.Sprintf("%s %s %s::text::%s", col, comparison[f.Op], b.arg(*f.Value), typ))
+			b.where = append(b.where, fmt.Sprintf("%s %s %s", col, comparison[f.Op], b.typed(*f.Value, c.Type)))
 		case OpIn:
 			if hasValue || len(f.Values) == 0 || len(f.Values) > MaxInValues {
 				return queryErr("in on %s takes 1..%d values", c.Name, MaxInValues)
@@ -341,7 +352,7 @@ func (b *builder) filters(fs []Filter) error {
 					return err
 				}
 			}
-			b.where = append(b.where, fmt.Sprintf("%s = ANY(%s::text[]::%s[])", col, b.arg(slices.Clone(f.Values)), typ))
+			b.where = append(b.where, b.anyOf(col, f.Values, c.Type))
 		case OpIsNull, OpNotNull:
 			if hasValue || hasValues {
 				return queryErr("%s on %s takes no value", f.Op, c.Name)
@@ -357,7 +368,7 @@ func (b *builder) filters(fs []Filter) error {
 			if err := checkValue(c, *f.Value); err != nil {
 				return err
 			}
-			b.where = append(b.where, fmt.Sprintf(`%s LIKE %s::text ESCAPE E'\\'`, col, b.arg(LikePrefix(*f.Value))))
+			b.where = append(b.where, b.like(col, LikePrefix(*f.Value)))
 		default:
 			return queryErr("unknown filter operator %q", f.Op)
 		}
@@ -384,7 +395,7 @@ func (b *builder) scope(s *RecordScope) error {
 			return &Error{Code: CodeScopeUnsupported, Detail: "record scope: " + err.Error()}
 		}
 	}
-	b.where = append(b.where, fmt.Sprintf("%s = ANY(%s::text[]::%s[])", b.col(c), b.arg(append([]string{}, s.Values...)), sqlType[c.Type]))
+	b.where = append(b.where, b.anyOf(b.col(c), s.Values, c.Type))
 	return nil
 }
 
@@ -415,8 +426,9 @@ func (b *builder) limit(request, clamp int) (int, error) {
 }
 
 func (b *builder) from() string {
-	if b.t.Partitioned {
-		return " FROM " + quote(b.t.Schema, b.t.Name)
+	if b.t.Partitioned || b.d == DialectSnowflake {
+		// Snowflake has no table inheritance, so no ONLY.
+		return " FROM " + b.ident(b.t.Schema, b.t.Name)
 	}
 	return " FROM ONLY " + quote(b.t.Schema, b.t.Name)
 }
@@ -425,7 +437,7 @@ func (b *builder) from() string {
 // column whose class may not be read is not selected at all; the answer
 // carries a placeholder in its place.
 func BuildRows(m Manifest, q Rows) (*Statement, error) {
-	b, err := newBuilder(m, q.Table, q.Access)
+	b, err := newBuilder(m, q.Table, q.Access, q.Dialect)
 	if err != nil {
 		return nil, err
 	}
@@ -444,7 +456,7 @@ func BuildRows(m Manifest, q Rows) (*Statement, error) {
 		}
 		o := Output{Name: c.Name, Type: c.Type}
 		if b.acc.Readable(c) {
-			sel = append(sel, selected(b.col(c)))
+			sel = append(sel, b.sel(b.col(c), c.Type))
 		} else {
 			o.Redacted = c.Class
 		}
@@ -484,7 +496,7 @@ func BuildRows(m Manifest, q Rows) (*Statement, error) {
 // Groups with fewer than the manifest's min_group_size rows are never
 // returned (HR-312): the HAVING clause drops them in the database.
 func BuildAggregate(m Manifest, q Aggregate) (*Statement, error) {
-	b, err := newBuilder(m, q.Table, q.Access)
+	b, err := newBuilder(m, q.Table, q.Access, q.Dialect)
 	if err != nil {
 		return nil, err
 	}
@@ -502,7 +514,7 @@ func BuildAggregate(m Manifest, q Aggregate) (*Statement, error) {
 			return nil, err
 		}
 		group = append(group, b.col(c))
-		sel = append(sel, selected(b.col(c)))
+		sel = append(sel, b.sel(b.col(c), c.Type))
 		st.Output = append(st.Output, Output{Name: c.Name, Type: c.Type})
 	}
 	for i, ms := range q.Measures {
@@ -513,7 +525,7 @@ func BuildAggregate(m Manifest, q Aggregate) (*Statement, error) {
 		if err != nil {
 			return nil, err
 		}
-		sel = append(sel, selected(expr))
+		sel = append(sel, b.sel(expr, typ))
 		st.Output = append(st.Output, Output{Name: ms.Label(), Type: typ})
 	}
 	if err := b.filters(q.Filters); err != nil {

@@ -89,14 +89,10 @@ func escape3986(s string) string {
 	return b.String()
 }
 
-// nestJSON turns a JSON body's bracket keys into nested objects: a[b][c]
-// is {"a":{"b":{"c":…}}} (G0 M20 D260). The keys are the reviewed
-// package's, checked again here, so no value ever adds a key; a flat key
-// stays as it is.
-func nestJSON(obj map[string]any) (map[string]any, error) { return nest(obj, false) }
-
-// nest builds nestJSON's object; with lists, a key ending in [] is a list of
-// its one value (an aws-json body, D283).
+// nest turns bracket keys into nested objects: a[b][c] is
+// {"a":{"b":{"c":…}}} (G0 M20 D260); with lists, a key ending in [] is a
+// list of its one value (an aws-json body, D283). JSON bodies use
+// nestJSONBody (G0 M31 D950).
 func nest(obj map[string]any, lists bool) (map[string]any, error) {
 	keys := slices.Sorted(maps.Keys(obj))
 	if err := defs.CheckFormKeys(keys); err != nil {

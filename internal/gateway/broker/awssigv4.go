@@ -111,6 +111,29 @@ func SessionPolicy(service, action, resource string) (string, error) {
 	return string(b), err
 }
 
+var (
+	bedrockProfileARNRe = regexp.MustCompile(`^arn:aws(-[a-z-]{1,16})?:bedrock:[a-z0-9-]{1,32}:\*:inference-profile/` +
+		`(us-gov|us|eu|apac|global|jp|au)\.[a-z0-9-]{1,32}\.[A-Za-z0-9._:-]{1,200}$`)
+	bedrockAnyRegionModelARNRe = regexp.MustCompile(`^arn:aws(-[a-z-]{1,16})?:bedrock:\*::foundation-model/[a-z0-9-]{1,32}\.[A-Za-z0-9._:-]{1,200}$`)
+)
+
+// BedrockProfilePolicy is the session policy of one Bedrock action through
+// a system inference profile (G0 M31 D961a): Allow exactly
+// "bedrock:<action>" on the profile (its region, any account) and its
+// foundation model (any region), the only wildcards it takes. Anything
+// else is refused.
+func BedrockProfilePolicy(service, action string, resources []string) (string, error) {
+	if service != "bedrock" || !awsActionRe.MatchString(action) || len(resources) != 2 ||
+		!bedrockProfileARNRe.MatchString(resources[0]) || !bedrockAnyRegionModelARNRe.MatchString(resources[1]) {
+		return "", ErrAWSAction
+	}
+	b, err := json.Marshal(map[string]any{
+		"Version":   "2012-10-17",
+		"Statement": []map[string]any{{"Effect": "Allow", "Action": service + ":" + action, "Resource": resources}},
+	}, json.Deterministic(true))
+	return string(b), err
+}
+
 // AssumeRole signs an sts:AssumeRole of the credential's role with its base
 // key and sends it through s (an egress client pinned to the STS host,
 // which the seal must bind), with the session policy and the shortest

@@ -951,6 +951,9 @@ func targetRef(def *defs.Definition, body, secret []byte) string {
 func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *defs.Definition, target actionir.Target,
 	req *http.Request, c broker.Sender, purpose string,
 ) (secret []byte, release func(), access func() *pb.CredentialAccess, err error) {
+	if err := e.checkSubjectTarget(ctx, conn, def, target); err != nil { // G0 M31 D956a
+		return nil, nil, nil, err
+	}
 	switch kind := conn.Credential.GetKind(); kind {
 	case credentials.KindGitHubApp:
 		if err := CheckCredentialPattern(def, kind, nil); err != nil {
@@ -963,6 +966,36 @@ func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *
 			return nil, nil, nil, err
 		}
 		tok, err := e.clientToken(ctx, conn)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if err := tok.Place(req); err != nil {
+			tok.Clear()
+			return nil, nil, nil, err
+		}
+		return tok.Token(), tok.Clear, func() *pb.CredentialAccess { return nil }, nil
+	case credentials.KindGoogleServiceAccount:
+		// A token minted for this dispatch from a signed assertion is
+		// placed, never the key (G0 M31 D952, HR-721).
+		if err := CheckCredentialPattern(def, kind, nil); err != nil {
+			return nil, nil, nil, err
+		}
+		tok, err := e.serviceAccountToken(ctx, conn)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if err := tok.Place(req); err != nil {
+			tok.Clear()
+			return nil, nil, nil, err
+		}
+		return tok.Token(), tok.Clear, func() *pb.CredentialAccess { return nil }, nil
+	case credentials.KindSnowflakeKeypair:
+		// A key-pair JWT signed for this dispatch is placed, never the key
+		// (G0 M31 D962, HR-726).
+		if err := CheckCredentialPattern(def, kind, nil); err != nil {
+			return nil, nil, nil, err
+		}
+		tok, err := e.snowflakeToken(ctx, conn)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -1047,6 +1080,9 @@ func (e *Engine) credentialFailed(ctx context.Context, r Result, conn *control.C
 	var granted []func(*pb.RecordExecutionRequest)
 	if errors.Is(err, ErrCredentialPattern) {
 		code = CodeCredentialPattern
+	}
+	if errors.Is(err, ErrNotCredentialSubject) {
+		code = CodeTargetNotCredentialSubject // G0 M31 D956a
 	}
 	if sm := (*broker.ScopeMismatchError)(nil); errors.As(err, &sm) {
 		code = CodeScopeMismatch

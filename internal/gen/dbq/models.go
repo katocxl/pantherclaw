@@ -4230,6 +4230,24 @@ type PcSlackDirectMessage struct {
 	UpdatedAt       time.Time
 }
 
+type PcSnowflakeConnection struct {
+	OrgID               ids.OrgID
+	ConnectionID        ids.UUID
+	Account             string
+	Warehouse           string
+	DatabaseName        string
+	SchemaName          string
+	Config              []byte
+	Digest              []byte
+	Proposed            []byte
+	ProposedDigest      []byte
+	ProposedAt          *time.Time
+	ConfirmedBy         *ids.UUID
+	ConfirmedCredential *ids.UUID
+	ConfirmedAt         *time.Time
+	UpdatedAt           time.Time
+}
+
 type PcSoarRequest struct {
 	OrgID          ids.OrgID
 	IdempotencyKey string
