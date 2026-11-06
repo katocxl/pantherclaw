@@ -213,9 +213,10 @@ func deny(w http.ResponseWriter, status int, class dispatch.Class, code, reason 
 // serves reports whether the face serves a connection, and when the
 // connection exists but is not one an SDK reaches directly, why.
 func serves(conn *control.Connection) (ok, useGateway bool) {
-	if conn != nil && (conn.GetKind() == "postgres" || conn.GetKind() == "a2a") {
-		// The gateway alone queries a database or calls a peer agent
-		// (G0 M14 D17, D31): an SDK uses the gateway's own face.
+	if conn != nil && (conn.GetKind() == "postgres" || conn.GetKind() == "a2a" || conn.GetKind() == dispatch.KindModel) {
+		// The gateway alone queries a database, calls a peer agent or a
+		// model (G0 M14 D17, D31; G0 M29 D811): an SDK uses the gateway's
+		// own face.
 		return false, true
 	}
 	if conn == nil || conn.Mapper == nil || (conn.GetKind() != "http" && conn.GetKind() != "mcp") {

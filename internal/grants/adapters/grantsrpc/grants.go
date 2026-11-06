@@ -319,6 +319,7 @@ func (s *Grants) GetBudgetState(ctx context.Context, req *pantherclawv1.GetBudge
 			OwnerKind: a.OwnerKind, OwnerId: a.OwnerID.String(), Rule: a.Rule, Grouping: a.Grouping, Period: a.Period,
 			Currency: a.Currency, Reserved: a.Reserved.String(), Spent: a.Spent.String(),
 			MaxCount: a.MaxCount, ReservedCount: a.ReservedCount, SpentCount: a.SpentCount,
+			Unit: a.Unit, // G0 M29 D821
 		}
 		if a.Period != "" && a.Period != "none" {
 			b.PeriodStart = ts(a.PeriodStart)

@@ -7,6 +7,7 @@ package pantherclaw.v1;
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/model_usage.proto";
 
 // InvestigationService explains runs and actions from recorded evidence
 // (G0 M10 D20; F239, F241, F248, F232, F284, F234; HR-247). Every row is
@@ -532,6 +533,26 @@ message RunBudgetLine {
   // What is left of the rule's amount limit in its current period; empty
   // for a counter, a rule without an amount limit or an earlier period.
   string remaining = 8;
+  // What the amounts count (G0 M29 D824): "currency", or "tokens" for a
+  // token rule; empty for a counter.
+  string unit = 9;
+  // The rule's cap (decimal string): its amount limit, or its token cap;
+  // empty for a counter or a rule without one.
+  string limit = 10;
+}
+
+// RunTokenEstimate is a cost estimate of the run's model calls from prices
+// the organization set on its model connections (G0 M29 D824; HR-698):
+// an estimate, not a bill. Team and above.
+message RunTokenEstimate {
+  // One per price currency.
+  repeated Estimate estimates = 1;
+  // Model calls with a price, counted in the estimates.
+  int64 priced_calls = 2;
+  // Model calls without a price, left out of the estimates.
+  int64 unpriced_calls = 3;
+  // Always "estimate".
+  string label = 4;
 }
 
 // RunRouteCoverage is a coverage snapshot the run's decisions claimed.
@@ -593,4 +614,8 @@ message InspectRunResponse {
   repeated InspectSection omitted_sections = 10;
   // The caller's scope is narrower than the organization.
   bool scope_limited = 11;
+  // A cost estimate of the run's model calls, with the budget section on
+  // Team and above (G0 M29 D824); unset on Community or without the budget
+  // section.
+  RunTokenEstimate token_estimate = 12;
 }

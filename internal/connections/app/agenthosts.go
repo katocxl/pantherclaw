@@ -17,7 +17,7 @@ const maxAgentHosts = 16
 
 // ErrAgentHosts is an invalid list of agent hosts.
 var ErrAgentHosts = pcerr.New(pcerr.InvalidArgument, "AGENT_HOSTS_INVALID",
-	"agent hosts are up to 16 distinct lowercase host names, no IP address, and only on http and mcp connections")
+	"agent hosts are up to 16 distinct lowercase host names, no IP address, and only on http, mcp and model connections")
 
 var agentHostRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`)
 
@@ -29,7 +29,7 @@ func checkAgentHosts(kind string, hosts []string) ([]string, error) {
 	if len(hosts) == 0 {
 		return []string{}, nil
 	}
-	if (kind != KindHTTP && kind != KindMCP) || len(hosts) > maxAgentHosts {
+	if (kind != KindHTTP && kind != KindMCP && kind != KindModel) || len(hosts) > maxAgentHosts {
 		return nil, ErrAgentHosts
 	}
 	for i, h := range hosts {

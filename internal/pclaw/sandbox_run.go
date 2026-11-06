@@ -24,6 +24,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"github.com/katocxl/pantherclaw/internal/gateway/outbound"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
@@ -31,6 +32,7 @@ import (
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/sandbox"
 	"github.com/katocxl/pantherclaw/internal/sandbox/docker"
+	"github.com/katocxl/pantherclaw/internal/sandbox/edge"
 	"github.com/katocxl/pantherclaw/internal/sandbox/workspace"
 	"github.com/katocxl/pantherclaw/internal/sim/canary"
 )
@@ -51,7 +53,8 @@ import (
 func init() {
 	commands["sandbox run"] = command{
 		usage: "sandbox run --agent ID --connection ID... --grant ID --gateway URL --image REF@sha256:… [--edge-image REF] [--probe-image REF] " +
-			"[--gateway-addr HOST:PORT] [--workspace DIR] [--out DIR] [--canary-listen ADDR] [--ttl DURATION] [-- COMMAND ARGS...]",
+			"[--gateway-addr HOST:PORT] [--workspace DIR] [--out DIR] [--canary-listen ADDR] [--ttl DURATION] [--max-tokens N] [--env NAME=VALUE]... " +
+			"[-- COMMAND ARGS...]",
 		run: sandboxRun,
 	}
 }
@@ -61,6 +64,11 @@ type sandboxRunFlags struct {
 	connections                                                                                    list
 	ttl                                                                                            time.Duration
 	args                                                                                           []string
+	// maxTokens is the run's token cap, 0 for none (G0 M29 D822).
+	maxTokens int64
+	// env are the agent's extra NAME=VALUE entries (G0 M29 D823): checked
+	// here, never logged and never sent to the server.
+	env list
 }
 
 func parseSandboxRun(a *app, args []string) (sandboxRunFlags, error) {
@@ -81,6 +89,8 @@ func parseSandboxRun(a *app, args []string) (sandboxRunFlags, error) {
 	fs.StringVar(&f.out, "out", "", "an empty or new directory that gets the agent's changes as a patch (changes.patch, changes.txt, binary/)")
 	fs.StringVar(&f.canaryListen, "canary-listen", "127.0.0.1", "where the canary listens on this host")
 	fs.DurationVar(&f.ttl, "ttl", 2*time.Hour, "how long the session lasts (at most 24h)")
+	fs.Int64Var(&f.maxTokens, "max-tokens", 0, "the run's token cap across its model calls (1 to 10^12; default: none)")
+	fs.Var(&f.env, "env", "an extra NAME=VALUE for the agent (repeat, at most 64; never a credential)")
 	if err := fs.Parse(args); err != nil {
 		return f, err
 	}
@@ -88,7 +98,87 @@ func parseSandboxRun(a *app, args []string) (sandboxRunFlags, error) {
 	if f.agent == "" || len(f.connections) == 0 || f.grant == "" || f.gateway == "" || f.image == "" || f.edgeImage == "" || f.probeImage == "" {
 		return f, errUsage
 	}
+	if f.maxTokens < 0 || f.maxTokens > maxRunTokens {
+		return f, errors.New("--max-tokens must be between 1 and 10^12")
+	}
+	if err := checkAgentEnv(f.env); err != nil {
+		return f, err
+	}
 	return f, nil
+}
+
+// maxRunTokens is the largest run token cap (G0 M29 D822; runs.proto).
+const maxRunTokens = 1_000_000_000_000
+
+// maxAgentEnv bounds --env (G0 M29 D823).
+const (
+	maxAgentEnv      = 64
+	maxAgentEnvValue = 4096
+)
+
+// refusedAgentEnv are the names --env may not set, compared case-
+// insensitively: the proxy and trust variables the sandbox sets, HOME, and
+// the model key variables (G0 M29 D823, HR-697).
+var refusedAgentEnv = []string{
+	"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "SSL_CERT_FILE", "SSL_CERT_DIR", "CURL_CA_BUNDLE",
+	"REQUESTS_CA_BUNDLE", "NODE_EXTRA_CA_CERTS", "GIT_SSL_CAINFO", "NODE_TLS_REJECT_UNAUTHORIZED", "NODE_USE_ENV_PROXY",
+	"HOME", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "OPENAI_ADMIN_KEY", "AZURE_OPENAI_API_KEY",
+}
+
+// checkAgentEnv checks --env entries (G0 M29 D823). An error names the
+// variable and never repeats its value.
+func checkAgentEnv(entries []string) error {
+	if len(entries) > maxAgentEnv {
+		return fmt.Errorf("--env: at most %d entries", maxAgentEnv)
+	}
+	for _, e := range entries {
+		name, value, ok := strings.Cut(e, "=")
+		if !ok || !agentEnvName(name) {
+			return errors.New("--env takes NAME=VALUE with NAME of letters, digits and _ (not starting with a digit, at most 128)")
+		}
+		upper := strings.ToUpper(name)
+		if slices.Contains(refusedAgentEnv, upper) || strings.HasPrefix(upper, "PC_") || strings.HasPrefix(upper, "PANTHERCLAW_") {
+			return fmt.Errorf("--env %s: the sandbox sets this variable itself", name)
+		}
+		if len(value) > maxAgentEnvValue || strings.ContainsAny(value, "\x00\r\n") {
+			return fmt.Errorf("--env %s: the value must be at most %d bytes on one line", name, maxAgentEnvValue)
+		}
+		if credentialValue(value) {
+			return fmt.Errorf("--env %s: the value looks like a credential; the sandbox never passes one to the agent", name)
+		}
+	}
+	return nil
+}
+
+// credentialValue reports whether an --env value holds a credential
+// anywhere (G0 M29 D823, D1214): a known format found by the gateway's
+// scanner, a PEM block, or a token the edge's detector names, after a
+// scheme, a prefix, "key=" or in URL userinfo.
+func credentialValue(v string) bool {
+	if outbound.Format(v) != "" || strings.Contains(v, "-----BEGIN") {
+		return true
+	}
+	for _, tok := range strings.FieldsFunc(v, func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '=' || r == ':' || r == '@' || r == '/' || r == '?' || r == '&' || r == ',' || r == ';' || r == '"' || r == '\''
+	}) {
+		if edge.TokenKind(tok) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// agentEnvName matches ^[A-Za-z_][A-Za-z0-9_]{0,127}$.
+func agentEnvName(s string) bool {
+	if s == "" || len(s) > 128 || (s[0] >= '0' && s[0] <= '9') {
+		return false
+	}
+	for _, r := range s {
+		if r != '_' && (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9') {
+			return false
+		}
+	}
+	return true
 }
 
 // gatewayAddr is the address the edge dials for the gateway: the given one,
@@ -202,6 +292,12 @@ func runSandboxInto(ctx context.Context, a *app, f sandboxRunFlags, x sandboxExt
 		return err
 	}
 	session := started.GetSession().GetId()
+	if len(started.GetModelConnections()) > 0 && x.placeholder == "" {
+		// G0 M29 D815: the agent's model key variables hold one per-session
+		// placeholder, never a key; the edge drops it without reporting it.
+		x.placeholder = "pc-placeholder-" + rand.Text()
+		x.env = append([]string{"ANTHROPIC_API_KEY=" + x.placeholder, "OPENAI_API_KEY=" + x.placeholder}, x.env...)
+	}
 	_, _ = fmt.Fprintf(a.stderr, "sandbox session %s opened (expires %s)\n", session, started.GetSession().GetExpireTime().AsTime().Format(time.RFC3339))
 	defer func() {
 		if _, err := sb.EndSession(context.WithoutCancel(ctx), &pantherclawv1.SandboxServiceEndSessionRequest{SessionId: session}); err != nil {
@@ -218,7 +314,11 @@ func runSandboxInto(ctx context.Context, a *app, f sandboxRunFlags, x sandboxExt
 	if err != nil {
 		return err
 	}
-	run, err := runs.StartRun(ctx, &pantherclawv1.StartRunRequest{AgentId: f.agent, InstanceId: &inst, GrantId: &f.grant, TaskRef: "sandbox " + session})
+	startRun := &pantherclawv1.StartRunRequest{AgentId: f.agent, InstanceId: &inst, GrantId: &f.grant, TaskRef: "sandbox " + session}
+	if f.maxTokens > 0 {
+		startRun.MaxTokens = &f.maxTokens // G0 M29 D822
+	}
+	run, err := runs.StartRun(ctx, startRun)
 	if err != nil {
 		return fmt.Errorf("starting the run: %w", err)
 	}
@@ -244,6 +344,7 @@ func runSandboxInto(ctx context.Context, a *app, f sandboxRunFlags, x sandboxExt
 		Run: run.GetRun().GetId(), KeyFile: kf, TokenFile: tokenFile, ProbeKey: probeKey, HostKey: hostKey, Canary: cn, CanaryPorts: ports,
 		HostPorts: []int{gwPort}, Dir: dir, BeforeProbe: a.beforeProbe,
 		ModelHost: x.modelHost, ModelConnection: x.modelConnection, ModelPlaceholder: x.placeholder,
+		ModelConnections: started.GetModelConnections(), // G0 M29 D814, D815, D877
 	})
 	defer func() {
 		if err := box.Close(context.WithoutCancel(ctx)); err != nil {
@@ -253,7 +354,7 @@ func runSandboxInto(ctx context.Context, a *app, f sandboxRunFlags, x sandboxExt
 	if err != nil {
 		return fmt.Errorf("starting the sandbox: %w", err)
 	}
-	if err := box.PrepareAgent(ctx, sandbox.Agent{Image: f.image, Args: f.args, Env: x.env, Workspace: f.workspace}); err != nil {
+	if err := box.PrepareAgent(ctx, sandbox.Agent{Image: f.image, Args: f.args, Env: append(slices.Clone(x.env), f.env...), Workspace: f.workspace}); err != nil {
 		return fmt.Errorf("preparing the agent: %w", err)
 	}
 	if f.workspace != "" {

@@ -46,6 +46,7 @@ Each pillar table has the columns `ID | Feature | What the backend delivers | Ph
 | M26 | Enterprise identity: IdP access, MCP client authorization, SCIM, SAML, SaaS agent discovery |
 | M27 | Agent Detection & Response: behaviour profiles, content signals, playbooks, SIEM packs, the read-only MCP server |
 | M28 | Threat map: MITRE ATLAS and ATT&CK Enterprise lanes from evidence, labels on signals and exports, signed report, Navigator export, history |
+| M29 | Model connections and token budgets: the agent reaches its model through the gateway, token caps on grants, envelopes and runs, a fake model, estimates and the monthly token report |
 | post-1.0 | Not yet scheduled to a milestone |
 
 Milestone numbers are identifiers, not delivery order. Delivery order ([ADR-0017](adr/0017-coding-agents-first-and-proven-coverage.md)): M1 … M9, M12, then the v0.1.0 preview, then M11.1, M10, M11, M14, UI, M13 and v1.0 (UI moved ahead of M13 by the founder on 2026-10-20).
@@ -897,6 +898,23 @@ The map shows PantherClaw's controls per MITRE technique and the evidence for th
 | F974 | Pinned MITRE catalogue | ATT&CK Enterprise and ATLAS pinned by version and sha256, ids, names and tactics only, updated by reviewed pull request; `MITRE_MAPPING.md` generated and checked in `task check`. | Next | Community | M28 | new |
 | F975 | Console threat map | Evidence › Threat map: tabs per framework, the matrix with lane marks and legend, tactic counts, filters, a technique drawer with gaps; exports on Team, history on Business. | Next | Community | M28 | new |
 | F976 | Console chips and agent link | Technique chips on alert, incident, case, range result and detection rule views; the agent page links to that agent's map. | Next | Community | M28 | new |
+
+### M29 rows: Model connections and token budgets
+
+An agent reaches its model through the gateway, which holds the key, checks each call and counts tokens against caps. Estimates come only from prices the organization sets and are never a bill ([G0 M29](g0/M29.md), [ADR-0056](adr/0056-model-connections.md), [model connections runbook](runbooks/model-connections.md)). The gateway checks the prompt as strict JSON and forwards exactly what it checked, a written exception to HR-075 for model connections only (HR-691). PantherClaw captures no prompt or reply; records keep metadata and token counts. Caps are counted in tokens, reserved by estimate before a call and settled at the usage the provider reported. Model connections, token caps, the run cap, `--env`, the fake model and every token view are on every edition; cost estimates and the monthly token report need Team. The console rows (F989, and the console parts of F987 and F988) come in a private stream after the API is on `main`.
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F980 | Model connections | Connection kind `model` with packages `pc.anthropic` and `pc.openai`. The gateway holds and places the key, decides each call on metadata and a body hash, scans the prompt and captures nothing. | Next | Community | M29 | new |
+| F981 | Model route limits | Model connections take 16 MiB each way, stream answers and allow 10 minutes a call, on the edge and the gateway. Refusals come in the provider's error shape with the agent-safe explanation. | Next | Community | M29 | new |
+| F982 | Token budgets | `max_tokens` budget rules on grants and guardrail envelopes: reserve by estimate before a call, refuse over the cap with `TOKEN_BUDGET_EXHAUSTED`, settle at reported usage. Unknown outcomes keep their reservation. | Next | Community | M29 | F110, F113, F114 |
+| F983 | Run token cap | `StartRun.max_tokens` and `pclaw sandbox run --max-tokens` add a run-level token cap that only restricts. | Next | Community | M29 | F110 |
+| F984 | Sandbox model settings | `pclaw sandbox run --env` refuses proxy, CA, key and PantherClaw names and credential values; a per-session key placeholder; `NODE_USE_ENV_PROXY` for Node's fetch. | Next | Community | M29 | new |
+| F985 | Fake model | `pantherclaw-sim model` on 127.0.0.1:9103: Anthropic and OpenAI shapes, streams, usage numbers and faults by model id; range scenarios RT-190..RT-197. No test spends a token. | Next | Community | M29 | PN-009.3 |
+| F986 | Token views | Budget lines with unit and cap in the run inspector, explanations, receipts and the approval display (model, max tokens, input size, provider-side tools; never prompt text). | Next | Community | M29 | F113, F227 |
+| F987 | Cost estimates | Organization-set prices per million tokens on a model connection give an estimate per call and per run, labelled an estimate. No price list ships. | Next | Team | M29 | new |
+| F988 | Monthly token report | `GetTokenReport` and `pclaw tokens report`: one UTC month's calls and tokens by team, agent, connection or model, with estimates and the fixed statement. | Next | Team | M29 | new |
+| F989 | Console token views | Console run and approval token lines, model connection settings (max output tokens, provider-side tools, prices on Team) and the monthly token report page on Team. | Next | Community | M29 | new |
 
 ## Product boundaries (non-goals, kept verbatim in spirit)
 

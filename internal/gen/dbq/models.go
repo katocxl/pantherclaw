@@ -931,6 +931,7 @@ type PcBudgetAccount struct {
 	ReservedCount int32
 	SpentCount    int32
 	CreatedAt     time.Time
+	Unit          string
 }
 
 type PcBudgetLedger struct {
@@ -2904,6 +2905,19 @@ type PcModelCall struct {
 	FinishedAt     *time.Time
 }
 
+type PcModelConnection struct {
+	OrgID              ids.OrgID
+	ConnectionID       ids.UUID
+	MaxOutputTokens    int64
+	AllowedServerTools []string
+	PriceCurrency      *string
+	PriceInput         *money.Decimal
+	PriceOutput        *money.Decimal
+	PriceCacheRead     *money.Decimal
+	PriceCacheWrite    *money.Decimal
+	UpdatedAt          time.Time
+}
+
 type PcModelDraft struct {
 	OrgID       ids.OrgID
 	VersionID   ids.UUID
@@ -2927,6 +2941,27 @@ type PcModelSetting struct {
 	EnabledBy         *ids.UUID
 	EnabledCredential *ids.UUID
 	UpdatedAt         time.Time
+}
+
+type PcModelUsage struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	TransactionID    ids.UUID
+	RunID            *ids.UUID
+	AgentID          *ids.UUID
+	TeamID           *ids.UUID
+	ConnectionID     ids.UUID
+	Operation        string
+	Model            string
+	Outcome          string
+	Reported         bool
+	InputTokens      int64
+	OutputTokens     int64
+	CacheReadTokens  int64
+	CacheWriteTokens int64
+	Estimate         *money.Decimal
+	EstimateCurrency *string
+	RecordedAt       time.Time
 }
 
 type PcNotification struct {
@@ -3743,6 +3778,7 @@ type PcReservation struct {
 	CreatedAt     time.Time
 	SettledAt     *time.Time
 	Pending       bool
+	SettledAmount *money.Decimal
 }
 
 type PcResponseAction struct {
@@ -3895,6 +3931,8 @@ type PcRun struct {
 	Simulated             bool
 	AutomationExecutionID *ids.UUID
 	ScopeOperations       []string
+	MaxTokens             pgtype.Int8
+	TokenCapRunID         *ids.UUID
 }
 
 type PcSaasScanRun struct {

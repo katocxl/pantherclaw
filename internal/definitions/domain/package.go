@@ -286,6 +286,10 @@ func (d *Definition) validateMapping(i int) error {
 	if !actionir.ValidRoute(m.Route) {
 		return invalid("%s: route %q", at, m.Route)
 	}
+	if d.IsModel() {
+		// A model call's params come from the model API parser (G0 M29 D813).
+		return d.validateModelMapping(at, m)
+	}
 	x := m.Extract
 	if err := expr(at+".target_id", x.TargetID, true); err != nil {
 		return err

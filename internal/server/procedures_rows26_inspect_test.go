@@ -41,7 +41,7 @@ func TestInspectBudgetsSkipsUnreadableGrants(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[account] != "65" {
+	if len(got) != 1 || got[account].Remaining != "65" {
 		t.Errorf("remaining = %v, want only %s: 65", got, account)
 	}
 	if _, err := b.Remaining(context.Background(), []ids.UUID{ids.NewV7()}); err == nil {

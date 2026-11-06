@@ -67,6 +67,8 @@ func (h *GatewayHandler) GetConfiguration(ctx context.Context, req *pb.GetConfig
 			out.Connections[len(out.Connections)-1].Postgres = cfg
 		case *pb.A2AConfig:
 			out.Connections[len(out.Connections)-1].A2A = cfg
+		case *pb.ModelConfig:
+			out.Connections[len(out.Connections)-1].Model = cfg // G0 M29 D811
 		}
 	}
 	for _, cr := range c.Credentials {
