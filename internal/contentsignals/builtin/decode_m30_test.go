@@ -38,7 +38,7 @@ func TestHR703_DecodedHitsAreFindingsWithTheirLayers(t *testing.T) {
 		name, text, kind, enc string
 	}{
 		{"base64", "note " + base64.StdEncoding.EncodeToString([]byte(phrase)), domain.KindInjectionPhrase, "base64"},
-		{"hex secret", "id " + hex.EncodeToString([]byte("AKIAABCDEFGHIJKLMNOP")), domain.KindSecretFormat, "hex"},
+		{"hex secret", "id " + hex.EncodeToString([]byte("AKIAABCDEFGHIJKLMNOP")), domain.KindSecretFormat, "hex"}, // gitleaks:allow -- a made-up AWS key-id shape the decoder must find; the format itself is what is tested
 		{"base64 in hex", hex.EncodeToString([]byte(base64.StdEncoding.EncodeToString([]byte(phrase)))), domain.KindInjectionPhrase, "hex+base64"},
 	}
 	for _, c := range cases {

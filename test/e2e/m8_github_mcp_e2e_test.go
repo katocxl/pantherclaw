@@ -57,7 +57,7 @@ func (s *stack) toGitHubMCP(t *testing.T) *mcpsim.Server {
 			digest = d
 		}
 	}
-	const version = "1.0.2"
+	const version = "1.1.1" // newer than the shipped pc.github 1.1.0 (M30), as pins only move forward
 	raw, err := github.MCPMergePackage(pcgithub.Package, version, digest)
 	if err != nil {
 		t.Fatal(err)
