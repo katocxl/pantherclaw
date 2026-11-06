@@ -126,6 +126,9 @@ const (
 	// GatewayServiceSignAgentCardProcedure is the procedure name of the GatewayService's SignAgentCard
 	// RPC.
 	GatewayServiceSignAgentCardProcedure = "/pantherclaw.v1.GatewayService/SignAgentCard"
+	// GatewayServiceReportPageCompareProcedure is the procedure name of the GatewayService's
+	// ReportPageCompare RPC.
+	GatewayServiceReportPageCompareProcedure = "/pantherclaw.v1.GatewayService/ReportPageCompare"
 )
 
 var (
@@ -819,6 +822,13 @@ var (
 			Procedure:  GatewayServiceSignAgentCardProcedure,
 		}
 	})
+	gatewayServiceReportPageCompareSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("ReportPageCompare"),
+			Procedure:  GatewayServiceReportPageCompareProcedure,
+		}
+	})
 )
 
 // GatewayServiceClient is a client for the pantherclaw.v1.GatewayService service.
@@ -943,6 +953,14 @@ type GatewayServiceClient interface {
 	// connection's active pin itself and signs only an exact match.
 	// permission: gateway.sync
 	SignAgentCard(context.Context, *v1.SignAgentCardRequest) (*v1.SignAgentCardResponse, error)
+	// ReportPageCompare reports a cloaking compare mismatch on a browser site
+	// marked for the compare (G0 M33 D986, HR-750): the page an agent's
+	// browser headers fetched differs from the plain fetch. It carries
+	// digests and sizes only, never page content, and only alerts. Accepted
+	// only for a connection the calling gateway serves and a host that
+	// matches one of the org's compare sites.
+	// permission: gateway.observe
+	ReportPageCompare(context.Context, *v1.ReportPageCompareRequest) (*v1.ReportPageCompareResponse, error)
 }
 
 // NewGatewayServiceClient constructs a client for the pantherclaw.v1.GatewayService service.
@@ -1094,6 +1112,14 @@ type GatewayServiceHandler interface {
 	// connection's active pin itself and signs only an exact match.
 	// permission: gateway.sync
 	SignAgentCard(context.Context, *v1.SignAgentCardRequest) (*v1.SignAgentCardResponse, error)
+	// ReportPageCompare reports a cloaking compare mismatch on a browser site
+	// marked for the compare (G0 M33 D986, HR-750): the page an agent's
+	// browser headers fetched differs from the plain fetch. It carries
+	// digests and sizes only, never page content, and only alerts. Accepted
+	// only for a connection the calling gateway serves and a host that
+	// matches one of the org's compare sites.
+	// permission: gateway.observe
+	ReportPageCompare(context.Context, *v1.ReportPageCompareRequest) (*v1.ReportPageCompareResponse, error)
 }
 
 // RegisterGatewayServiceHandler registers svc as the pantherclaw.v1.GatewayService implementation
@@ -1123,6 +1149,7 @@ func RegisterGatewayServiceHandler(server *connect.Server, svc GatewayServiceHan
 		connect.Method{Spec: gatewayServiceDeleteMCPStateSpec(), Handler: adapter.deleteMCPState},
 		connect.Method{Spec: gatewayServiceReportInventorySpec(), Handler: adapter.reportInventory},
 		connect.Method{Spec: gatewayServiceSignAgentCardSpec(), Handler: adapter.signAgentCard},
+		connect.Method{Spec: gatewayServiceReportPageCompareSpec(), Handler: adapter.reportPageCompare},
 	)
 }
 
@@ -1231,6 +1258,10 @@ func (UnimplementedGatewayServiceHandler) ReportInventory(context.Context, *v1.R
 
 func (UnimplementedGatewayServiceHandler) SignAgentCard(context.Context, *v1.SignAgentCardRequest) (*v1.SignAgentCardResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.SignAgentCard is not implemented")
+}
+
+func (UnimplementedGatewayServiceHandler) ReportPageCompare(context.Context, *v1.ReportPageCompareRequest) (*v1.ReportPageCompareResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportPageCompare is not implemented")
 }
 
 type gatewayServiceClient struct {
@@ -1408,6 +1439,14 @@ func (c *gatewayServiceClient) ReportInventory(ctx context.Context, req *v1.Repo
 func (c *gatewayServiceClient) SignAgentCard(ctx context.Context, req *v1.SignAgentCardRequest) (*v1.SignAgentCardResponse, error) {
 	var res v1.SignAgentCardResponse
 	if err := c.client.CallUnary(ctx, gatewayServiceSignAgentCardSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayServiceClient) ReportPageCompare(ctx context.Context, req *v1.ReportPageCompareRequest) (*v1.ReportPageCompareResponse, error) {
+	var res v1.ReportPageCompareResponse
+	if err := c.client.CallUnary(ctx, gatewayServiceReportPageCompareSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -1669,6 +1708,18 @@ func (h gatewayServiceHandler) signAgentCard(ctx context.Context, _ connect.Spec
 		return err
 	}
 	res, err := h.svc.SignAgentCard(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayServiceHandler) reportPageCompare(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReportPageCompareRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReportPageCompare(ctx, &req)
 	if err != nil {
 		return err
 	}

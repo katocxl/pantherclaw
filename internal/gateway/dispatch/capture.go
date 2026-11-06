@@ -105,8 +105,14 @@ func modelCaptures(conn *control.Connection, op string, monitor bool, request, k
 		return nil
 	}
 	var out []*pb.PayloadCapture
-	if p.GetRequest() {
-		if c := captured(p, pb.CaptureDirection_CAPTURE_DIRECTION_REQUEST, egress.Redacted(request, secret)); c != nil {
+	if p.GetRequest() && len(request) > 0 {
+		// No image, document, audio or screenshot data is kept (G0 M33
+		// D985, HR-757); a body that cannot be parsed is not kept at all.
+		body, ok := withoutImages(request)
+		if !ok {
+			body = omittedBody(len(request))
+		}
+		if c := captured(p, pb.CaptureDirection_CAPTURE_DIRECTION_REQUEST, egress.Redacted(body, secret)); c != nil {
 			out = append(out, c)
 		}
 	}

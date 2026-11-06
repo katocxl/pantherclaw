@@ -70,3 +70,4 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [vectorstore.md](vectorstore.md) | M30 | The pgvector connector: the table DDL, writers and holds, provenance from the permit, a fixed endpoint, bounds |
 | [connector-breadth.md](connector-breadth.md) | M31 | Google Workspace, Microsoft 365, Salesforce, Notion, Linear, Bedrock, Vertex and Snowflake: sealing, shares that hold, and drafting a package from an OpenAPI spec |
 | [kubernetes.md](kubernetes.md) | M32 | Kubernetes enforcement: the fail-closed admission webhook and its TLS and secret rotation, gateway enrolment from a projected token, kube closures and pod runs |
+| [browser-agents.md](browser-agents.md) | M33 | Browser and computer-use agents: the managed extension and its native host, Chrome policy, the site list and cloaking compare, takeover, and computer use through the SDK wrappers |

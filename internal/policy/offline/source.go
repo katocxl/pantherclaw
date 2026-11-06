@@ -31,7 +31,9 @@ import (
 	pcawsecs "github.com/katocxl/pantherclaw/packages/pc-aws-ecs"
 	pcawss3 "github.com/katocxl/pantherclaw/packages/pc-aws-s3"
 	pcbedrock "github.com/katocxl/pantherclaw/packages/pc-bedrock"
+	pcbrowser "github.com/katocxl/pantherclaw/packages/pc-browser"
 	pcchatgptenterprise "github.com/katocxl/pantherclaw/packages/pc-chatgpt-enterprise"
+	pccomputer "github.com/katocxl/pantherclaw/packages/pc-computer"
 	pccopilotstudio "github.com/katocxl/pantherclaw/packages/pc-copilot-studio"
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
 	pcgitlab "github.com/katocxl/pantherclaw/packages/pc-gitlab"
@@ -111,6 +113,7 @@ func builtin() [][]byte {
 		pcchatgptenterprise.Package, pcanthropic.Package, pcopenai.Package, pcvectorstore.Package,
 		pcgmail.Package, pcgoogleworkspace.Package, pcm365.Package,
 		pcsalesforce.Package, pcnotion.Package, pclinear.Package, pcvertex.Package, pcbedrock.Package, pcsnowflake.Package,
+		pcbrowser.Package, pccomputer.Package,
 	}
 }
 

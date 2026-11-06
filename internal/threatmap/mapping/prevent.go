@@ -29,11 +29,14 @@ const (
 	// SurfaceConnector: a connector refuses the act itself, before anything is
 	// sent (G0 M30 D948).
 	SurfaceConnector Surface = "CONNECTOR"
+	// SurfaceBrowser: the managed browser extension refuses or holds the act
+	// before the browser does it; cooperative (G0 M33 D987).
+	SurfaceBrowser Surface = "BROWSER"
 )
 
 // Surfaces lists every Surface.
 func Surfaces() []Surface {
-	return []Surface{SurfaceAuthority, SurfaceGateway, SurfaceSandbox, SurfaceCredential, SurfaceConnector}
+	return []Surface{SurfaceAuthority, SurfaceGateway, SurfaceSandbox, SurfaceCredential, SurfaceConnector, SurfaceBrowser}
 }
 
 // Valid reports whether s is a listed Surface.
@@ -52,11 +55,15 @@ const (
 	RequiresContentSignalsActive Requirement = "CONTENT_SIGNALS_ACTIVE"
 	// RequiresMCPCatalogEnforcing: the M24 MCP catalog enforcement is on.
 	RequiresMCPCatalogEnforcing Requirement = "MCP_CATALOG_ENFORCING"
+	// RequiresBrowserExtensionDeployed: the managed extension is
+	// force-installed with its native host for the agent's browser (G0 M33
+	// D987).
+	RequiresBrowserExtensionDeployed Requirement = "BROWSER_EXTENSION_DEPLOYED"
 )
 
 // Requirements lists every Requirement.
 func Requirements() []Requirement {
-	return []Requirement{RequiresAlways, RequiresContentSignalsActive, RequiresMCPCatalogEnforcing}
+	return []Requirement{RequiresAlways, RequiresContentSignalsActive, RequiresMCPCatalogEnforcing, RequiresBrowserExtensionDeployed}
 }
 
 // Valid reports whether r is a listed Requirement.
@@ -378,6 +385,31 @@ var Prevent = []PreventControl{
 		Techniques: []string{"T1610"},
 		Why: map[string]string{
 			"T1610": "Deploy container (T1610): the admission webhook denies a pod in an enforced namespace without an issuer entry, the edge sidecar or pinned images, and every ephemeral container.",
+		},
+	},
+	{
+		// G0 M33 D987: the evidence is pc.browser transactions and their
+		// SITE_NOT_LISTED holds; the extension is cooperative (PARTIAL, R-78).
+		ID: "prevent.browser_sites", Title: "An agent's browser opens, submits to and downloads from listed sites only, unless a person allows it", Surface: SurfaceAuthority,
+		ReasonCodes: []string{"SITE_NOT_LISTED"},
+		HR:          []string{"HR-745", "HR-749", "HR-751"},
+		Requires:    RequiresBrowserExtensionDeployed,
+		Techniques:  []string{"AML.T0100", "AML.T0131"},
+		Why: map[string]string{
+			"AML.T0100": "AI agent clickbait (AML.T0100): a page, submit or marked click on a site not on the org's list is held for a person before the browser acts.",
+			"AML.T0131": "Crafted AI assistant links (AML.T0131): a crafted link to a site not on the org's list is held for a person before the browser opens it.",
+		},
+	},
+	{
+		// G0 M33 D987: the evidence is the gateway's BROWSER_SECRET_FIELD
+		// refusals; the extension refuses the input in the page (HR-752).
+		ID: "prevent.browser_secret_fields", Title: "An agent never types into or submits password, one-time-code, payment or challenge fields", Surface: SurfaceBrowser,
+		ReasonCodes: []string{"BROWSER_SECRET_FIELD"},
+		HR:          []string{"HR-747", "HR-752"},
+		Requires:    RequiresBrowserExtensionDeployed,
+		Techniques:  []string{"T1696.001"},
+		Why: map[string]string{
+			"T1696.001": "Automate CAPTCHA completion (T1696.001): every pointer, key and input event in a challenge frame is refused, so the agent cannot solve it.",
 		},
 	},
 }

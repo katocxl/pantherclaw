@@ -7,8 +7,10 @@
 PantherClaw before the tool runs: only an allow runs it, a hold waits in
 PantherClaw, and anything else returns a refusal to the model.
 ``gateway_mcp_server`` reaches a gateway connection's MCP face through
-``pclaw mcp proxy``, where the gateway itself enforces every call. Every
-decision a wrapped tool gets is cooperative and labeled PARTIAL.
+``pclaw mcp proxy``, where the gateway itself enforces every call.
+``guard_computer`` wraps a Computer so PantherClaw decides its input
+actions before they run (M33 D984). Every decision a wrapped tool or
+computer gets is cooperative and labeled PARTIAL.
 """
 
 from __future__ import annotations
@@ -21,8 +23,9 @@ from typing import Any
 from pantherclaw.client import Client, Outbound
 
 from ._guard import Guard, PantherClawRefused, Verdict, refusal
+from .computer import guard_computer
 
-__all__ = ["PantherClawRefused", "gateway_mcp_server", "guard_tools", "refusal"]
+__all__ = ["PantherClawRefused", "gateway_mcp_server", "guard_computer", "guard_tools", "refusal"]
 
 
 def _wrap(tool: Any, guard: Guard) -> Any:

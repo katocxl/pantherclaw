@@ -86,6 +86,9 @@ func (h *GatewayHandler) GetConfiguration(ctx context.Context, req *pb.GetConfig
 	if c.McpIssuer != "" {
 		out.McpAccess = &pb.GatewayMcpAccess{Issuer: c.McpIssuer}
 	}
+	for _, s := range c.CompareSites { // G0 M33 D986
+		out.BrowserCompareSites = append(out.BrowserCompareSites, &pb.GatewayBrowserCompareSite{Host: s.Host, IncludeSubdomains: s.IncludeSubdomains})
+	}
 	return out, nil
 }
 

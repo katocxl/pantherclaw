@@ -38,9 +38,9 @@ func TestHR234_RecordingFromBeforeRolloutsReplaysIdentically(t *testing.T) {
 // version 6 recording read none and replays in version 6 mode. Version 8
 // reads owned accounts (G0 M30 D935a); the version 7 and 8 golden
 // recordings replay in TestM27_V7RecordingReplaysIdentically and
-// TestM30_V8RecordingReplaysIdentically.
+// TestM30_V8RecordingReplaysIdentically. Version 9 records an unlisted-site hold in TestM33_V9RecordingReplaysIdentically.
 func TestHR234_RecordingOfThisVersionReplaysIdentically(t *testing.T) {
-	if pipeline.Version != 8 {
+	if pipeline.Version != 9 {
 		t.Fatalf("pipeline version %d: record a golden fixture for it", pipeline.Version)
 	}
 	replaysIdentically(t, "recording_v6_hold", 6)

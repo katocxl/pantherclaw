@@ -118,6 +118,22 @@ type Reads struct {
 	// OwnedAccounts are the reads of the org's owned accounts, one per kind
 	// (pipeline 8, G0 M30 D935a); earlier recordings have none.
 	OwnedAccounts []OwnedAccounts `json:"owned_accounts,omitzero"`
+	// BrowserSites is the read of the org's browser site list (pipeline 9,
+	// G0 M33 D977); earlier recordings have none.
+	BrowserSites *BrowserSites `json:"browser_sites,omitzero"`
+}
+
+// BrowserSites is the read of the org's browser site list (G0 M33 D977):
+// the sites the browser step matched against.
+type BrowserSites struct {
+	Sites []BrowserSite `json:"sites,omitzero"`
+	Err   string        `json:"err,omitzero"`
+}
+
+// BrowserSite is one listed site.
+type BrowserSite struct {
+	Host              string `json:"host"`
+	IncludeSubdomains bool   `json:"include_subdomains,omitzero"`
 }
 
 // Containment is the org's containment state and the database time: the

@@ -148,7 +148,7 @@ func paramType(t domain.ParamType) *types.Type {
 		return cel.StringType
 	case domain.TypeStringMap:
 		return cel.MapType(cel.StringType, cel.StringType)
-	case domain.TypeEnum, domain.TypeIdentifier, domain.TypeText, domain.TypeCommand, domain.TypeContent, domain.TypePath:
+	case domain.TypeEnum, domain.TypeIdentifier, domain.TypeText, domain.TypeCommand, domain.TypeContent, domain.TypePath, domain.TypeURL:
 		return cel.StringType
 	}
 	return nil
@@ -519,7 +519,7 @@ func evalParam(ctx context.Context, p *celenv.Program, t domain.ParamType, vars 
 		var b types.Bool
 		b, ok = v.(types.Bool)
 		out.Bool = bool(b)
-	case domain.TypeEnum, domain.TypeIdentifier, domain.TypeText, domain.TypeCommand, domain.TypeContent, domain.TypePath:
+	case domain.TypeEnum, domain.TypeIdentifier, domain.TypeText, domain.TypeCommand, domain.TypeContent, domain.TypePath, domain.TypeURL:
 		var s types.String
 		s, ok = v.(types.String)
 		out.Str = string(s)

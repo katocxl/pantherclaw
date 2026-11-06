@@ -283,15 +283,18 @@ type Inputs struct {
 	// ContentMode is OFF, WATCHING or ACTIVE.
 	ContentMode string `json:"content_mode"`
 	// MCPCatalogEnforcing is the MCP catalog mode ENFORCE.
-	MCPCatalogEnforcing bool            `json:"mcp_catalog_enforcing"`
-	Agents              []Agent         `json:"agents"`
-	Routes              []Route         `json:"routes"`
-	Rules               []Rule          `json:"rules"`
-	Cursor              Cursor          `json:"cursor"`
-	Automations         []Automation    `json:"automations"`
-	Results             []Result        `json:"results"`
-	Alerts              []AlertGroup    `json:"alerts"`
-	Decisions           []DecisionCount `json:"decisions"`
+	MCPCatalogEnforcing bool `json:"mcp_catalog_enforcing"`
+	// BrowserExtensionDeployed: the org has an ACTIVE connection that pins
+	// pc.browser (G0 M33 D987a).
+	BrowserExtensionDeployed bool            `json:"browser_extension_deployed"`
+	Agents                   []Agent         `json:"agents"`
+	Routes                   []Route         `json:"routes"`
+	Rules                    []Rule          `json:"rules"`
+	Cursor                   Cursor          `json:"cursor"`
+	Automations              []Automation    `json:"automations"`
+	Results                  []Result        `json:"results"`
+	Alerts                   []AlertGroup    `json:"alerts"`
+	Decisions                []DecisionCount `json:"decisions"`
 	// Outcomes are the connector refusals counted by outcome code (D948).
 	Outcomes []OutcomeCount `json:"outcomes,omitzero"`
 }

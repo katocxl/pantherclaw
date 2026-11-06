@@ -164,6 +164,8 @@ func TestE2E_M12_CodingAgentSuite(t *testing.T) {
 		"RT-196": model, "RT-197": model,
 		// M30: the CLI range here seeds neither the share grant nor the shell hook connection.
 		"RT-201": "driver lacks capability share", "RT-203": "driver lacks capability agent_config",
+		// M33: the standard range does not provide the browser agent setup.
+		"RT-220": "driver lacks capability browser_agent", "RT-221": "driver lacks capability browser_agent", "RT-222": "driver lacks capability browser_agent", "RT-223": "driver lacks capability browser_agent", "RT-224": "driver lacks capability browser_agent",
 	}
 	if !maps.Equal(skipped, wantSkip) {
 		t.Errorf("SKIPPED set %v, want %v", skipped, wantSkip)

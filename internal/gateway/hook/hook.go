@@ -26,7 +26,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/actionir"
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
+	"github.com/katocxl/pantherclaw/internal/gateway/browsercompare"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
@@ -48,6 +50,23 @@ type Handler struct {
 	config    Configuration
 	publicURL string
 	log       *slog.Logger
+	// compare takes allowed browser.navigate actions to marked sites for
+	// the cloaking compare (G0 M33 D986); nil compares nothing.
+	compare Comparer
+}
+
+// Comparer queues a cloaking compare without blocking
+// (browsercompare.Comparer).
+type Comparer interface {
+	Enqueue(browsercompare.Job) bool
+}
+
+// WithBrowserCompare sends allowed navigations to sites marked for the
+// cloaking compare to c (G0 M33 D986, HR-759). It never delays or changes
+// an answer.
+func (h *Handler) WithBrowserCompare(c Comparer) *Handler {
+	h.compare = c
+	return h
 }
 
 // New returns the hook face. publicURL is the gateway's base URL, which
@@ -177,7 +196,40 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if res.Nonce != "" {
 		w.Header().Set(dispatch.HeaderNonce, res.Nonce)
 	}
-	answer(w, http.StatusOK, decide(res))
+	a := decide(res)
+	answer(w, http.StatusOK, a)
+	if a.Decision == "allow" {
+		h.compareNavigation(cfg, conn, parsed, res)
+	}
+}
+
+// navigateOp is the pc.browser operation the cloaking compare follows.
+const (
+	browserPackage = "pc.browser"
+	navigateOp     = "browser.navigate"
+)
+
+// compareNavigation queues an allowed browser.navigate whose host is a
+// site marked for the compare (G0 M33 D986). The answer is already sent:
+// nothing here changes it.
+func (h *Handler) compareNavigation(cfg *control.Config, conn *control.Connection, parsed actionir.Parsed, res dispatch.Result) {
+	a := parsed.Action
+	if h.compare == nil || a.Operation != navigateOp || a.Definition.Package != browserPackage ||
+		!browsercompare.Listed(a.Target.ID, cfg.BrowserCompareSites) {
+		return
+	}
+	var p struct {
+		URL            string `json:"url"`
+		UserAgent      string `json:"user_agent"`
+		AcceptLanguage string `json:"accept_language"`
+	}
+	if json.Unmarshal(a.Params, &p) != nil || p.URL == "" {
+		return
+	}
+	h.compare.Enqueue(browsercompare.Job{
+		Connection: conn.GetId(), Run: a.RunID, Transaction: res.TransactionID, URL: p.URL, Host: a.Target.ID,
+		UserAgent: p.UserAgent, AcceptLanguage: p.AcceptLanguage,
+	})
 }
 
 // decide is the answer to a decision: allow only when the action was
@@ -204,6 +256,8 @@ func decide(res dispatch.Result) Answer {
 		a.Decision, a.Held = "deny", true
 		a.Reason = "PantherClaw holds this call for an approval or a step-up by an eligible person, not by you." + txn +
 			" Once it is approved in PantherClaw, run the same command again."
+	case res.Code == dispatch.CodeBrowserSecretField: // G0 M33 D978, HR-747
+		a.Decision, a.Reason = "deny", dispatch.BrowserSecretFieldReason+txn
 	default:
 		a.Decision = "deny"
 		a.Reason = "PantherClaw denied this call: " + string(res.Class)

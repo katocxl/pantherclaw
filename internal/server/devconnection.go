@@ -81,6 +81,28 @@ func seedShellConnection(ctx context.Context, cfg *Config, pool *db.Pool, org id
 	return c, nil
 }
 
+// The development browser and computer-use hook connections (G0 M33): the
+// native host asks the gateway at /hook/browser, the SDK computer-use
+// wrappers at /hook/computer.
+const (
+	devBrowserConnectionName  = "browser"
+	devComputerConnectionName = "computer"
+)
+
+// seedHookConnection creates a kind-local connection serving pkg, in
+// enforce mode, as the operator but through every connection check.
+// DEVELOPMENT ONLY.
+func seedHookConnection(ctx context.Context, cfg *Config, pool *db.Pool, org ids.OrgID, gateway ids.UUID, name, pkg string) (capp.Connection, error) {
+	c, err := capp.New(pool, nil, cfg.Auth.PublicURL, cfg.GatewayAPI.URL).Seed(ctx, org, "dev-seed", capp.CreateInput{
+		Name: name, Kind: capp.KindLocal, Package: pkg, Gateway: gateway,
+		DestinationClass: capp.ClassInternal, AccessMode: capp.AccessNone, DefaultMode: "enforce",
+	})
+	if err != nil {
+		return capp.Connection{}, fmt.Errorf("dev: %s connection: %w", name, err)
+	}
+	return c, nil
+}
+
 // gatewayByName finds an active gateway of org by name.
 func gatewayByName(ctx context.Context, pool *db.Pool, org ids.OrgID, name string) (ids.UUID, error) {
 	var out ids.UUID

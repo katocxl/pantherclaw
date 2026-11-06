@@ -1295,6 +1295,53 @@
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own verdict: the server's checks decide a kube closure, not the probe's say-so."
   },
+  "RT-220": {
+    "digest": "a96531c33fe017c22586fd415105283886128daf822c98d2bbf9de23e6cdf2b6",
+    "tier": "community",
+    "atlas": [
+      "AML.T0100",
+      "AML.T0131"
+    ],
+    "technique_why": {
+      "AML.T0100": "AI agent clickbait (AML.T0100): a page lures the agent's browser to a site nobody listed.",
+      "AML.T0131": "Crafted AI assistant links (AML.T0131): a link dressed as a listed site leads the agent elsewhere."
+    }
+  },
+  "RT-221": {
+    "digest": "28779a70903000bb7adc06a9a933bb80211af8bffe7c762640ad514073a85bde",
+    "tier": "community",
+    "atlas": [
+      "AML.T0098"
+    ],
+    "technique_why": {
+      "AML.T0098": "AI agent tool credential harvesting (AML.T0098): a page asks the agent's browser to send a password it was given."
+    }
+  },
+  "RT-222": {
+    "digest": "61f59608283e44eb5c0315e575dc9d75a67d81cb7005e806085caf5bb5694165",
+    "tier": "community",
+    "techniques_none": "Tests PantherClaw's own hand-over: a takeover is always held for a person and is bounded."
+  },
+  "RT-223": {
+    "digest": "2110c0fc886a75bcbe18bb50790e1965d3697b217ca184ec8b25040ea30e136e",
+    "tier": "community",
+    "atlas": [
+      "AML.T0053"
+    ],
+    "technique_why": {
+      "AML.T0053": "AI agent tool invocation (AML.T0053): the agent clicks and types on its screen through a computer-use tool."
+    }
+  },
+  "RT-224": {
+    "digest": "eee01aa74e745205f174c3606d279af54f897bed6ffe7eb4d97ed68865b02fdb",
+    "tier": "community",
+    "atlas": [
+      "AML.T0134"
+    ],
+    "technique_why": {
+      "AML.T0134": "AI targeted cloaking (AML.T0134): a site shows the agent's browser a different page than a person would see."
+    }
+  },
   "RT-260": {
     "digest": "c917e88f00ab7079bb682ed8910c4fc428f9679cdc487522fa9c7a1d2a957105",
     "tier": "community",

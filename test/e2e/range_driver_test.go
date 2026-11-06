@@ -131,6 +131,9 @@ func (d *rangeDriver) Capabilities() map[app.Capability]bool {
 	// M30 (D1216): the harness seeds the share grant and the shell hook
 	// connection (RT-201, RT-203).
 	caps["share"], caps["agent_config"] = true, true
+	// M33 (D1216): the browser and computer hook connections, the browser
+	// grant and the site list (RT-220..RT-224).
+	caps[capBrowserAgent] = true
 	return caps
 }
 
@@ -178,6 +181,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	o.model = requires(sc, string(capModel))
 	o.google = requires(sc, string(capGmailSend)) || requires(sc, string(capDriveShare))
 	o.linear = requires(sc, string(capLinearIssue))
+	o.browser = requires(sc, string(capBrowserAgent))
 	if sc.ID == "RT-011" {
 		o.github = true
 	}
@@ -223,6 +227,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	d.setupM31Connectors()
 	d.setupAWSECS()
 	d.setupModel()
+	d.setupBrowserAgent(sc)
 	if requires(sc, "mcp") {
 		d.setupMCPUpstream()
 	}
@@ -468,6 +473,9 @@ func (d *rangeDriver) callOnce(w callWith, _ []byte, _ int) (domain.Observation,
 	case "sdk":
 		return d.callSDK(conn, w, act)
 	case "hook":
+		if browserTool(w.Tool) {
+			return d.callBrowserHook(conn, w, act)
+		}
 		return d.callHook(w)
 	case "authzen":
 		return d.callAuthZEN(conn, w, act)

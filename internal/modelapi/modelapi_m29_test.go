@@ -102,7 +102,7 @@ func TestT311_ACraftedRequestCannotReadDifferentlyAtTheProvider(t *testing.T) {
 
 // TestHR696_ProviderSideToolsAreNamed: client tools are not named; every
 // provider-side tool, remote MCP servers, a container and background mode
-// are named by type (G0 M29 D813).
+// are named by type (G0 M29 D813); M33 also names client-run computer tools as computer_use for the explicit gate.
 //
 // Covers: F980, HR-696
 func TestHR696_ProviderSideToolsAreNamed(t *testing.T) {
@@ -111,11 +111,11 @@ func TestHR696_ProviderSideToolsAreNamed(t *testing.T) {
 		body string
 		want []string
 	}{
-		{AnthropicMessages, `{"model":"m","tools":[{"name":"f","input_schema":{}},{"type":"custom","name":"g"},{"type":"bash_20250124"},{"type":"computer_20250124"},{"type":"text_editor_20250728"},{"type":"memory_20250818"}]}`, []string{}},
+		{AnthropicMessages, `{"model":"m","tools":[{"name":"f","input_schema":{}},{"type":"custom","name":"g"},{"type":"bash_20250124"},{"type":"computer_20250124"},{"type":"text_editor_20250728"},{"type":"memory_20250818"}]}`, []string{ComputerUse}},
 		{AnthropicMessages, `{"model":"m","tools":[{"type":"web_search_20250305"}],"mcp_servers":[{"url":"https://x"}],"container":"c"}`, []string{"container", "mcp_servers", "web_search_20250305"}},
 		{OpenAIChat, `{"model":"m","tools":[{"type":"function","function":{"name":"f"}}]}`, []string{}},
 		{OpenAIChat, `{"model":"m","web_search_options":{}}`, []string{"web_search_options"}},
-		{OpenAIResponses, `{"model":"m","tools":[{"type":"function"},{"type":"local_shell"},{"type":"computer_use_preview"}],"background":false}`, []string{}},
+		{OpenAIResponses, `{"model":"m","tools":[{"type":"function"},{"type":"local_shell"},{"type":"computer_use_preview"}],"background":false}`, []string{ComputerUse}},
 		{OpenAIResponses, `{"model":"m","tools":[{"type":"web_search"},{"type":"code_interpreter"},{"type":"mcp"}],"background":true}`, []string{"background", "code_interpreter", "mcp", "web_search"}},
 	} {
 		r, err := Parse(tc.api, []byte(tc.body), 77)

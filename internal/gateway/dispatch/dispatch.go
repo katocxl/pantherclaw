@@ -423,6 +423,9 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if code := e.simulatorRefusal(ctx, conn); code != "" {
 		return Result{Class: CannotAuthorize, Code: code, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 	}
+	if e.browserSecretField(ctx, conn, c.Action.Action) { // G0 M33 D978 (browser_m33.go)
+		return Result{Class: CannotAuthorize, Code: CodeBrowserSecretField, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
+	}
 	ctx, content, scan := e.outboundContent(ctx, c) // G0 M27 D507, D533
 	refusedPayload, findings := e.outboundCheck(ctx, conn, c.Action.Action)
 	if refusedPayload {

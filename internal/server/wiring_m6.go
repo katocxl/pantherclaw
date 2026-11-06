@@ -76,6 +76,8 @@ type m6Services struct {
 	// modelCalls decides the model face's calls (G0 M25 D313); nil leaves
 	// them unimplemented.
 	modelCalls gatewaysrpc.ModelCalls
+	// pageCompares records cloaking compare reports (G0 M33 D986).
+	pageCompares gatewaysrpc.PageCompares
 }
 
 // newM6 builds the M6 services; notify (M5 notifications) may be nil.
@@ -96,6 +98,8 @@ func newM6(cfg *Config, pool *db.Pool, reg *keys.Registry, notify rapp.Notifier,
 		credentials: credapp.New(pool, notify),
 		rpID:        cfg.webAuthnRPID(),
 		modelCalls:  modelCalls(pool),
+		// G0 M33 D986 (wiring_m33_browser.go).
+		pageCompares: browserPageCompares(pool),
 	}, nil
 }
 
@@ -145,6 +149,9 @@ func (m *m6Services) gatewayHandler(svc *authority.Service, log *slog.Logger) (h
 	}
 	if m.cards != nil {
 		gw = gw.WithCardSigner(m.cards)
+	}
+	if m.pageCompares != nil {
+		gw = gw.WithPageCompares(m.pageCompares)
 	}
 	pantherclawv1connect.RegisterGatewayServiceHandler(rs, gw)
 	if m.scans != nil {

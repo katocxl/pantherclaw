@@ -514,6 +514,39 @@ class Client:
             return HookResult("deny", held=a.get("held") is True, why=str(a.get("reason", "")), answer=a)
         return HookResult("cannot_decide", why=f"unknown decision {a.get('decision')}")
 
+    def hook_call(self, connection: str, tool: str, tool_input: dict[str, Any]) -> HookResult:
+        """Asks the local connection's /hook face about one call of a hook
+        mapping of its package (``tool``, such as ``computer`` of
+        pc.computer) with its input, as sent. Allow only on an allow; a hold
+        is a deny with ``held``. Never raises (HR-200)."""
+        if not self._gateway or not self._run:
+            return HookResult("cannot_decide", why="the gateway URL and the run id are required")
+        if not isinstance(connection, str) or not _CONNECTION_NAME.match(connection):
+            return HookResult("cannot_decide", why=f"no connection is named {connection}")
+        if not isinstance(tool, str) or not tool or not isinstance(tool_input, dict):
+            return HookResult("cannot_decide", why="a hook call needs a tool name and an input object")
+        try:
+            body = json.dumps({"input": tool_input, "tool": tool}, separators=(",", ":"), ensure_ascii=False).encode()
+        except Exception as e:  # noqa: BLE001 - every failure is "cannot decide" (HR-200)
+            return HookResult("cannot_decide", why=f"the call's input is not JSON: {e}")
+        if len(body) > MAX_CALL_BODY:
+            return HookResult("cannot_decide", why="the call is larger than the /hook face takes")
+        try:
+            res = self._do("POST", f"{self._gateway}/hook/{urllib.parse.quote(connection, safe='')}", body,
+                           {"Content-Type": "application/json", "PAP-Run-Id": self._run})
+        except Exception as e:  # noqa: BLE001 - every failure is "cannot decide" (HR-200)
+            return HookResult("cannot_decide", why=f"PantherClaw cannot decide: {e}")
+        if res.status != 200:
+            return HookResult("cannot_decide", why=f"the gateway answered HTTP {res.status}")
+        a = _answer(res.body)
+        if a is None:
+            return HookResult("cannot_decide", why="the gateway's answer is not readable")
+        if a.get("decision") == "allow":
+            return HookResult("allow", why=str(a.get("reason", "")), answer=a)
+        if a.get("decision") == "deny":
+            return HookResult("deny", held=a.get("held") is True, why=str(a.get("reason", "")), answer=a)
+        return HookResult("cannot_decide", why=f"unknown decision {a.get('decision')}")
+
     def wait(self, handle: str, known: str = "", timeout: int = 30) -> tuple[dict[str, Any], bool]:
         """Long-polls a held call: answers when the state differs from ``known`` or after ``timeout`` (at most 30 s)."""
         req: dict[str, Any] = {"runId": self._run, "handle": handle, "timeoutSeconds": min(timeout, 30)}

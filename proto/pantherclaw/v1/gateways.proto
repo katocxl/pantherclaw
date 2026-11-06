@@ -215,6 +215,14 @@ service GatewayService {
   // connection's active pin itself and signs only an exact match.
   // permission: gateway.sync
   rpc SignAgentCard(SignAgentCardRequest) returns (SignAgentCardResponse);
+  // ReportPageCompare reports a cloaking compare mismatch on a browser site
+  // marked for the compare (G0 M33 D986, HR-750): the page an agent's
+  // browser headers fetched differs from the plain fetch. It carries
+  // digests and sizes only, never page content, and only alerts. Accepted
+  // only for a connection the calling gateway serves and a host that
+  // matches one of the org's compare sites.
+  // permission: gateway.observe
+  rpc ReportPageCompare(ReportPageCompareRequest) returns (ReportPageCompareResponse);
 }
 
 // GatewayState is whether a gateway may act.
@@ -635,6 +643,17 @@ message GetConfigurationResponse {
   // The org's content signal mode (G0 M27 D507): the gateway scans nothing
   // at OFF, and unset is OFF.
   ContentSignalMode content_signal_mode = 10;
+  // The org's browser sites marked for the cloaking compare (G0 M33 D986):
+  // only these are compared, and none means the compare is off.
+  repeated GatewayBrowserCompareSite browser_compare_sites = 11;
+}
+
+// GatewayBrowserCompareSite is one browser site marked for the cloaking
+// compare (G0 M33 D986). A host matches it when it equals host, or with
+// include_subdomains when it ends with "." + host.
+message GatewayBrowserCompareSite {
+  string host = 1;
+  bool include_subdomains = 2;
 }
 
 // GatewayMcpAccess turns on the OAuth route of a gateway's MCP face.
@@ -876,6 +895,55 @@ message ReportDriftResponse {
   bool quarantined = 1;
 }
 
+// ReportPageCompareRequest is one cloaking compare mismatch (G0 M33 D986).
+message ReportPageCompareRequest {
+  // Connection id.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // The run of the compared navigation.
+  string run_id = 2 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  // The transaction of the compared navigation.
+  string transaction_id = 3 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  // The page's host.
+  string host = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 253
+  }];
+  // Hex SHA-256 of the escaped path + "?" + the raw query.
+  string path_sha256 = 5 [(buf.validate.field).string.pattern = "^[0-9a-f]{64}$"];
+  // HTTP status of the fetch with the agent's headers (0: it failed).
+  int32 agent_status = 6 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 599
+  }];
+  // HTTP status of the plain fetch (0: it failed).
+  int32 plain_status = 7 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 599
+  }];
+  // Body bytes of the fetch with the agent's headers.
+  int64 agent_bytes = 8 [(buf.validate.field).int64.gte = 0];
+  // Body bytes of the plain fetch.
+  int64 plain_bytes = 9 [(buf.validate.field).int64.gte = 0];
+  // Text similarity of the two pages, in permille.
+  int32 similarity_permille = 10 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 1000
+  }];
+}
+
+// ReportPageCompareResponse says whether the report was recorded.
+message ReportPageCompareResponse {
+  // False when the same (connection, host, path) was recorded within the
+  // hour.
+  bool recorded = 1;
+}
+
 // ReportRevocationFailureRequest names the token that was not revoked.
 message ReportRevocationFailureRequest {
   // Connection id: one the calling gateway serves.
@@ -910,7 +978,7 @@ message ReportLocalRefusalRequest {
   string connection_id = 1 [(buf.validate.field).string.uuid = true];
   // The refusal code.
   string code = 2 [(buf.validate.field).string = {
-    in: ["secret_in_payload", "elicitation_refused", "model_server_tool_not_allowed"]
+    in: ["secret_in_payload", "elicitation_refused", "model_server_tool_not_allowed", "browser_secret_field"]
   }];
   // The refused action's operation.
   string operation = 3 [(buf.validate.field).string = {

@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.browser.cloaking
+version: "1"
+title: Site may show agents a different page
+description: >-
+  The customer's gateway fetched a page an agent's browser opened on a site
+  marked for the cloaking compare twice, once with the agent's browser
+  headers and once plainly, and the two pages differed (G0 M33 D986): their
+  text was less than half alike, or only one fetch succeeded. Only digests,
+  sizes and statuses are recorded, never page content. The compare is
+  PARTIAL: it sees only header-based differences, from the gateway's
+  network and without cookies (R-80). An alert only: nothing is held or
+  contained. A simulated connection's report raises nothing here.
+severity: MEDIUM
+attention: ALERT
+basis: OBSERVED
+atlas: [AML.T0134]
+edition: community
+on: [audit.browser.cloaking_suspected]
+match: event.attrs.?simulated.orValue("") != "true"
+group: connection
+tests:
+  - name: pages differ
+    fires: true
+    events:
+      - kind: audit.browser.cloaking_suspected
+        actor_type: gateway
+        actor_id: 01930000-0000-7000-8000-0000000000e1
+        outcome: success
+        subjects: {connection: 01930000-0000-7000-8000-0000000000c1, run: 01930000-0000-7000-8000-0000000000r1}
+        attrs: {object_type: connection, host: shop.example.com, path_sha256: "3333333333333333333333333333333333333333333333333333333333333333", agent_status: "200", plain_status: "200", agent_bytes: "51200", plain_bytes: "48100", similarity_permille: "120"}
+  - name: simulated report
+    fires: false
+    events:
+      - kind: audit.browser.cloaking_suspected
+        actor_type: gateway
+        actor_id: 01930000-0000-7000-8000-0000000000e1
+        outcome: success
+        subjects: {connection: 01930000-0000-7000-8000-0000000000c1}
+        attrs: {object_type: connection, simulated: "true", host: shop.example.com, path_sha256: "3333333333333333333333333333333333333333333333333333333333333333", agent_status: "200", plain_status: "404", agent_bytes: "51200", plain_bytes: "900", similarity_permille: "0"}
+  - name: a site added
+    fires: false
+    events:
+      - kind: audit.browser.site_added
+        actor_type: user
+        actor_id: 01930000-0000-7000-8000-0000000000u1
+        outcome: success
+        attrs: {object_type: browser_site, host: shop.example.com}

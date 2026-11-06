@@ -148,6 +148,71 @@ func TestHR681_MappingDocUsesNoBannedWord(t *testing.T) {
 	}
 }
 
+// TestMappedParentNamesItsUncoveredSubtechniques: a technique mapped
+// through some sub-techniques, with others that nothing maps to and that
+// have no other place, is "Mapped (partly)" and names each of those as not
+// covered; a technique with none such is "Mapped" (D1221a R1).
+// Covers: F974
+func TestMappedParentNamesItsUncoveredSubtechniques(t *testing.T) {
+	s := mapset.Load()
+	text := string(mapdoc.Render(s, threats(t)))
+	empty := func(m mapset.TechniqueMappings) bool {
+		return m.Outside == nil && m.Unaddressed == nil && len(m.Prevent)+len(m.Rules)+len(m.Kinds)+
+			len(m.Scenarios)+len(m.Campaigns)+len(m.HubRules)+len(m.HubPlaybooks) == 0
+	}
+	partly := 0
+	for _, f := range catalog.Frameworks() {
+		c, m := catalog.Load(f), s.Techniques(f)
+		for _, tech := range c.Matrix() {
+			var rows []string
+			for line := range strings.Lines(text) {
+				if strings.HasPrefix(line, "| ["+tech.ID+"](") {
+					rows = append(rows, line)
+				}
+			}
+			if len(rows) == 0 || (!strings.Contains(rows[0], "| Mapped |") && !strings.Contains(rows[0], "| Mapped (partly) |")) {
+				continue
+			}
+			var uncovered []string
+			for _, sub := range c.Subtechniques(tech.ID) {
+				if empty(m[sub.ID]) {
+					uncovered = append(uncovered, sub.ID)
+				}
+			}
+			for _, row := range rows {
+				if len(uncovered) == 0 {
+					if !strings.Contains(row, "| Mapped |") {
+						t.Errorf("%s has every sub-technique placed but is not plain Mapped: %s", tech.ID, row)
+					}
+					continue
+				}
+				if !strings.Contains(row, "| Mapped (partly) |") {
+					t.Errorf("%s leaves %v uncovered but is not Mapped (partly): %s", tech.ID, uncovered, row)
+				}
+				for _, id := range uncovered {
+					if !strings.Contains(row, id+" not covered") {
+						t.Errorf("%s does not name %s as not covered: %s", tech.ID, id, row)
+					}
+				}
+			}
+			if len(uncovered) > 0 {
+				partly++
+			}
+		}
+	}
+	if partly == 0 {
+		t.Error("no technique is Mapped (partly); the case is not exercised")
+	}
+	for line := range strings.Lines(text) {
+		if !strings.HasPrefix(line, "| [T1696](") {
+			continue
+		}
+		if !strings.Contains(line, "| Mapped (partly) |") || !strings.Contains(line, "T1696.002 not covered") {
+			t.Errorf("T1696 does not name T1696.002 as not covered: %s", line)
+		}
+	}
+}
+
 // TestAbuseCaseRows: a row's ids are the union of its library scenarios'
 // entries; a scenario outside the library or with no technique adds
 // nothing, and an abuse case with no id gets no row.

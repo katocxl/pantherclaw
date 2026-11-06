@@ -204,6 +204,7 @@ func inputsFor(ctx context.Context, store ports.Store, tx db.TenantTx, org ids.O
 ) (domain.Inputs, error) {
 	in := domain.Inputs{Framework: f, Scope: sc, EvaluatedAt: now, Editions: EditionsOf(e)}
 	in.ContentMode, in.MCPCatalogEnforcing = rec.ContentMode, rec.MCPCatalogEnforcing
+	in.BrowserExtensionDeployed = rec.BrowserExtensionDeployed
 	in.Agents, in.Routes, in.Rules, in.Cursor = rec.Agents, rec.Routes, rec.Rules, rec.Cursor
 	in.Automations, in.Results = rec.Automations, rec.Results
 	all, agents := true, []ids.UUID{}

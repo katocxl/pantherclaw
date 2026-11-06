@@ -31,6 +31,14 @@ export {
   type ToolCall,
   type WaitState,
 } from "./client.ts";
+export {
+  type AnthropicToolUse,
+  CODE_ACTION_UNKNOWN,
+  CODE_CANNOT_DECIDE,
+  type ComputerDecision,
+  ComputerUseGuard,
+  type OpenAIComputerCall,
+} from "./computer_use.ts";
 export { canonicalize, JCSError, type JSONValue, parseJSON, serialize } from "./jcs.ts";
 export * from "./pap.ts";
 export {

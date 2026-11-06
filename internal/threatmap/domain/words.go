@@ -107,14 +107,17 @@ func (r Reason) Text() string { return reasonTexts[r] }
 
 // Label templates of fixes (D713). Names are inserted as plain text.
 const (
-	labelEnableRule       = "Turn rule %s back on"
-	labelPublishRule      = "Publish rule %s"
-	labelEndSuppression   = "End the suppression of rule %s"
-	labelSendEvents       = "Send the events rule %s reads: %s"
-	labelUpgradeEdition   = "Upgrade to %s"
-	labelTurnOnContent    = "Turn content signals on (WATCHING or ACTIVE)"
-	labelContentActive    = "Set content signals to ACTIVE"
-	labelMCPEnforce       = "Set the MCP server catalog to ENFORCE"
+	labelEnableRule     = "Turn rule %s back on"
+	labelPublishRule    = "Publish rule %s"
+	labelEndSuppression = "End the suppression of rule %s"
+	labelSendEvents     = "Send the events rule %s reads: %s"
+	labelUpgradeEdition = "Upgrade to %s"
+	labelTurnOnContent  = "Turn content signals on (WATCHING or ACTIVE)"
+	labelContentActive  = "Set content signals to ACTIVE"
+	labelMCPEnforce     = "Set the MCP server catalog to ENFORCE"
+	// labelBrowserExtension is the fix for a browser control that does not
+	// apply (G0 M33 D987a).
+	labelBrowserExtension = "Deploy the managed browser extension: a local connection pinning pc.browser, `pclaw browser install-host` on the agent's machine, and the policy from `pclaw browser policy generate`."
 	labelRouteNamed       = "Route these agents through a PantherClaw gateway: %s"
 	labelRouteAny         = "Route your agents through a PantherClaw gateway"
 	labelEnablePlaybook   = "Turn on automation %s"

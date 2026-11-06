@@ -227,7 +227,7 @@ func (f Param) literal(value, currency string) (string, bool) {
 		return render.CELQuote(value), slices.Contains(f.Values, value)
 	case defs.TypeIdentifier:
 		return render.CELQuote(value), true
-	case defs.TypeIdentifierList, defs.TypeText, defs.TypeCommand, defs.TypeContent, defs.TypePath, defs.TypeQueryFilter,
+	case defs.TypeIdentifierList, defs.TypeText, defs.TypeCommand, defs.TypeContent, defs.TypePath, defs.TypeURL, defs.TypeQueryFilter,
 		defs.TypeFloatArray, defs.TypeStringMap:
 		return "", false
 	}

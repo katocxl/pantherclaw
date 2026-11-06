@@ -43,6 +43,11 @@ const (
 	TypeCommand        ParamType = "command"
 	TypeContent        ParamType = "content"
 	TypePath           ParamType = "path"
+	// TypeURL is an absolute http or https URL in its one spelling
+	// (actionir.NormalizeURL, CEL normurl): printable ASCII, at most
+	// actionir.MaxURL bytes (or max_length), a host and no userinfo (G0 M33
+	// D975, HR-748).
+	TypeURL ParamType = "url"
 )
 
 // Unit is the unit of a decimal or integer parameter. The list is closed:
@@ -142,6 +147,10 @@ func (p ParamSpec) validate(name string) error {
 	case TypePath:
 		if p.MaxLength > actionir.MaxPath {
 			return invalid("%s: max_length of a path is at most %d", name, actionir.MaxPath)
+		}
+	case TypeURL:
+		if p.MaxLength > actionir.MaxURL {
+			return invalid("%s: max_length of a url is at most %d (G0 M33 D975)", name, actionir.MaxURL)
 		}
 	case TypeDecimal, TypeInteger, TypeBoolean, TypeText, TypeCommand, TypeContent, TypeFloatArray, TypeStringMap:
 	case TypeQueryFilter:

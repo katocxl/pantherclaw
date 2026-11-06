@@ -315,6 +315,27 @@ func (r *Recorder) ContentSignals(ctx context.Context, org ids.OrgID, run ids.UU
 	return st, err
 }
 
+// BrowserSites implements pipeline.BrowserSites (G0 M33 D977). A wrapped
+// reader without the port lists nothing, as the pipeline treats one.
+func (r *Recorder) BrowserSites(ctx context.Context, org ids.OrgID) ([]pipeline.BrowserSite, error) {
+	var (
+		list []pipeline.BrowserSite
+		err  error
+	)
+	if port, ok := r.r.(pipeline.BrowserSites); ok {
+		list, err = port.BrowserSites(ctx, org)
+	}
+	r.keep(func(x *Reads) error {
+		b := &BrowserSites{Err: errKind(err)}
+		for _, s := range list {
+			b.Sites = append(b.Sites, BrowserSite{Host: s.Host, IncludeSubdomains: s.IncludeSubdomains})
+		}
+		x.BrowserSites = b
+		return nil
+	})
+	return list, err
+}
+
 // OwnedAccounts implements pipeline.OwnedAccounts (G0 M30 D935a). A wrapped
 // reader without the port owns nothing, as the pipeline treats one.
 func (r *Recorder) OwnedAccounts(ctx context.Context, org ids.OrgID, kind string) ([]string, error) {
