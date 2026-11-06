@@ -238,6 +238,31 @@ func TestHR764_TheAgentCoreFaceDecidesToolsCallsOnly(t *testing.T) {
 	}
 }
 
+// TestHR764_UndecidedRuntimeMethodsVerifyTheWorkload ensures a forged proof
+// cannot pass through an otherwise undecided method.
+func TestHR764_UndecidedRuntimeMethodsVerifyTheWorkload(t *testing.T) {
+	cases := map[string]string{
+		"initialize": rtRPC("initialize", ""), "ping": rtRPC("ping", ""), "tools/list": rtRPC("tools/list", ""),
+		"notification": rtRPC("notifications/initialized", ""), "unsupported": rtRPC("resources/read", ""),
+		"bad params": rtRPC("tools/call", ""), "bad target": rtCall("bad", `{}`),
+		"unbound target": rtCall("other___tool", `{}`), "unmapped tool": rtCall(rtTarget+"___unknown", `{}`),
+	}
+	for name, rpc := range cases {
+		t.Run(name, func(t *testing.T) {
+			h := setup(t, withRuntime, func(h *harness) { h.auth.identity = "invalid_proof" })
+			r := h.runtime(t, http.MethodPost, rtEvent(rpc), nil)
+			if r.code != http.StatusUnauthorized || r.hdr.Get(dispatch.HeaderError) != "invalid_proof" || h.auth.verifies != 1 {
+				t.Fatalf("%s: status %d, error %q, verifications %d", name, r.code, r.hdr.Get(dispatch.HeaderError), h.auth.verifies)
+			}
+		})
+	}
+	h := setup(t, withRuntime, func(h *harness) { h.auth.identity = "run_mismatch" })
+	r := h.runtime(t, http.MethodPost, rtEvent(rtRPC("ping", "")), nil)
+	if r.code != http.StatusUnauthorized || r.hdr.Get(runtimeface.HeaderRunEnded) != "1" {
+		t.Fatalf("ended run: %d, header %q", r.code, r.hdr.Get(runtimeface.HeaderRunEnded))
+	}
+}
+
 // TestHR765_TheFaceDecidesThroughTheOneBoundTarget: the tool name splits on
 // its first "___", so a tool whose own name has "___" stays whole; the
 // connection is the one bound to "agentcore:<header ARN>/<target>"; the

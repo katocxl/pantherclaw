@@ -56,6 +56,29 @@ func TestT345_AGatewayThatCannotAskRunsNothing(t *testing.T) {
 		t.Fatalf("a face call without a proof: %d", res.StatusCode)
 	}
 
+	// A token with a forged proof cannot pass an undecided method either.
+	ping := bytes.ReplaceAll(event, []byte(`"method":"tools/call"`), []byte(`"method":"ping"`))
+	if bytes.Equal(ping, event) {
+		t.Fatal("test event did not contain a tools/call method")
+	}
+	req, err = http.NewRequestWithContext(context.Background(), http.MethodPost, s.gateway+runtimeface.AgentCorePath, bytes.NewReader(ping))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "PAP "+rt.token)
+	req.Header.Set("PAP-Proof", "forged")
+	req.Header.Set("PAP-Run-Id", rt.run)
+	req.Header.Set(runtimeface.HeaderGateway, agentcore.GatewayARN)
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("an undecided method with a forged proof: %d", res.StatusCode)
+	}
+
 	// A method the face does not decide.
 	other := bytes.ReplaceAll(event, []byte(`"method":"tools/call"`), []byte(`"method":"sampling/createMessage"`))
 	other = bytes.ReplaceAll(other, []byte(`\"method\":\"tools/call\"`), []byte(`\"method\":\"sampling/createMessage\"`))

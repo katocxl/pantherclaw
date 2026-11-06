@@ -90,9 +90,14 @@ class FoundryApprovals:
     def answer(self, item: Any) -> dict[str, Any]:
         """The ``mcp_approval_response`` for one ``mcp_approval_request``
         item ``{id, server_label, name, arguments}``."""
-        rid = _get(item, "id")
-        rid = rid if isinstance(rid, str) else ""
-        approve = bool(rid) and self._approve(rid, _get(item, "server_label"), _get(item, "name"), _get(item, "arguments"))
+        rid = ""
+        approve = False
+        try:
+            raw_id = _get(item, "id")
+            rid = raw_id if isinstance(raw_id, str) else ""
+            approve = bool(rid) and self._approve(rid, _get(item, "server_label"), _get(item, "name"), _get(item, "arguments"))
+        except Exception:  # noqa: BLE001 - unreadable requests must not approve
+            pass
         return {"type": "mcp_approval_response", "approval_request_id": rid, "approve": approve}
 
     def answer_required_action(self, run: Any) -> list[dict[str, Any]]:

@@ -74,6 +74,19 @@ class TestHR767FoundryApprovals(unittest.TestCase):
         FoundryApprovals(client, {"payments": "c"}).answer(request(server_label="other"))
         self.assertEqual(client.calls, [])
 
+    def test_HR767_unreadable_sdk_object_refuses(self) -> None:
+        class BrokenRequest:
+            id = "mcpr_broken"
+
+            @property
+            def server_label(self) -> str:
+                raise RuntimeError("unreadable")
+
+        client = FakeClient(Result("allow"))
+        got = FoundryApprovals(client, {"payments": "c"}).answer(BrokenRequest())
+        self.assertEqual(got, {"type": "mcp_approval_response", "approval_request_id": "mcpr_broken", "approve": False})
+        self.assertEqual(client.calls, [])
+
     def test_required_action_approvals(self) -> None:
         run = {"required_action": {"type": "submit_tool_approval", "submit_tool_approval": {"tool_calls": [
             {"id": "call_1", "server_label": "payments", "name": "create_refund", "arguments": "{}"},

@@ -233,6 +233,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := rpcID(req.ID)
+	// Calls which do not enter Dispatch still need the Authority to verify
+	// the workload, its proof and the named run before anything can pass.
+	if req.Method != "tools/call" && !h.verifyUndecided(w, r, in) {
+		return
+	}
 	switch {
 	case passed[req.Method] || strings.HasPrefix(req.Method, "notifications/"):
 		output(w, passOutput(original))
@@ -243,16 +248,25 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	var p callParams
 	if req.Params.Kind() != '{' || json.Unmarshal(req.Params, &p) != nil {
+		if !h.verifyUndecided(w, r, in) {
+			return
+		}
 		output(w, denyOutput(id, "PantherClaw cannot decide this call: its params are not a tools/call's"))
 		return
 	}
 	target, tool, ok := strings.Cut(p.Name, toolSeparator)
 	if !ok || !targetName.MatchString(target) || tool == "" {
+		if !h.verifyUndecided(w, r, in) {
+			return
+		}
 		output(w, denyOutput(id, CodeTargetUnknown+": PantherClaw cannot decide this call: the tool name names no AgentCore target"))
 		return
 	}
 	conn := byRuntimeTarget(cfg, TargetPrefix+arn+"/"+target)
 	if conn == nil {
+		if !h.verifyUndecided(w, r, in) {
+			return
+		}
 		output(w, denyOutput(id, CodeTargetUnknown+": PantherClaw cannot decide this call: no connection is bound to its AgentCore target"))
 		return
 	}
@@ -268,6 +282,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Org: cfg.Org, Env: in.Env, RunID: in.Run, ActionID: action, AgentInstance: in.Instance, Connection: conn.GetId(),
 	}, tool, args)
 	if err != nil {
+		if !h.verifyUndecided(w, r, in) {
+			return
+		}
 		why := "its arguments do not match the reviewed mapping of " + tool
 		if errors.Is(err, mapping.ErrUnmapped) {
 			why = "the connection's reviewed package does not map " + tool
@@ -305,6 +322,26 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		output(w, denyOutput(id, reason+"."+txn(res.TransactionID)))
 	}
+}
+
+// verifyUndecided authenticates requests that will not reach Dispatch.
+func (h *Handler) verifyUndecided(w http.ResponseWriter, r *http.Request, in dispatch.Inbound) bool {
+	verified, err := h.engine.Verify(r.Context(), in.Creds, in.Run)
+	if err != nil {
+		refuse(w, http.StatusServiceUnavailable, "authority_unavailable", "the Authority cannot verify the workload now")
+		return false
+	}
+	if !verified.OK {
+		if verified.Code == pap.CodeRunMismatch {
+			w.Header().Set(HeaderRunEnded, "1")
+		}
+		h.refusePAP(w, r, verified.Code, verified.Nonce)
+		return false
+	}
+	if verified.Nonce != "" {
+		w.Header().Set(dispatch.HeaderNonce, verified.Nonce)
+	}
+	return true
 }
 
 func txn(id string) string {
