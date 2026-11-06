@@ -121,6 +121,7 @@ func (d *rangeDriver) Capabilities() map[app.Capability]bool {
 	maps.Copy(caps, pgCapabilities())
 	maps.Copy(caps, m20ConnectorCapabilities())
 	caps[capAWSECS] = true
+	caps[capModel] = true
 	return caps
 }
 
@@ -156,7 +157,8 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	// CX-90002 is the Hub seed's customer-authored form of RT-009.
 	ownGrant := sc.ID == "RT-009" || sc.ID == "CX-90002"
 	if requires(sc, "person") || ownGrant || sc.ID == shareScenario || slackScenario(sc) || needsBrowser(sc) ||
-		requires(sc, string(capJiraComment)) || requires(sc, string(capGitLabMerge)) || requires(sc, string(capAWSECS)) {
+		requires(sc, string(capJiraComment)) || requires(sc, string(capGitLabMerge)) || requires(sc, string(capAWSECS)) ||
+		(requires(sc, string(capModel)) && !requires(sc, "sandbox")) {
 		p = inProcessIdP(t)
 		o.people = &p
 	}
@@ -164,6 +166,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	o.slack = slackScenario(sc)
 	o.jira, o.gitlab = requires(sc, string(capJiraComment)), requires(sc, string(capGitLabMerge))
 	o.awsECS = requires(sc, string(capAWSECS))
+	o.model = requires(sc, string(capModel))
 	if sc.ID == "RT-011" {
 		o.github = true
 	}
@@ -207,6 +210,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	}
 	d.setupM20Connectors()
 	d.setupAWSECS()
+	d.setupModel()
 	if requires(sc, "mcp") {
 		d.setupMCPUpstream()
 	}
@@ -354,6 +358,8 @@ func (d *rangeDriver) Do(ctx context.Context, sc domain.Scenario, st domain.Step
 		return d.browserCall(st)
 	case "support.probe":
 		return d.supportProbe(st)
+	case "model.call":
+		return d.modelCallStep(st)
 	case "sandbox.probe":
 		return d.extra.probe(d, st, vars)
 	}

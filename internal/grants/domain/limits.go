@@ -48,9 +48,6 @@ type BudgetRule struct {
 	Access string `json:"access,omitzero"`
 }
 
-// IsTokenRule reports whether r caps model tokens (G0 M29 D821).
-func (r BudgetRule) IsTokenRule() bool { return r.MaxTokens != "" }
-
 // opsWildcard is the operations entry that names every operation of a
 // rule's access (G0 M30 D930a).
 const opsWildcard = "*"
@@ -90,6 +87,9 @@ func (r BudgetRule) covers(a Action) bool {
 	}
 	return r.Operations.Matches(a.Operation)
 }
+
+// IsTokenRule reports whether r caps model tokens (G0 M29 D821).
+func (r BudgetRule) IsTokenRule() bool { return r.MaxTokens != "" }
 
 // CountRule limits how many of the actions it covers may happen per key
 // and window (HR-049). Key is one of: task (the declaring grant, or for an
@@ -353,6 +353,20 @@ func (c Chain) Debits(a Action, dc DebitContext) (Plan, *LevelFinding) {
 		amountRules, inCurrency := 0, 0
 		for _, r := range limits.Budgets {
 			if !r.covers(a) {
+				continue
+			}
+			if r.IsTokenRule() {
+				// G0 M29 D821: a token rule debits only model calls that
+				// reserve tokens, by those tokens; every other action skips it.
+				if dc.ModelTokens <= 0 {
+					continue
+				}
+				capTokens, _ := ParseMaxTokens("", r.MaxTokens)
+				key, ok := groupingKey(r.Grouping, task, a, dc)
+				if !ok {
+					return Plan{}, unknownLimit(l.level, "budgets."+r.ID, ReasonLimitKeyMissing, "the action has no "+string(r.Grouping)+" to key this budget")
+				}
+				plan.Budgets = append(plan.Budgets, tokenDebit(owner, r.ID, key, r.Grouping, r.Period, capTokens, dc))
 				continue
 			}
 			if r.IsTokenRule() {

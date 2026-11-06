@@ -32,6 +32,7 @@ var allowed = map[string]string{
 	"internal/approvals/app/automationgate.go|approval.expired":     "a notification type, chosen into typ and passed to tell",
 	"internal/datarequests/requests.go|data.deletion_requested":     "a notification type, passed to notice",
 	"internal/datarequests/requests.go|data.deletion_canceled":      "a notification type, passed to notice",
+	"internal/redteam/domain/steps_ui_m29_model.go|model.call":      "the range step kind model.call (G0 M29 D827), a scenario's step name",
 	"internal/reflex/domain/kinds.go|signals.event_received":        "the notification type NotifySignalsReceived",
 	"internal/reflex/domain/kinds.go|signals.playbook_changed":      "the notification type NotifyPlaybookChanged",
 	"internal/signals/cases.go|signals.playbook_failed":             "the kind of a Reflex failure (reflexdomain.Failure.Kind)",

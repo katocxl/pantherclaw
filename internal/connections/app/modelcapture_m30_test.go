@@ -12,14 +12,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/protect"
 )
 
-type edition billing.Edition
-
-func (e edition) Current(context.Context) (billing.Entitlements, error) {
-	ents := billing.CommunityEntitlements()
-	ents.Edition = billing.Edition(e)
-	return ents, nil
-}
-
 // TestHR716_TurningPromptCaptureOnNeedsBusinessAndASecondPerson (G0 M30
 // D945b, HR-716): a model connection is created with capture off; turning
 // it on needs Business (an unknown edition refuses) and is filed on the

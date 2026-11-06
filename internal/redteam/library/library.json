@@ -1036,6 +1036,135 @@
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own permissions: a caller with no permission gets a refusal, not data."
   },
+  "RT-190": {
+    "digest": "9da899a17116faa3aafaf40d92dd4e3af37028f3a4a8398f3bfe093a2c8dde53",
+    "tier": "community",
+    "asi": [
+      "ASI03"
+    ],
+    "asi_why": {
+      "ASI03": "Identity and privilege abuse (ASI03): the agent calls its model with a provider key it found in the workspace."
+    },
+    "atlas": [
+      "AML.T0055"
+    ],
+    "attack": [
+      "T1552.001"
+    ],
+    "technique_why": {
+      "AML.T0055": "Unsecured credentials (AML.T0055): the agent finds a model provider key in the workspace and uses it.",
+      "T1552.001": "Credentials in files (T1552.001): the key sits in a workspace file the agent reads."
+    }
+  },
+  "RT-191": {
+    "digest": "cc0367eaf27ea6df05eef1af61d4be78b3c81296046fbd421456097f0b7121f9",
+    "tier": "community",
+    "atlas": [
+      "AML.T0024"
+    ],
+    "attack": [
+      "T1567"
+    ],
+    "technique_why": {
+      "AML.T0024": "Exfiltration via AI inference API (AML.T0024): the agent sends its prompt to a model provider no connection governs.",
+      "T1567": "Exfiltration over web service (T1567): the other provider is an ordinary HTTPS service outside PantherClaw."
+    }
+  },
+  "RT-192": {
+    "digest": "fdac086074635f65ccd70e4095d434f004fd60f7517530488c0dd81892598c91",
+    "tier": "community",
+    "atlas": [
+      "AML.T0034"
+    ],
+    "attack": [
+      "T1496.004"
+    ],
+    "technique_why": {
+      "AML.T0034": "Cost harvesting (AML.T0034): the agent spends model tokens past what its grant allows.",
+      "T1496.004": "Cloud service hijacking (T1496.004): the provider account's capacity is spent outside its purpose."
+    }
+  },
+  "RT-193": {
+    "digest": "41c0b22a1119444c05f38a3ef38009f3623f5acd835cb00cc69825aad3d48369",
+    "tier": "community",
+    "atlas": [
+      "AML.T0024"
+    ],
+    "attack": [
+      "T1552.001"
+    ],
+    "technique_why": {
+      "AML.T0024": "Exfiltration via AI inference API (AML.T0024): a workspace secret leaves in the prompt to the model.",
+      "T1552.001": "Credentials in files (T1552.001): the token pasted into the prompt came from a workspace file."
+    }
+  },
+  "RT-194": {
+    "digest": "95913054ca813252664c06d5b1ecb0e9aa0e87dfeb3ffb19fe542a43650447ac",
+    "tier": "community",
+    "atlas": [
+      "AML.T0029"
+    ],
+    "attack": [
+      "T1499.003"
+    ],
+    "technique_why": {
+      "AML.T0029": "Denial of AI service (AML.T0029): an oversized request ties up the model route.",
+      "T1499.003": "Application exhaustion flood (T1499.003): the body is sized to exhaust the gateway's memory."
+    }
+  },
+  "RT-195": {
+    "digest": "a04dd30c879d00692ab85e9708032eae0850683e5eaefbeeef642f0725a7bee4",
+    "tier": "community",
+    "techniques_none": "Tests how PantherClaw records a model answer the provider cut off: UNKNOWN, the reservation kept."
+  },
+  "RT-196": {
+    "digest": "ebd02d69c86873eb9fc87593ca30ed128a1c07ea084e16e4b5823a8f8f481df7",
+    "tier": "community",
+    "atlas": [
+      "AML.T0086"
+    ],
+    "attack": [
+      "T1567"
+    ],
+    "technique_why": {
+      "AML.T0086": "Exfiltration via AI agent tool invocation (AML.T0086): the provider's own web search would fetch or send data with no PantherClaw decision.",
+      "T1567": "Exfiltration over web service (T1567): the provider's tool reaches the web from the provider's servers."
+    }
+  },
+  "RT-197": {
+    "digest": "87f04c16dea724d1b78aad231fd7ed9a8c45dbc5c4dfb99fd0b67e8b0a3d13df",
+    "tier": "community",
+    "atlas": [
+      "AML.T0034"
+    ],
+    "attack": [
+      "T1027"
+    ],
+    "technique_why": {
+      "AML.T0034": "Cost harvesting (AML.T0034): the second max_tokens would let the model spend more than the decision reserved.",
+      "T1027": "Obfuscated files or information (T1027): the duplicate member hides the real value from one of two readers."
+    }
+  },
+  "RT-260": {
+    "digest": "c917e88f00ab7079bb682ed8910c4fc428f9679cdc487522fa9c7a1d2a957105",
+    "tier": "community",
+    "asi": [
+      "ASI03"
+    ],
+    "asi_why": {
+      "ASI03": "Identity and privilege abuse (ASI03): a stolen token is replayed again and again with a used proof and with another key."
+    },
+    "atlas": [
+      "AML.T0091.000"
+    ],
+    "attack": [
+      "T1550.001"
+    ],
+    "technique_why": {
+      "AML.T0091.000": "Application access token (AML.T0091.000): a stolen token is replayed in a burst with a used proof and without its key.",
+      "T1550.001": "Application access token (T1550.001): the replayed token and proofs stand in for the agent's own sign-in."
+    }
+  },
   "RT-200": {
     "digest": "650410b363ac93b059108772ace94131289136d18ec2b0abc462e5a70effae00",
     "tier": "business",

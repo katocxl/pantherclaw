@@ -171,7 +171,10 @@ func (s *Service) authorize(ctx context.Context, gw Gateway, raw []byte, creds *
 		return Result{}, err
 	}
 	if !ok {
-		s.log.InfoContext(ctx, "authz.decision", slog.String("decision", string(o.Decision)), slog.String("reason_code", o.Decisive()))
+		// An identity refusal, before the pipeline: agent identity
+		// protection, not a firewall decision (D1205).
+		s.log.InfoContext(ctx, "authz.decision", slog.String("decision", string(o.Decision)), slog.String("reason_code", o.Decisive()),
+			slog.String("check", "identity"))
 		return Result{Decision: o.Decision, ActionHash: p.HashHex(), Reasons: o.Reasons, Nonce: s.nonce(ctx, gw)}, nil
 	}
 	if s.decider == nil {
@@ -280,6 +283,18 @@ type Workloads interface {
 	Identify(ctx context.Context, org ids.OrgID, in iapp.IdentifyInput) (iapp.Identified, error)
 	NonceExpiry(ctx context.Context, org ids.OrgID) (string, time.Time, error)
 	Discover(ctx context.Context, org ids.OrgID, in iapp.DiscoverInput) (ids.UUID, error)
+	// RecordRefusedProof records refused PAP/1 credentials as an identity
+	// event (HR-850); it changes no refusal.
+	RecordRefusedProof(ctx context.Context, org ids.OrgID, in iapp.IdentifyInput, gateway string, refusal error) error
+}
+
+// refusedProof records credentials Identify refused (HR-850). A failure to
+// record is logged and never changes the refusal.
+func (s *Service) refusedProof(ctx context.Context, gw Gateway, in iapp.IdentifyInput, refusal error) {
+	if err := s.workloads.RecordRefusedProof(ctx, gw.Org, in, gw.ID, refusal); err != nil {
+		s.log.WarnContext(ctx, "security.workload_proof_refused_unrecorded", slog.String("gateway_id", gw.ID),
+			slog.String("error", err.Error()))
+	}
 }
 
 // Runs checks and binds runs (runs app). Bind returns when the run expires.
@@ -324,13 +339,15 @@ func (s *Service) identify(ctx context.Context, gw Gateway, p actionir.Parsed, c
 	if s.workloads == nil || s.runs == nil {
 		return iapp.Identified{}, domain.Outcome{}, false, errors.New("authority: workload identity is not configured")
 	}
-	id, err := s.workloads.Identify(ctx, gw.Org, iapp.IdentifyInput{
+	in := iapp.IdentifyInput{
 		Request: pap.Request{Method: c.Method, URL: c.URL, BodySHA256: c.BodySHA256, Token: c.Token},
 		Proof:   c.Proof, ClientAddress: c.ClientAddress,
-	})
+	}
+	id, err := s.workloads.Identify(ctx, gw.Org, in)
 	var pe *pap.Error
 	switch {
 	case errors.As(err, &pe):
+		s.refusedProof(ctx, gw, in, err)
 		return id, identityOutcome(domain.CannotAuthorize, domain.ReasonIdentityUnverified, string(pe.Code)), false, nil
 	case err != nil:
 		return id, domain.Outcome{}, false, err
@@ -392,10 +409,14 @@ func (s *Service) Verify(ctx context.Context, gw Gateway, c *Credentials, run id
 	if s.workloads == nil || (!run.IsZero() && s.runs == nil) {
 		return Verified{}, errors.New("authority: workload identity is not configured")
 	}
-	id, err := s.workloads.Identify(ctx, gw.Org, iapp.IdentifyInput{
+	in := iapp.IdentifyInput{
 		Request: pap.Request{Method: c.Method, URL: c.URL, BodySHA256: c.BodySHA256, Token: c.Token},
 		Proof:   c.Proof, ClientAddress: c.ClientAddress,
-	})
+	}
+	id, err := s.workloads.Identify(ctx, gw.Org, in)
+	if errors.As(err, new(*pap.Error)) {
+		s.refusedProof(ctx, gw, in, err)
+	}
 	if err != nil {
 		return Verified{}, err
 	}

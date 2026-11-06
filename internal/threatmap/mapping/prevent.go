@@ -14,7 +14,13 @@ import "slices"
 // Surface is where a Prevent control acts (D714).
 type Surface string
 
-// Surfaces (closed).
+// Surfaces (closed). CREDENTIAL holds the agent identity protection
+// controls (Badge; D1205): proving which workload is acting and for whom,
+// with the agent's own key and tokens. The others are the runtime
+// firewall's: where an action is decided (AUTHORITY), enforced on its way
+// out (GATEWAY) or confined (SANDBOX). A secret an agent found is not its
+// identity: controls on found secrets sit where they act, never under
+// CREDENTIAL.
 const (
 	SurfaceAuthority  Surface = "AUTHORITY"
 	SurfaceGateway    Surface = "GATEWAY"
@@ -207,7 +213,9 @@ var Prevent = []PreventControl{
 		},
 	},
 	{
-		ID: "prevent.edge_credential_strip", Title: "The edge strips credentials the agent found", Surface: SurfaceCredential,
+		// The sandbox edge acts on secrets the agent found, not on its own
+		// identity: a runtime firewall control (D1205).
+		ID: "prevent.edge_credential_strip", Title: "The edge strips credentials the agent found", Surface: SurfaceSandbox,
 		HR:         []string{"HR-213"},
 		Requires:   RequiresAlways,
 		Techniques: []string{"AML.T0055", "T1552.001"},

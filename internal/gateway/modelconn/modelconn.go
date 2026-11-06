@@ -260,7 +260,7 @@ func match(conn *control.Connection, method, rest string) (route, bool) {
 					continue
 				}
 				id, err := url.PathUnescape(esc)
-				if err != nil || modelapi.CheckModelID(id) != nil {
+				if err != nil || modelapi.CheckModelID(id) != nil || !onePathSegment(id) {
 					continue
 				}
 				rt.id = id
@@ -272,6 +272,13 @@ func match(conn *control.Connection, method, rest string) (route, bool) {
 		}
 	}
 	return route{}, false
+}
+
+// onePathSegment reports whether a model id read on its own stays one
+// plain path segment wherever it is decoded (G0 M29 D1214): not "." or
+// "..", and no "/", "%" or "\".
+func onePathSegment(id string) bool {
+	return id != "." && id != ".." && !strings.ContainsAny(id, `/%\`)
 }
 
 var apiVersion = regexp.MustCompile(`^[a-z0-9.-]{1,32}$`)
@@ -514,8 +521,10 @@ func answerHeader(name string) bool {
 			return true
 		}
 	}
-	if strings.HasPrefix(name, "Pc-") {
-		return true
+	if strings.HasPrefix(strings.ToLower(name), "pc-") {
+		// PantherClaw's headers are its own, set by facts; a provider's
+		// never pass (G0 M29 D1214).
+		return false
 	}
 	for _, p := range answerPrefixes {
 		if strings.HasPrefix(name, p) {

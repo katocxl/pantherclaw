@@ -35,6 +35,8 @@ agent → sandbox edge (dials only the gateway) → gateway model face `/model/{
 - Limits: 8 MiB a request, 8 MiB an answer, 256 MiB a run with both ways together, 5 minutes a call. An answer past the cap breaks the connection rather than arriving cut.
 - The server keeps the request count, bytes each way and model host for each run. It never keeps a body.
 
+This route is for campaigns only. An agent outside a campaign reaches its model through a model connection, where each call is decided, scanned and metered ([model connections](model-connections.md), M29).
+
 ## Set up
 
 1. Create a model relay connection: simulated `http`, package `model-relay`, access mode none, no agent hosts. Its base URL is a loopback or private IP literal where the relay will listen. A relay is known by its mark, not by its name.
