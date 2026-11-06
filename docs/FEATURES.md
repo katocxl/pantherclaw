@@ -962,7 +962,9 @@ Connectors for the mail, files, CRM, docs, issues, model clouds and warehouse ag
 
 ### M32 rows: Kubernetes and edge enforcement
 
-Agent pods in a customer's own cluster get one route out, through the edge as a native sidecar to the gateway, and a daily closure that shows it ([G0 M32](g0/M32.md), [ADR-0059](adr/0059-kubernetes-containment.md)). Self-hosted clusters only; each row takes the edition of platform attestation (PN-002.2).
+Agent pods in a customer's own cluster get one route out, through the edge as a native sidecar to the gateway, and a daily closure that shows it ([G0 M32](g0/M32.md), [ADR-0059](adr/0059-kubernetes-containment.md), [runbook](runbooks/kubernetes.md)). Self-hosted clusters only; each row takes the edition of platform attestation (PN-002.2).
+
+The rows fall in two halves. **Agent identity protection:** the edge's workload key enrolled from the pod's projected token (F1022), gateway enrolment from a projected token (F1024) and pod runs under the issuer entry's run grant (F1028) answer "is this really that pod's agent, and acting for whom?" **Runtime firewall:** enforced namespaces and the admission webhook (F1020, F1021), the agent NetworkPolicy (F1023), the edge as the pod's only route (F1022) and the kube closures that show the route holds (F1026, F1027, F1029) answer "may this pod reach anything but the gateway?" The chart (F1025) deploys both.
 
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
