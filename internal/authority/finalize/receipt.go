@@ -188,6 +188,9 @@ func (a *Authority) receipt(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, e
 	if pap.Would != "" {
 		entry["would"] = pap.Would
 	}
+	if d := TargetDigest(ev); d != "" {
+		entry["target_digest"] = d // G0 M30 D931a: distinct targets, no raw ids
+	}
 	body, err := evdomain.CanonicalBody(entry)
 	if err != nil {
 		return Receipt{}, err
@@ -256,6 +259,11 @@ type permitPAP struct {
 	// Approval is the approval the decision rests on, with every counted
 	// approver's assertion (HR-038, PAP-1 §7.2).
 	Approval *proof.Approval `json:"approval,omitzero"`
+	// Run and Agent are the run and agent of a vectorstore write's permit:
+	// the gateway records them as the record's provenance (G0 M30 D923,
+	// HR-704, D923a). Other permits carry neither.
+	Run   string `json:"run,omitzero"`
+	Agent string `json:"agent,omitzero"`
 }
 
 // permit signs the single-use permit (HR-009). It binds the effective
@@ -270,9 +278,13 @@ func (a *Authority) permit(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, ap
 	if ev.MonitorPermit() {
 		act = ev.ActionHash
 	}
+	pap := permitPAP{V: 1, Org: gw.Org.String(), Txn: txn.String(), Act: act, Epoch: ev.Epoch, Approval: approval}
+	if ev.Connection != nil && ev.Connection.Kind == "vectorstore" {
+		pap.Run, pap.Agent = ev.RunID.String(), ev.Identity.Agent
+	}
 	b, err := json.Marshal(permitClaims{
 		Iss: a.issuer(), Aud: "gw:" + gw.ID, Jti: id.String(), Iat: ev.Now.Unix(), Exp: exp.Unix(),
-		Pap: permitPAP{V: 1, Org: gw.Org.String(), Txn: txn.String(), Act: act, Epoch: ev.Epoch, Approval: approval},
+		Pap: pap,
 	})
 	if err != nil {
 		return nil, err
@@ -334,6 +346,10 @@ type Execution struct {
 	// at its total (D821), and a model operation's usage row records it
 	// (D825).
 	ModelUsage *ModelUsage
+	// OutcomeCode is the code of a connector's refusal after the decision
+	// (G0 M30 D947a); "" otherwise. It is recorded with the attempt, not
+	// signed into the receipt.
+	OutcomeCode string
 }
 
 // ModelUsage is the token usage of one model call (G0 M29 D818).
@@ -454,4 +470,21 @@ func (a *Authority) executionReceipt(gw Gateway, e Execution, x Executed, now ti
 		return Receipt{}, err
 	}
 	return Receipt{JWS: jws, Body: body}, nil
+}
+
+// TargetDigest is the decision event's target_digest (G0 M30 D931a): the
+// first 32 hex characters of sha256(connection id, NUL, target id), so a
+// detection can count the distinct targets a run touched without the feed
+// carrying raw ids. It is empty when the decision has no target; an action
+// without a connection hashes an empty connection id.
+func TargetDigest(ev *pipeline.Evaluation) string {
+	if ev.Target.ID == "" {
+		return ""
+	}
+	conn := ""
+	if ev.Connection != nil {
+		conn = ev.Connection.ID.String()
+	}
+	sum := sha256.Sum256([]byte(conn + "\x00" + ev.Target.ID))
+	return hex.EncodeToString(sum[:])[:32]
 }

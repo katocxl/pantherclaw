@@ -118,8 +118,10 @@ func TestF346_ConnectionsDeclareTheirCapabilities(t *testing.T) {
 	}
 
 	local := app.Declare(conn(app.KindLocal, app.AccessNone), shell)
-	if len(local.Operations) != 1 || local.Operations[0].Route != "shell-command" || local.Operations[0].Mode != app.ModeMonitor ||
-		!slices.Equal(limits(local), []string{"EFFECT_UNVERIFIABLE", "COOPERATIVE"}) || len(local.Permissions) != 0 ||
+	// pc.shell also serves agent_config.write (G0 M30 D943), cooperative too.
+	if len(local.Operations) != 2 || local.Operations[0].Route != "shell-command" || local.Operations[0].Mode != app.ModeMonitor ||
+		local.Operations[1].Route != "agent-config-write" || local.Operations[1].Mode != app.ModeMonitor ||
+		!slices.Equal(limits(local), []string{"EFFECT_UNVERIFIABLE", "EFFECT_UNVERIFIABLE", "COOPERATIVE"}) || len(local.Permissions) != 0 ||
 		!slices.ContainsFunc(local.Failure, func(s string) bool { return strings.Contains(s, "HR-200") }) {
 		t.Fatalf("local shell: %+v", local)
 	}

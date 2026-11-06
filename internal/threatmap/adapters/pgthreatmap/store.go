@@ -214,7 +214,7 @@ func automations(ctx context.Context, q *dbq.Queries, org ids.OrgID, hub map[str
 	for _, r := range rows {
 		a := domain.Automation{ID: r.ID.String(), Name: r.Name, State: r.State, HubItem: hub[r.ID.String()]}
 		if d, err := autodomain.Parse(r.Definition); err == nil {
-			a.TriggerRules, a.HasContain = triggers(d)
+			a.TriggerRules, a.Narrowed, a.HasContain = triggers(d)
 		}
 		out = append(out, a)
 	}
@@ -224,13 +224,14 @@ func automations(ctx context.Context, q *dbq.Queries, org ids.OrgID, hub map[str
 // alertEvents are the events a Respond trigger reads rule ids from (D713).
 var alertEvents = []string{"alert.raised", "alert.inferred"}
 
-func triggers(d *autodomain.Definition) ([]string, bool) {
+func triggers(d *autodomain.Definition) ([]string, bool, bool) {
 	var ids []string
+	narrowed := false
 	if e := d.When.Event; e != nil && slices.Contains(alertEvents, e.On) {
-		ids = celenv.TriggerRules(e.Where)
+		ids, narrowed = celenv.TriggerRulesNarrowed(e.Where)
 	}
 	contain := slices.ContainsFunc(d.Do, func(s autodomain.StepSpec) bool { return s.Step == autodomain.KindContain })
-	return ids, contain
+	return ids, narrowed, contain
 }
 
 // Seen implements ports.Store.
@@ -253,6 +254,14 @@ func (Store) Seen(ctx context.Context, tx db.TenantTx, org ids.OrgID, since time
 	}
 	for _, d := range decisions {
 		out.Decisions = append(out.Decisions, domain.DecisionCount{ReasonCode: d.ReasonCode, Decision: d.Decision, Count: d.N})
+	}
+	outcomes, err := q.ThreatMapOutcomeCounts(ctx, dbq.ThreatMapOutcomeCountsParams{OrgID: org, Since: since, AllAgents: all, Agents: agents})
+	if err != nil {
+		return ports.Seen{}, err
+	}
+	out.Outcomes = make([]domain.OutcomeCount, 0, len(outcomes))
+	for _, o := range outcomes {
+		out.Outcomes = append(out.Outcomes, domain.OutcomeCount{Code: o.OutcomeCode, Count: o.N}) // G0 M30 D947a
 	}
 	return out, nil
 }

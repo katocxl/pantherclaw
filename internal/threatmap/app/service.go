@@ -223,7 +223,7 @@ func inputsFor(ctx context.Context, store ports.Store, tx db.TenantTx, org ids.O
 	if err != nil {
 		return in, err
 	}
-	in.Alerts, in.Decisions = seen.Alerts, seen.Decisions
+	in.Alerts, in.Decisions, in.Outcomes = seen.Alerts, seen.Decisions, seen.Outcomes
 	return in, nil
 }
 

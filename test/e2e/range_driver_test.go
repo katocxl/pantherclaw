@@ -122,6 +122,9 @@ func (d *rangeDriver) Capabilities() map[app.Capability]bool {
 	maps.Copy(caps, m20ConnectorCapabilities())
 	caps[capAWSECS] = true
 	caps[capModel] = true
+	// M30 (D1216): the harness seeds the share grant and the shell hook
+	// connection (RT-201, RT-203).
+	caps["share"], caps["agent_config"] = true, true
 	return caps
 }
 
@@ -137,7 +140,7 @@ func (d *rangeDriver) Teardown(context.Context, domain.Scenario) error { return 
 func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture, error) {
 	t := d.t
 	d.sc = sc
-	o := options{budget: "1000.00", shell: sc.ID == "RT-016"}
+	o := options{budget: "1000.00", shell: sc.ID == "RT-016" || sc.ID == configScenario}
 	switch sc.ID {
 	case "RT-026":
 		o.budget = "100.00"
@@ -156,7 +159,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	var p idp
 	// CX-90002 is the Hub seed's customer-authored form of RT-009.
 	ownGrant := sc.ID == "RT-009" || sc.ID == "CX-90002"
-	if requires(sc, "person") || ownGrant || slackScenario(sc) || needsBrowser(sc) ||
+	if requires(sc, "person") || ownGrant || sc.ID == shareScenario || slackScenario(sc) || needsBrowser(sc) ||
 		requires(sc, string(capJiraComment)) || requires(sc, string(capGitLabMerge)) || requires(sc, string(capAWSECS)) ||
 		(requires(sc, string(capModel)) && !requires(sc, "sandbox")) {
 		p = inProcessIdP(t)
@@ -222,6 +225,9 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	}
 	if ownGrant {
 		d.ownGrant(`{"operations": ["github.contents.write"], "targets": {"github.branch": {"prefixes": ["acme/payments@"]}}}`, "")
+	}
+	if sc.ID == shareScenario {
+		d.ownGrant(shareBounds, "")
 	}
 	if err := d.extra.setup(d); err != nil {
 		return nil, err

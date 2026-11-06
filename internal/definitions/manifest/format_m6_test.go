@@ -38,7 +38,9 @@ func TestHR124_PcShellGolden(t *testing.T) {
 	}
 	golden(t, "pc-shell.digests", []byte(digests.String()))
 	d := p.Definitions[0]
-	if p.Name != "pc.shell" || len(p.Definitions) != 1 || d.Operation != "shell.command.run" || d.Dispatch != nil ||
+	// G0 M30 D943 adds agent_config.write, the protected-config write route.
+	if p.Name != "pc.shell" || len(p.Definitions) != 2 || d.Operation != "shell.command.run" || d.Dispatch != nil ||
+		p.Definitions[1].Operation != "agent_config.write" || p.Definitions[1].Dispatch != nil ||
 		d.Params["command"].Type != domain.TypeCommand || d.Params["cwd"].Type != domain.TypePath ||
 		d.Mappings[0].Channel != domain.ChannelHook {
 		t.Fatalf("decoded %+v", p)

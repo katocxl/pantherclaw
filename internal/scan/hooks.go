@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/katocxl/pantherclaw/internal/agentconfig"
 )
 
 // Limits of the hook and skill readers.
@@ -26,16 +28,40 @@ var (
 	assignment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
 )
 
-// hookFiles returns the settings files that can hold hooks.
-func hookFiles(o Options) []string {
-	var out []string
+// rootDir is one of agentconfig's roots and the directory it is here.
+type rootDir struct {
+	root agentconfig.Root
+	dir  string
+}
+
+// rootDirs are the configuration directory, the home and each project.
+func rootDirs(o Options) []rootDir {
+	var out []rootDir
+	if o.ConfigDir != "" {
+		out = append(out, rootDir{agentconfig.RootConfig, o.ConfigDir})
+	}
 	if o.Home != "" {
-		out = append(out, filepath.Join(o.Home, ".claude", "settings.json"), filepath.Join(o.Home, ".cursor", "hooks.json"),
-			filepath.Join(o.Home, ".gemini", "settings.json"))
+		out = append(out, rootDir{agentconfig.RootHome, o.Home})
 	}
 	for _, p := range o.Paths {
-		out = append(out, filepath.Join(p, ".claude", "settings.json"), filepath.Join(p, ".claude", "settings.local.json"),
-			filepath.Join(p, ".cursor", "hooks.json"), filepath.Join(p, ".gemini", "settings.json"))
+		out = append(out, rootDir{agentconfig.RootProject, p})
+	}
+	return out
+}
+
+// hookFiles returns the settings files that can hold hooks (agentconfig's
+// table, G0 M30 D940).
+func hookFiles(o Options) []string {
+	var out []string
+	for _, r := range rootDirs(o) {
+		if r.root == agentconfig.RootConfig {
+			continue
+		}
+		for _, e := range agentconfig.OfRoot(r.root) {
+			if e.Hooks {
+				out = append(out, filepath.Join(r.dir, filepath.FromSlash(e.Glob)))
+			}
+		}
 	}
 	return out
 }
@@ -133,16 +159,12 @@ func firstWord(line string) (word, rest string) {
 // skillDirs returns the directories that hold agent skills.
 func skillDirs(o Options) []string {
 	var out []string
-	add := func(root string) {
-		for _, d := range []string{".claude", ".cursor", ".codex", ".gemini"} {
-			out = append(out, filepath.Join(root, d, "skills"))
+	for _, r := range rootDirs(o) {
+		for _, e := range agentconfig.OfRoot(r.root) {
+			if dir, tree := e.Tree(); tree && e.Class == agentconfig.ClassSkills {
+				out = append(out, filepath.Join(r.dir, filepath.FromSlash(dir)))
+			}
 		}
-	}
-	if o.Home != "" {
-		add(o.Home)
-	}
-	for _, p := range o.Paths {
-		add(p)
 	}
 	return out
 }

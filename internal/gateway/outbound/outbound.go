@@ -104,6 +104,20 @@ var formats = []format{
 	{"openai", regexp.MustCompile(`sk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{32,}|sk-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}`)},
 }
 
+// Formats returns the kinds of the known credential formats text holds, in
+// table order without repeats: the local scan reads agent configuration
+// files through them (G0 M30 D942). Like a finding, it names the kind and
+// never the value.
+func Formats(text string) []string {
+	var out []string
+	for _, f := range formats {
+		if !slices.Contains(out, f.kind) && f.re.MatchString(text) {
+			out = append(out, f.kind)
+		}
+	}
+	return out
+}
+
 // part is a string to look at. heldOnly parts are searched for held secrets
 // but not for formats (a whole body whose values are scanned one by one).
 type part struct {

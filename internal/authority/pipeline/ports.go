@@ -41,7 +41,8 @@ type Identity struct {
 	// bind it (HR-030).
 	JKT string
 	// Proof is how the request was proven: "" for a PAP/1 proof, "bearer"
-	// for an MCP access token (G0 M26 D402, HR-627). Policy sees it as
+	// for an MCP access token (G0 M26 D402, HR-627), "dpop" for a DPoP-bound
+	// one (G0 M30 D913). Policy sees it as
 	// `workload.proof`.
 	Proof string
 }
@@ -271,6 +272,10 @@ type Connection struct {
 	// connection for a verifier: the HTTP GET reads of the package version
 	// the org pinned for it (HR-190, G0 M7 design decision 2), sorted.
 	Reads []string
+	// Writers are a vectorstore connection's writer agents (G0 M30 D924):
+	// another agent's upsert or delete waits for approval. Empty for any
+	// other kind.
+	Writers []ids.UUID
 }
 
 // Mode is a route's mode on the connection.

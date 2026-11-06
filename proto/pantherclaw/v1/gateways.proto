@@ -633,6 +633,9 @@ message GatewayConnection {
   // A model connection's settings (G0 M29 D811): the max output tokens
   // the gateway adds and the provider-side tool types it lets through.
   ModelConfig model = 27;
+  // A vectorstore connection's settings (G0 M30 D922): its database, its
+  // table and the agents that may write without a person.
+  VectorstoreConfig vectorstore = 28;
 }
 
 // RouteModeSetting is one route's mode.

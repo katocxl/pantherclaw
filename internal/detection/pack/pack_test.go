@@ -115,10 +115,12 @@ func TestPackCoversD11(t *testing.T) {
 		"pc.live.unexpected_denial",
 		// HR-850: refused workload proofs are an identity event in every edition.
 		"pc.identity.workload_proof_refused",
+		"pc.agent.config_changed", // G0 M30 D941, D947b
 	}
 	business := []string{
 		"pc.probing.denial_burst", "pc.sequence.read_then_disclose", "pc.budget.splitting", "pc.delegation.depth_anomaly",
 		"pc.drift.behavior", "pc.threatmap.lane_lost",
+		"pc.reads.enumeration", "pc.exfil.scheduled_sends", // G0 M30 D931, D932, D947b
 	}
 	for _, id := range community {
 		if editions[id] != "community" {

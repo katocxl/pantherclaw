@@ -1,0 +1,1 @@
+{"id":"org-policy","version":1,"rules":[{"id":"hold","kind":"REQUIRE_APPROVAL","summary":"over 50 needs approval","operations":["payments.refund.create"],"when":"action.params.amount \u003e money(\"50\", \"USD\")","reason":"REFUND_OVER_50","approval":{"role":"approver","count":1}}]}

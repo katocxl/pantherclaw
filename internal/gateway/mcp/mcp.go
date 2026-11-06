@@ -463,8 +463,14 @@ func (h *Handler) inbound(w http.ResponseWriter, r *http.Request, conn *control.
 		htu = oauthURL
 	}
 	in := dispatch.ReadInbound(r, body, htu)
+	bearerProof := in.Creds.GetProof() == ""
+	if bearer && bearerProof {
+		// The DPoP proof the OAuth route forwards, if any, is the proof the
+		// Authority checks a DPoP-bound token with (G0 M30 D913).
+		in.Creds.Proof = r.Header.Get(dispatch.HeaderMcpDPoP)
+	}
 	switch {
-	case bearer && in.HasToken && in.SubjectOK && in.Creds.GetProof() == "":
+	case bearer && in.HasToken && in.SubjectOK && bearerProof:
 		// An MCP access token through the OAuth route: the Authority
 		// verifies it, and that it is one, from its type (G0 M26 D408).
 		return in, true

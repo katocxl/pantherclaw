@@ -112,16 +112,17 @@ WHERE org_id = sqlc.arg(org_id) AND enabled
 RETURNING *;
 
 -- name: InsertMcpClient :one
-INSERT INTO pc.mcp_clients (org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, created_by)
+INSERT INTO pc.mcp_clients (org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, created_by,
+    dpop_bound)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(client_url), sqlc.arg(agent_id), sqlc.arg(instance_id), sqlc.arg(client_name),
-    sqlc.arg(redirect_uris), sqlc.arg(document_digest), sqlc.arg(created_by))
+    sqlc.arg(redirect_uris), sqlc.arg(document_digest), sqlc.arg(created_by), sqlc.arg(dpop_bound))
 RETURNING *;
 
 -- A confirmed change takes a new document, only over the one it was asked
 -- against.
 -- name: UpdateMcpClientDocument :execrows
 UPDATE pc.mcp_clients SET client_name = sqlc.arg(client_name), redirect_uris = sqlc.arg(redirect_uris),
-    document_digest = sqlc.arg(document_digest)
+    document_digest = sqlc.arg(document_digest), dpop_bound = sqlc.arg(dpop_bound)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'ACTIVE' AND document_digest = sqlc.arg(previous_digest);
 
 -- name: GetMcpClient :one
@@ -193,9 +194,9 @@ LIMIT 20;
 
 -- name: InsertMcpAuthorizationCode :exec
 INSERT INTO pc.mcp_authorization_codes (org_id, code_hash, client_id, user_id, redirect_uri, code_challenge, resource,
-    scope_operations, expires_at)
+    scope_operations, expires_at, dpop_jkt)
 VALUES (sqlc.arg(org_id), sqlc.arg(code_hash), sqlc.arg(client_id), sqlc.arg(user_id), sqlc.arg(redirect_uri),
-    sqlc.arg(code_challenge), sqlc.arg(resource), sqlc.arg(scope_operations), now() + interval '60 seconds');
+    sqlc.arg(code_challenge), sqlc.arg(resource), sqlc.arg(scope_operations), now() + interval '60 seconds', sqlc.narg(dpop_jkt));
 
 -- A code is spent by the first request that names it, right or wrong.
 -- name: SpendMcpAuthorizationCode :one
@@ -222,9 +223,9 @@ WHERE org_id = sqlc.arg(org_id) AND code_hash = sqlc.arg(code_hash)
 FOR UPDATE;
 
 -- name: InsertMcpRefreshToken :exec
-INSERT INTO pc.mcp_refresh_tokens (org_id, id, family_id, token_hash, client_id, run_id, resource, expires_at)
+INSERT INTO pc.mcp_refresh_tokens (org_id, id, family_id, token_hash, client_id, run_id, resource, expires_at, dpop_jkt)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(family_id), sqlc.arg(token_hash), sqlc.arg(client_id), sqlc.arg(run_id),
-    sqlc.arg(resource), sqlc.arg(expires_at));
+    sqlc.arg(resource), sqlc.arg(expires_at), sqlc.narg(dpop_jkt));
 
 -- name: LockMcpRefreshToken :one
 SELECT * FROM pc.mcp_refresh_tokens

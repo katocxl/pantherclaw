@@ -80,8 +80,28 @@ type ActionIR struct {
 	Target       Target         `json:"target"`
 	Params       jsontext.Value `json:"params"`
 	Destinations []Destination  `json:"destinations"`
-	DedupeKey    string         `json:"dedupe_key,omitempty"`
+	// Shares are the accounts the action shares to (G0 M30 D934): kind
+	// aws_account, github_org, email_domain or public. Only the gateway
+	// mapper fills them, from the definition's share extractors, never
+	// from agent-supplied fields directly; the Authority holds a share to
+	// an account the org does not own, or to the public (D935).
+	Shares    []Destination `json:"shares,omitempty"`
+	DedupeKey string        `json:"dedupe_key,omitempty"`
 }
+
+// Share kinds (G0 M30 D934). A public share's id is ShareIDPublic.
+const (
+	ShareAWSAccount  = "aws_account"
+	ShareGitHubOrg   = "github_org"
+	ShareEmailDomain = "email_domain"
+	SharePublic      = "public"
+	ShareIDPublic    = "*"
+	// MaxShares bounds an action's share destinations.
+	MaxShares = 32
+)
+
+// ShareKinds lists every share kind.
+var ShareKinds = []string{ShareAWSAccount, ShareGitHubOrg, ShareEmailDomain, SharePublic}
 
 // Parsed is a validated ActionIR with its canonical bytes and hash.
 type Parsed struct {
@@ -215,6 +235,17 @@ func (a ActionIR) validate() error {
 			return ambiguous("destinations[%d].kind must be internal or external", i)
 		}
 		if err := identifier(fmt.Sprintf("destinations[%d].id", i), d.ID, true); err != nil {
+			return err
+		}
+	}
+	if len(a.Shares) > MaxShares {
+		return ambiguous("more than %d shares", MaxShares)
+	}
+	for i, d := range a.Shares {
+		if !slices.Contains(ShareKinds, d.Kind) {
+			return ambiguous("shares[%d].kind is not a share kind", i)
+		}
+		if err := identifier(fmt.Sprintf("shares[%d].id", i), d.ID, true); err != nil {
 			return err
 		}
 	}

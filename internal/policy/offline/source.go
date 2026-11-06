@@ -29,6 +29,7 @@ import (
 	pcanthropic "github.com/katocxl/pantherclaw/packages/pc-anthropic"
 	pcaws "github.com/katocxl/pantherclaw/packages/pc-aws"
 	pcawsecs "github.com/katocxl/pantherclaw/packages/pc-aws-ecs"
+	pcawss3 "github.com/katocxl/pantherclaw/packages/pc-aws-s3"
 	pcchatgptenterprise "github.com/katocxl/pantherclaw/packages/pc-chatgpt-enterprise"
 	pccopilotstudio "github.com/katocxl/pantherclaw/packages/pc-copilot-studio"
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
@@ -40,6 +41,7 @@ import (
 	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
 	pcstripe "github.com/katocxl/pantherclaw/packages/pc-stripe"
 	pcteams "github.com/katocxl/pantherclaw/packages/pc-teams"
+	pcvectorstore "github.com/katocxl/pantherclaw/packages/pc-vectorstore"
 )
 
 // Bounds of what one check reads. A check runs on a pull request's own
@@ -95,9 +97,9 @@ func (w *world) add(p *defs.Package) {
 // that names no --packages.
 func builtin() [][]byte {
 	return [][]byte{
-		mockpayments.Package, pca2a.Package, pcaws.Package, pcawsecs.Package, pcgithub.Package, pcgitlab.Package, pcjira.Package,
+		mockpayments.Package, pca2a.Package, pcaws.Package, pcawsecs.Package, pcawss3.Package, pcgithub.Package, pcgitlab.Package, pcjira.Package,
 		pcpostgres.Package, pcshell.Package, pcslack.Package, pcstripe.Package, pcteams.Package, pccopilotstudio.Package,
-		pcchatgptenterprise.Package, pcanthropic.Package, pcopenai.Package,
+		pcchatgptenterprise.Package, pcanthropic.Package, pcopenai.Package, pcvectorstore.Package,
 	}
 }
 

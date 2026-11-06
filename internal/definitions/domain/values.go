@@ -21,13 +21,15 @@ import (
 // Value is one typed parameter value.
 type Value struct {
 	Type    ParamType
-	Money   money.Money   // money
-	Decimal money.Decimal // decimal
-	Int     int64         // integer
-	Str     string        // enum, identifier, text, command, path
-	Bool    bool          // boolean
-	List    []string      // identifier_list
-	Filter  []Predicate   // query_filter
+	Money   money.Money       // money
+	Decimal money.Decimal     // decimal
+	Int     int64             // integer
+	Str     string            // enum, identifier, text, command, path
+	Bool    bool              // boolean
+	List    []string          // identifier_list
+	Filter  []Predicate       // query_filter
+	Floats  []float64         // float_array
+	Map     map[string]string // string_map
 }
 
 // Values are the typed parameters of one action, by name.
@@ -86,6 +88,10 @@ func (p ParamSpec) decode(name string, raw jsontext.Value) (Value, error) {
 		}
 	case TypeQueryFilter:
 		v.Filter, err = decodeFilter(raw)
+	case TypeFloatArray:
+		v.Floats, err = p.decodeFloats(raw)
+	case TypeStringMap:
+		v.Map, err = p.decodeStringMap(raw)
 	case TypeEnum, TypeIdentifier, TypeText, TypeCommand, TypeContent, TypePath:
 		if err = json.Unmarshal(raw, &v.Str); err == nil {
 			err = p.str(v.Str)
@@ -161,7 +167,8 @@ func (p ParamSpec) str(s string) error {
 		}
 		return nil
 	case TypeText, TypeCommand, TypeContent:
-	case TypeMoney, TypeDecimal, TypeInteger, TypeIdentifierList, TypeBoolean, TypeQueryFilter:
+	case TypeMoney, TypeDecimal, TypeInteger, TypeIdentifierList, TypeBoolean, TypeQueryFilter, TypeFloatArray,
+		TypeStringMap:
 		return fmt.Errorf("not a string type")
 	}
 	if limit := limitOr(p.MaxLength, maxParamText); len(s) > limit {
@@ -234,6 +241,15 @@ func (v Value) wire() any {
 		return v.List
 	case TypeQueryFilter:
 		return v.Filter
+	case TypeFloatArray:
+		// The canonical string (G0 M30 D1211); values with no such form
+		// stay numbers, which the ActionIR refuses (HR-101).
+		if s, err := EncodeFloat32s(v.Floats); err == nil {
+			return s
+		}
+		return v.Floats
+	case TypeStringMap:
+		return v.Map
 	case TypeEnum, TypeIdentifier, TypeText, TypeCommand, TypeContent, TypePath:
 		return v.Str
 	}

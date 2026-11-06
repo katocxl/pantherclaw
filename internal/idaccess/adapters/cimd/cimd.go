@@ -133,6 +133,8 @@ type document struct {
 	TokenEndpointAuthMethod *string  `json:"token_endpoint_auth_method"`
 	ClientSecret            *string  `json:"client_secret"`
 	ClientSecretExpiresAt   any      `json:"client_secret_expires_at"`
+	// DPoPBound is RFC 9449 §5.2 client metadata (G0 M30 D911).
+	DPoPBound bool `json:"dpop_bound_access_tokens"`
 }
 
 // Fetch implements ports.ClientDocuments.
@@ -222,7 +224,7 @@ func Parse(b []byte, clientURL string) (ports.ClientMetadata, error) {
 	if len([]rune(name)) > maxName {
 		name = string([]rune(name)[:maxName])
 	}
-	return ports.ClientMetadata{ClientID: clientURL, Name: name, RedirectURIs: d.RedirectURIs}, nil
+	return ports.ClientMetadata{ClientID: clientURL, Name: name, RedirectURIs: d.RedirectURIs, DPoPBound: d.DPoPBound}, nil
 }
 
 func jsonType(ct string) bool {

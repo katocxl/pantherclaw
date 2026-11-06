@@ -9,6 +9,11 @@
 // its audience, and carries no key confirmation: it is bearer proof, level
 // 0, and the Authority re-checks the client, the opt-in and the run on
 // every call.
+//
+// A token minted against a DPoP proof (RFC 9449) is bound to that key
+// instead: cnf.jkt names it and pap.proof is "dpop", and the two always
+// agree. Every use then needs a DPoP proof with that key (G0 M30 D912,
+// D913). It is still level 0.
 package mcptoken
 
 import (
@@ -32,6 +37,10 @@ const TokenType = "pap-mcp+jwt" //nolint:gosec // G101: a JWS type, not a creden
 
 // ProofBearer is the workload.proof a call with this token carries (HR-627).
 const ProofBearer = "bearer"
+
+// ProofDPoP is the workload.proof of a call with a DPoP-bound token (G0
+// M30 D912).
+const ProofDPoP = "dpop"
 
 // MaxBytes bounds a token before it is parsed.
 const MaxBytes = 8 << 10
@@ -59,7 +68,13 @@ type claims struct {
 	Expiry    int64     `json:"exp"`
 	ID        string    `json:"jti"`
 	Scope     string    `json:"scope,omitzero"`
+	Cnf       *cnf      `json:"cnf,omitzero"`
 	PAP       claimsPAP `json:"pap"`
+}
+
+// cnf is the key confirmation of a DPoP-bound token (RFC 9449 §6.1).
+type cnf struct {
+	JKT string `json:"jkt"`
 }
 
 type claimsPAP struct {
@@ -105,6 +120,12 @@ func (m *Minter) Mint(_ context.Context, c ports.AccessClaims, now time.Time) (s
 		return "", time.Time{}, bad("client kind")
 	case c.Connection == "" || c.Resource == "":
 		return "", time.Time{}, bad("resource")
+	case c.JKT != "" && !pap.ValidJKT(c.JKT):
+		return "", time.Time{}, bad("jkt")
+	}
+	proof, confirm := ProofBearer, (*cnf)(nil)
+	if c.JKT != "" {
+		proof, confirm = ProofDPoP, &cnf{JKT: c.JKT}
 	}
 	signer, err := m.Keys.Signer()
 	if err != nil {
@@ -115,10 +136,10 @@ func (m *Minter) Mint(_ context.Context, c ports.AccessClaims, now time.Time) (s
 	inst := pap.Instance{Org: c.Org, Agent: c.Agent, Instance: c.Instance}
 	payload, err := json.Marshal(claims{
 		Issuer: m.Issuer, Subject: inst.String(), Audience: c.Resource,
-		IssuedAt: now.Unix(), NotBefore: now.Unix(), Expiry: exp.Unix(), ID: ids.NewV7().String(),
+		IssuedAt: now.Unix(), NotBefore: now.Unix(), Expiry: exp.Unix(), ID: ids.NewV7().String(), Cnf: confirm,
 		PAP: claimsPAP{
 			V: 1, Org: c.Org.String(), Env: c.Environment.String(), Run: c.Run.String(), Connection: c.Connection,
-			Client: client{Kind: c.ClientKind, ID: c.Client.String()}, Proof: ProofBearer, Ops: c.Scope,
+			Client: client{Kind: c.ClientKind, ID: c.Client.String()}, Proof: proof, Ops: c.Scope,
 		},
 	})
 	if err != nil {
@@ -141,6 +162,10 @@ type Token struct {
 	ID          ids.UUID
 	IssuedAt    time.Time
 	ExpiresAt   time.Time
+	// JKT is cnf.jkt, the DPoP key the token is bound to; empty for a bearer
+	// token. Proof is ProofBearer or ProofDPoP, agreeing with JKT.
+	JKT   string
+	Proof string
 }
 
 // Verify checks a token: typ and signature with an mcp_tokens key, issuer,
@@ -164,8 +189,11 @@ func Verify(v *jws.Verifier, issuer, compact, url string, now time.Time) (Token,
 		return Token{}, bad("issuer")
 	case c.Audience == "" || c.Audience != url:
 		return Token{}, bad("audience")
-	case c.PAP.V != 1 || c.PAP.Proof != ProofBearer:
+	case c.PAP.V != 1 || (c.PAP.Proof != ProofBearer && c.PAP.Proof != ProofDPoP):
 		return Token{}, bad("version")
+	case (c.PAP.Proof == ProofDPoP) != (c.Cnf != nil) || (c.Cnf != nil && !pap.ValidJKT(c.Cnf.JKT)):
+		// cnf.jkt and pap.proof must agree (G0 M30 D913).
+		return Token{}, bad("key confirmation")
 	case !now.Before(exp.Add(Leeway)):
 		return Token{}, ErrExpired
 	case nbf.After(now.Add(Leeway)) || iat.After(now.Add(Leeway)) || nbf.Before(iat):
@@ -195,8 +223,13 @@ func Verify(v *jws.Verifier, issuer, compact, url string, now time.Time) (Token,
 	if !ok1 || !ok2 || !ok3 || !ok4 {
 		return Token{}, bad("ids")
 	}
+	var jkt string
+	if c.Cnf != nil {
+		jkt = c.Cnf.JKT
+	}
 	return Token{
 		Instance: inst, Environment: env, Run: run, Connection: c.PAP.Connection, Resource: c.Audience,
 		ClientKind: c.PAP.Client.Kind, Client: cl, Operations: slices.Clone(c.PAP.Ops), ID: id, IssuedAt: iat, ExpiresAt: exp,
+		JKT: jkt, Proof: c.PAP.Proof,
 	}, nil
 }

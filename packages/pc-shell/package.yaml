@@ -10,7 +10,7 @@
 # the golden tests in internal/definitions to be updated deliberately.
 format: 1
 name: pc.shell
-version: 1.0.0
+version: 1.1.0
 publisher: pantherclaw
 summary: Shell commands a cooperative coding agent asks to run
 
@@ -70,4 +70,63 @@ definitions:
             shell: input.shell
             command: input.command
             cwd: normpath(input.cwd)
+            call: input.call
+
+  # A write to an agent configuration or memory file of the project (G0 M30
+  # D943, HR-712): `pclaw hook claude-code` asks before Write, Edit,
+  # MultiEdit or NotebookEdit writes a file agentconfig marks protected, and
+  # writes nothing else through here. No template or default grant names
+  # this operation, so it is refused as not granted unless a grant names it.
+  # The route is cooperative (PARTIAL), as the shell route is.
+  - operation: agent_config.write
+    summary: Write an agent configuration or memory file on the developer's machine
+    access: write
+    target:
+      type: shell.workspace
+      id_pattern: '^local$'
+      account: none
+    params:
+      # The file, in its one normalized absolute spelling: the project's
+      # working directory joined with the project-relative path.
+      path:
+        type: path
+        material: true
+        required: true
+      class:
+        type: enum
+        material: true
+        required: true
+        values: [settings, mcp, hooks, memory, skills]
+      # The client's id of this tool call, as for shell.command.run: the
+      # dedupe key an irreversible operation needs (HR-007).
+      call:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z0-9_-]{1,128}$'
+    effects:
+      - kind: agent.config.change
+        description: Changes how the developer's coding agent is configured or what it remembers
+    reversibility: irreversible
+    dedupe_key: [params.call]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Write the agent {params.class} file {params.path}
+      fields: [params.path, params.class]
+    assurance:
+      basis: declared
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-08
+    mappings:
+      - channel: hook
+        tool: agent_config
+        route: agent-config-write
+        extract:
+          # The only operation is write; anything else names no target.
+          target_id: "input.op == 'write' ? 'local' : ''"
+          params:
+            path: normpath(input.cwd + '/' + input.path)
+            class: input.class
             call: input.call

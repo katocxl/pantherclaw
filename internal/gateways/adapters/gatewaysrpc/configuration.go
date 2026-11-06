@@ -69,6 +69,8 @@ func (h *GatewayHandler) GetConfiguration(ctx context.Context, req *pb.GetConfig
 			out.Connections[len(out.Connections)-1].A2A = cfg
 		case *pb.ModelConfig:
 			out.Connections[len(out.Connections)-1].Model = cfg // G0 M29 D811
+		case *pb.VectorstoreConfig:
+			out.Connections[len(out.Connections)-1].Vectorstore = cfg // G0 M30 D922
 		}
 	}
 	for _, cr := range c.Credentials {

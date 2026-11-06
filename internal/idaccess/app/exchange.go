@@ -237,6 +237,13 @@ func (e *Exchange) JWTBearer(ctx context.Context, form url.Values) (authnapp.Tok
 	} else if err != nil {
 		return authnapp.TokenResponse{}, err
 	}
+	// A DPoP proof binds the token to the client's key (G0 M30 D912).
+	jkt, err := tokenDPoP(ctx, e.Pool, e.PublicURL, org, now)
+	if errors.As(err, &r) {
+		return authnapp.TokenResponse{}, e.fail(ctx, r.oe, r.reason, slog.String("org", org.String()))
+	} else if err != nil {
+		return authnapp.TokenResponse{}, err
+	}
 	resource, err := chooseResource(a.Resources, form)
 	if err != nil {
 		return authnapp.TokenResponse{}, e.fail(ctx, authnapp.ErrInvalidGrant, "resource")
@@ -295,13 +302,13 @@ func (e *Exchange) JWTBearer(ctx context.Context, form url.Values) (authnapp.Tok
 		}
 		tok, exp, err := e.Tokens.Mint(ctx, ports.AccessClaims{
 			Org: org, Environment: run.EnvironmentID, Agent: agent.ID, Instance: inst.ID, Run: run.ID, Connection: conn,
-			Resource: resource, ClientKind: ports.ClientAssertion, Client: binding.ID, Scope: choice.Operations,
+			Resource: resource, ClientKind: ports.ClientAssertion, Client: binding.ID, Scope: choice.Operations, JKT: jkt,
 		}, now)
 		if err != nil {
 			return err
 		}
 		out = authnapp.TokenResponse{
-			AccessToken: tok, TokenType: "Bearer", ExpiresIn: int(exp.Sub(now).Seconds()),
+			AccessToken: tok, TokenType: tokenType(jkt), ExpiresIn: int(exp.Sub(now).Seconds()),
 			Scope: strings.Join(choice.Operations, " "), RunID: run.ID.String(),
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
@@ -309,7 +316,7 @@ func (e *Exchange) JWTBearer(ctx context.Context, form url.Values) (authnapp.Tok
 			Object: &audit.Object{Type: "run", ID: run.ID.String()},
 			Details: map[string]string{
 				"grant": "jwt_bearer", "issuer": a.Issuer, "client": binding.ID.String(), "user": user.String(),
-				"resource": resource, "grant_id": choice.Grant.String(),
+				"resource": resource, "grant_id": choice.Grant.String(), "binding": bindingOf(jkt),
 			},
 		})
 		return err

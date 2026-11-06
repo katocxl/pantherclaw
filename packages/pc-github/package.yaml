@@ -34,7 +34,7 @@
 # updated deliberately.
 format: 1
 name: pc.github
-version: 1.0.1
+version: 1.1.0
 publisher: pantherclaw
 summary: GitHub repositories, branches and pull requests through a GitHub App
 
@@ -770,6 +770,157 @@ definitions:
           allow_rebase_merge: params.allow_rebase_merge
           allow_auto_merge: params.allow_auto_merge
           delete_branch_on_merge: params.delete_branch_on_merge
+      credential_scope:
+        administration: write
+
+  # Shares (G0 M30 D934): making a repository public, or moving it to
+  # another owner, discloses it, and neither can be taken back once seen.
+  # The share extractor names who it reaches, and the Authority holds a
+  # share to the public or to an owner not on the org's owned list (D935).
+  # PATCH /repos/{owner}/{repo} is the settings route above, which refuses
+  # a visibility field, so the visibility change is an MCP tool only.
+  - operation: github.repo.visibility.update
+    summary: Change a repository's visibility
+    access: write
+    target:
+      type: github.repository
+      id_pattern: '^(?P<owner>[a-z0-9][a-z0-9-]{0,38})/(?P<repo>\.?[a-z0-9_-][a-z0-9._-]{0,98})$'
+      account: none
+    params:
+      visibility:
+        type: enum
+        material: true
+        required: true
+        values: [public, private, internal]
+        share: github_visibility
+    effects:
+      - kind: repository.visibility.change
+        description: Changes who can see the repository; public makes it visible to anyone
+    reversibility: irreversible
+    dedupe_key: [target.id, params.visibility]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Make {target.id} {params.visibility}
+      fields:
+        - target.id
+        - params.visibility
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: update_repository_visibility
+        route: github-repo-visibility-update
+        description: >-
+          Change a GitHub repository's visibility to public, private or
+          internal. Making a repository public holds for a person. Owner and
+          repository are written in lowercase.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [owner, repo, visibility]
+          properties:
+            owner:
+              type: string
+              description: The account that owns the repository, in lowercase
+              pattern: '^[a-z0-9][a-z0-9-]{0,38}$'
+            repo:
+              type: string
+              description: The repository name, in lowercase
+              pattern: '^\.?[a-z0-9_-][a-z0-9._-]{0,98}$'
+            visibility:
+              type: string
+              enum: [public, private, internal]
+        extract:
+          target_id: input.owner + '/' + input.repo
+          params:
+            visibility: input.visibility
+    dispatch:
+      http:
+        method: PATCH
+        path: /repos/{target.id.owner}/{target.id.repo}
+        body:
+          visibility: params.visibility
+      credential_scope:
+        administration: write
+
+  - operation: github.repo.transfer
+    summary: Transfer a repository to another owner
+    access: write
+    target:
+      type: github.repository
+      id_pattern: '^(?P<owner>[a-z0-9][a-z0-9-]{0,38})/(?P<repo>\.?[a-z0-9_-][a-z0-9._-]{0,98})$'
+      account: none
+    params:
+      new_owner:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[a-z0-9][a-z0-9-]{0,38}$'
+        share: github_owner
+    effects:
+      - kind: repository.transfer
+        description: Moves the repository, its issues and its history to another account
+    reversibility: irreversible
+    dedupe_key: [target.id, params.new_owner]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Transfer {target.id} to {params.new_owner}
+      fields:
+        - target.id
+        - params.new_owner
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: http
+        method: POST
+        path: /repos/{owner}/{repo}/transfer
+        route: github-repo-transfer
+        extract:
+          target_id: path.owner + '/' + path.repo
+          params:
+            new_owner: input.new_owner
+      - channel: mcp
+        tool: transfer_repository
+        route: github-repo-transfer
+        description: >-
+          Transfer a GitHub repository to another account. A transfer to an
+          account not on the organization's owned list holds for a person.
+          Owner, repository and new owner are written in lowercase.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [owner, repo, new_owner]
+          properties:
+            owner:
+              type: string
+              description: The account that owns the repository, in lowercase
+              pattern: '^[a-z0-9][a-z0-9-]{0,38}$'
+            repo:
+              type: string
+              description: The repository name, in lowercase
+              pattern: '^\.?[a-z0-9_-][a-z0-9._-]{0,98}$'
+            new_owner:
+              type: string
+              description: The account to transfer the repository to, in lowercase
+              pattern: '^[a-z0-9][a-z0-9-]{0,38}$'
+        extract:
+          target_id: input.owner + '/' + input.repo
+          params:
+            new_owner: input.new_owner
+    dispatch:
+      http:
+        method: POST
+        path: /repos/{target.id.owner}/{target.id.repo}/transfer
+        body:
+          new_owner: params.new_owner
       credential_scope:
         administration: write
 

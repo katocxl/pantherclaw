@@ -23391,6 +23391,168 @@
         }
       }
     },
+    "/pantherclaw.v1.OwnedAccountService/ListOwnedAccounts": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.OwnedAccountService"
+        ],
+        "summary": "ListOwnedAccounts",
+        "description": "ListOwnedAccounts lists the org's owned accounts.\n permission: org.owned_accounts.read",
+        "operationId": "pantherclaw.v1.OwnedAccountService.ListOwnedAccounts",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListOwnedAccountsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListOwnedAccountsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.OwnedAccountService/AddOwnedAccount": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.OwnedAccountService"
+        ],
+        "summary": "AddOwnedAccount",
+        "description": "AddOwnedAccount files the protected change that adds an account (a\n person). Nothing changes until a second person confirms it.\n permission: org.owned_accounts.manage",
+        "operationId": "pantherclaw.v1.OwnedAccountService.AddOwnedAccount",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.AddOwnedAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.AddOwnedAccountResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.OwnedAccountService/RemoveOwnedAccount": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.OwnedAccountService"
+        ],
+        "summary": "RemoveOwnedAccount",
+        "description": "RemoveOwnedAccount removes an account at once (a person): shares to it\n hold again.\n permission: org.owned_accounts.manage",
+        "operationId": "pantherclaw.v1.OwnedAccountService.RemoveOwnedAccount",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RemoveOwnedAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RemoveOwnedAccountResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.PackageService/ImportPackage": {
       "post": {
         "tags": [
@@ -40748,7 +40910,23 @@
             "type": "string",
             "title": "location",
             "pattern": "^[!-~]{1,128}$",
-            "description": "Where, such as result/content/0/text; for scan_incomplete, over_bound,\n classifier_unavailable or builtin_failed."
+            "description": "Where, such as result/content/0/text; for scan_incomplete, over_bound,\n classifier_unavailable, builtin_failed or decode_bound."
+          },
+          "encoding": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "encoding",
+            "description": "The decoding layers a hit was found through, joined by \"+\" in\n application order (base64, hex, url, escape, entity, confusable,\n zero_width); empty for a plain hit (G0 M30 D921).",
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9_+]{0,64}$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
           }
         },
         "title": "ContentFinding",
@@ -41696,6 +41874,22 @@
               },
               {
                 "type": "null"
+              }
+            ]
+          },
+          "outcomeCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "outcome_code",
+            "description": "The code of a connector's refusal after the decision, e.g.\n table_not_allowed (G0 M30 D947a); empty otherwise. The threat map counts\n it against a Prevent control's outcome codes.",
+            "anyOf": [
+              {
+                "pattern": "^([a-z][a-z0-9_]{0,63})?$"
+              },
+              {
+                "maxLength": 0
               }
             ]
           }
@@ -52293,7 +52487,8 @@
           "CONNECTION_KIND_MCP_CONTAINER",
           "CONNECTION_KIND_POSTGRES",
           "CONNECTION_KIND_A2A",
-          "CONNECTION_KIND_MODEL"
+          "CONNECTION_KIND_MODEL",
+          "CONNECTION_KIND_VECTORSTORE"
         ],
         "description": "ConnectionKind is what a connection reaches."
       },
@@ -52946,6 +53141,11 @@
             "title": "model",
             "description": "model is a model connection's settings (G0 M29 D811).",
             "$ref": "#/components/schemas/pantherclaw.v1.ModelConfig"
+          },
+          "vectorstore": {
+            "title": "vectorstore",
+            "description": "vectorstore is a vectorstore connection's settings (G0 M30 D922).",
+            "$ref": "#/components/schemas/pantherclaw.v1.VectorstoreConfig"
           }
         },
         "title": "Connection",
@@ -53708,6 +53908,18 @@
                 "type": "null"
               }
             ]
+          },
+          "vectorstore": {
+            "title": "vectorstore",
+            "description": "vectorstore is required for, and only for, a vectorstore connection\n (G0 M30 D922).",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.VectorstoreConfigInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "CreateConnectionRequest",
@@ -54406,6 +54618,11 @@
             "title": "price",
             "description": "An optional price for estimates only (Team, HR-698); unset = no price.\n PantherClaw ships no price list.",
             "$ref": "#/components/schemas/pantherclaw.v1.ModelPrice"
+          },
+          "capturePrompts": {
+            "type": "boolean",
+            "title": "capture_prompts",
+            "description": "Prompt capture (Business, G0 M30 D945b): while on, a capture profile\n that covers this connection keeps its requests and replies for the\n profile's retention. Off by default; turning it on waits for a second\n person's security-key confirmation, turning it off applies at once."
           }
         },
         "title": "ModelConfig",
@@ -54454,6 +54671,14 @@
                 "type": "null"
               }
             ]
+          },
+          "capturePrompts": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "capture_prompts",
+            "description": "Prompt capture (Business, G0 M30 D945b): while on, a capture profile\n that covers this connection keeps its requests and replies for the\n profile's retention. Off by default; turning it on waits for a second\n person's security-key confirmation, turning it off applies at once."
           }
         },
         "title": "ModelConfig",
@@ -55596,6 +55821,18 @@
                 "type": "null"
               }
             ]
+          },
+          "vectorstore": {
+            "title": "vectorstore",
+            "description": "vectorstore replaces a vectorstore connection's settings (G0 M30\n D922): its endpoint must stay as it is (VECTORSTORE_ENDPOINT_IMMUTABLE);\n a new writer weakens.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.VectorstoreConfigInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "UpdateConnectionRequest",
@@ -55618,6 +55855,227 @@
         "title": "UpdateConnectionResponse",
         "additionalProperties": false,
         "description": "UpdateConnectionResponse returns the connection."
+      },
+      "pantherclaw.v1.VectorstoreConfig": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "title": "host",
+            "maxLength": 253,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9]([A-Za-z0-9.:-]{0,251}[A-Za-z0-9])?$",
+            "description": "Database host name or address."
+          },
+          "port": {
+            "type": "integer",
+            "title": "port",
+            "maximum": 65535,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Port (default 5432)."
+          },
+          "database": {
+            "type": "string",
+            "title": "database",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Database name."
+          },
+          "user": {
+            "type": "string",
+            "title": "user",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Role the gateway logs in as; never a superuser."
+          },
+          "sslmode": {
+            "type": "string",
+            "title": "sslmode",
+            "enum": [
+              "verify-full",
+              "require"
+            ],
+            "description": "\"verify-full\" (required), or \"require\" only with internal and a pinned\n CA."
+          },
+          "caPem": {
+            "type": "string",
+            "title": "ca_pem",
+            "maxLength": 16384,
+            "description": "Optional pinned CA certificate (PEM)."
+          },
+          "internal": {
+            "type": "boolean",
+            "title": "internal",
+            "description": "Allows a private address; set only with a step-up."
+          },
+          "schemaName": {
+            "type": "string",
+            "title": "schema_name",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The table's schema."
+          },
+          "tableName": {
+            "type": "string",
+            "title": "table_name",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The table's name."
+          },
+          "dimensions": {
+            "type": "integer",
+            "title": "dimensions",
+            "maximum": 12288,
+            "minimum": 1,
+            "format": "int32",
+            "description": "The embedding's dimensions (1..12288)."
+          },
+          "distance": {
+            "type": "string",
+            "title": "distance",
+            "enum": [
+              "cosine",
+              "l2",
+              "inner_product"
+            ],
+            "description": "The distance metric: cosine, l2 or inner_product."
+          },
+          "writerAgentIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "maxItems": 64,
+              "uniqueItems": true
+            },
+            "title": "writer_agent_ids",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "description": "Agents that may write without a person (at most 64); a write by any\n other agent is held (VECTOR_WRITE_NOT_WRITER, HR-705)."
+          }
+        },
+        "title": "VectorstoreConfig",
+        "additionalProperties": false,
+        "description": "VectorstoreConfig is a vectorstore connection (G0 M30 D922-D925a): where\n the database is, the one table the admin created from the printed DDL,\n and the agents that may write without a person. Its password is the\n connection's sealed static credential. The endpoint (host through\n internal) is fixed once the connection exists: a change is refused with\n VECTORSTORE_ENDPOINT_IMMUTABLE, and a store that moves is a new\n connection."
+      },
+      "pantherclaw.v1.VectorstoreConfigInput": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "title": "host",
+            "maxLength": 253,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9]([A-Za-z0-9.:-]{0,251}[A-Za-z0-9])?$",
+            "description": "Database host name or address."
+          },
+          "port": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "port",
+            "maximum": 65535,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Port (default 5432)."
+          },
+          "database": {
+            "type": "string",
+            "title": "database",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Database name."
+          },
+          "user": {
+            "type": "string",
+            "title": "user",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Role the gateway logs in as; never a superuser."
+          },
+          "sslmode": {
+            "type": "string",
+            "title": "sslmode",
+            "enum": [
+              "verify-full",
+              "require"
+            ],
+            "description": "\"verify-full\" (required), or \"require\" only with internal and a pinned\n CA."
+          },
+          "caPem": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "ca_pem",
+            "maxLength": 16384,
+            "description": "Optional pinned CA certificate (PEM)."
+          },
+          "internal": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "internal",
+            "description": "Allows a private address; set only with a step-up."
+          },
+          "schemaName": {
+            "type": "string",
+            "title": "schema_name",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The table's schema."
+          },
+          "tableName": {
+            "type": "string",
+            "title": "table_name",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The table's name."
+          },
+          "dimensions": {
+            "type": "integer",
+            "title": "dimensions",
+            "maximum": 12288,
+            "minimum": 1,
+            "format": "int32",
+            "description": "The embedding's dimensions (1..12288)."
+          },
+          "distance": {
+            "type": "string",
+            "title": "distance",
+            "enum": [
+              "cosine",
+              "l2",
+              "inner_product"
+            ],
+            "description": "The distance metric: cosine, l2 or inner_product."
+          },
+          "writerAgentIds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "maxItems": 64,
+              "uniqueItems": true
+            },
+            "title": "writer_agent_ids",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "description": "Agents that may write without a person (at most 64); a write by any\n other agent is held (VECTOR_WRITE_NOT_WRITER, HR-705)."
+          }
+        },
+        "title": "VectorstoreConfig",
+        "additionalProperties": false,
+        "description": "VectorstoreConfig is a vectorstore connection (G0 M30 D922-D925a): where\n the database is, the one table the admin created from the printed DDL,\n and the agents that may write without a person. Its password is the\n connection's sealed static credential. The endpoint (host through\n internal) is fixed once the connection exists: a change is refused with\n VECTORSTORE_ENDPOINT_IMMUTABLE, and a store that moves is a new\n connection.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.VectorstoreConfig",
+        "required": [
+          "host",
+          "database",
+          "user",
+          "sslmode",
+          "schemaName",
+          "tableName",
+          "dimensions",
+          "distance"
+        ]
       },
       "pantherclaw.v1.ConsequenceRuleSpec": {
         "type": "object",
@@ -67905,6 +68363,11 @@
             "title": "model",
             "description": "A model connection's settings (G0 M29 D811): the max output tokens\n the gateway adds and the provider-side tool types it lets through.",
             "$ref": "#/components/schemas/pantherclaw.v1.ModelConfig"
+          },
+          "vectorstore": {
+            "title": "vectorstore",
+            "description": "A vectorstore connection's settings (G0 M30 D922): its database, its\n table and the agents that may write without a person.",
+            "$ref": "#/components/schemas/pantherclaw.v1.VectorstoreConfig"
           }
         },
         "title": "GatewayConnection",
@@ -75352,6 +75815,11 @@
             "type": "string",
             "title": "document_digest",
             "description": "SHA-256 of the confirmed document, hex."
+          },
+          "dpopBound": {
+            "type": "boolean",
+            "title": "dpop_bound",
+            "description": "The confirmed document asks for DPoP-bound access tokens (RFC 9449):\n every token request must then carry a DPoP proof (G0 M30 D911, D914)."
           }
         },
         "title": "McpClient",
@@ -83645,6 +84113,133 @@
         "title": "OutcomeUnmeasured",
         "additionalProperties": false,
         "description": "OutcomeUnmeasured is why some cases were not measured."
+      },
+      "pantherclaw.v1.AddOwnedAccountRequest": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "enum": [
+              "aws_account",
+              "github_org",
+              "email_domain",
+              "gcp_project",
+              "azure_tenant"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "title": "value",
+            "maxLength": 253,
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1
+          }
+        },
+        "title": "AddOwnedAccountRequest",
+        "additionalProperties": false,
+        "description": "AddOwnedAccountRequest names an account to add.",
+        "required": [
+          "kind",
+          "value",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.AddOwnedAccountResponse": {
+        "type": "object",
+        "properties": {
+          "protectedChangeId": {
+            "type": "string",
+            "title": "protected_change_id"
+          }
+        },
+        "title": "AddOwnedAccountResponse",
+        "additionalProperties": false,
+        "description": "AddOwnedAccountResponse names the protected change filed."
+      },
+      "pantherclaw.v1.ListOwnedAccountsRequest": {
+        "type": "object",
+        "title": "ListOwnedAccountsRequest",
+        "additionalProperties": false,
+        "description": "ListOwnedAccountsRequest asks for the list."
+      },
+      "pantherclaw.v1.ListOwnedAccountsResponse": {
+        "type": "object",
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.OwnedAccount"
+            },
+            "title": "accounts"
+          }
+        },
+        "title": "ListOwnedAccountsResponse",
+        "additionalProperties": false,
+        "description": "ListOwnedAccountsResponse is the list, by kind and value."
+      },
+      "pantherclaw.v1.OwnedAccount": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "aws_account, github_org, email_domain, gcp_project or azure_tenant."
+          },
+          "value": {
+            "type": "string",
+            "title": "value"
+          },
+          "addedBy": {
+            "type": "string",
+            "title": "added_by"
+          },
+          "addTime": {
+            "title": "add_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "OwnedAccount",
+        "additionalProperties": false,
+        "description": "OwnedAccount is one account the org named as its own."
+      },
+      "pantherclaw.v1.RemoveOwnedAccountRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1
+          }
+        },
+        "title": "RemoveOwnedAccountRequest",
+        "additionalProperties": false,
+        "description": "RemoveOwnedAccountRequest names an account to remove.",
+        "required": [
+          "id",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.RemoveOwnedAccountResponse": {
+        "type": "object",
+        "title": "RemoveOwnedAccountResponse",
+        "additionalProperties": false,
+        "description": "RemoveOwnedAccountResponse is empty."
       },
       "pantherclaw.v1.PackageState": {
         "type": "string",
@@ -103778,6 +104373,10 @@
     {
       "name": "pantherclaw.v1.OutcomeService",
       "description": "OutcomeService reads the outcome metrics (G0 M21 D303, F774; HR-537..540;\n Business). Each metric is a distribution of durations or a share, with the\n cases it measured and the cases it could not, never a raw volume presented\n as value. A window without a measured case is NOT_COLLECTED, never 0.\n Every metric states its scope and as-of time, and its definition stays a\n draft until the founder signs it off."
+    },
+    {
+      "name": "pantherclaw.v1.OwnedAccountService",
+      "description": "OwnedAccountService is the org's list of its own cloud accounts, GitHub\n organizations, email domains, GCP projects and Azure tenants (G0 M30 D933,\n D935; HR-707, HR-708).\n\n An action that shares to an account not on the list holds for a person\n (SHARE_ACCOUNT_NOT_OWNED), and an empty list holds every cross-account\n share. Adding an account loosens that hold, so it files a protected change\n that applies only when a second person confirms it with a security key.\n Removing one applies at once."
     },
     {
       "name": "pantherclaw.v1.PackageService",

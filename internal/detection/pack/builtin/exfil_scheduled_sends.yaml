@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.exfil.scheduled_sends
+version: "1"
+title: Repeated sends to a public destination across runs
+description: >-
+  One agent dispatched writes toward a public destination through the same
+  connection from twelve or more different runs within a day. A scheduled
+  agent that sends data out on every run looks like this (G0 M30 D932). The
+  rule infers the pattern from runs and destination; it does not see the
+  payload.
+severity: MEDIUM
+attention: ALERT
+basis: INFERRED
+attack: [T1020]
+edition: business
+on: [receipt.execution]
+match: event.destination_class == "public"
+window:
+  duration: 24h
+  group_by: [subjects.agent, subjects.connection]
+  distinct: subjects.run
+  count: 12
+group: agent
+tests:
+  - name: twelve runs
+    fires: true
+    events:
+      - {kind: receipt.execution, destination_class: public, subjects: {agent: a1, connection: c1, run: r1}}
+      - {kind: receipt.execution, destination_class: public, subjects: {agent: a1, connection: c1, run: r2}, at: 1h}
+      - {kind: receipt.execution, destination_class: public, subjects: {agent: a1, connection: c1, run: r3}, at: 2h}
+      - {kind: receipt.execution, destination_class: public, subjects: {agent: a1, connection: c1, run: r4}, at: 3h}
+      - {kind: receipt.execution, destination_class: public, subjects: {agent: a1, connection: c1, run: r5}, at: 4h}
+      - {kind: receipt.execution, destination_class: public, subjects: {agent: a1, connection: c1, run: r6}, at: 5h}
+      - {kind: receipt.execution, destination_class: public, subjects: {agent: a1, connection: c1, run: r7}, at: 6h}
+      - {kind: receipt.execution, destination_class: public, subjects: {agent: a1, connection: c1, run: r8}, at: 7h}
+      - {kind: receipt.execution, destination_class: public, subjects: {agent: a1, connection: c1, run: r9}, at: 8h}
+      - {kind: receipt.execution, destination_class: public, subjects: {agent: a1, connection: c1, run: r10}, at: 9h}
+      - {kind: receipt.execution, destination_class: public, subjects: {agent: a1, connection: c1, run: r11}, at: 10h}
+      - {kind: receipt.execution, destination_class: public, subjects: {agent: a1, connection: c1, run: r12}, at: 11h}
+  - name: one run many sends
+    fires: false
+    events:
+      - {kind: receipt.execution, destination_class: public, subjects: {agent: a1, connection: c1, run: r1}}
+      - {kind: receipt.execution, destination_class: public, subjects: {agent: a1, connection: c1, run: r1}, at: 1h}
+      - {kind: receipt.execution, destination_class: public, subjects: {agent: a1, connection: c1, run: r1}, at: 2h}
+  - name: internal destination
+    fires: false
+    events:
+      - {kind: receipt.execution, destination_class: internal, subjects: {agent: a1, connection: c1, run: r1}}
+      - {kind: receipt.execution, destination_class: internal, subjects: {agent: a1, connection: c1, run: r2}, at: 1h}

@@ -5,7 +5,8 @@
 // regular expressions and an entropy measure, no model and no network. It
 // knows listed phrases and formats, nothing else: paraphrased, split or
 // re-encoded content passes, which is why nothing it returns is a safety
-// claim (F789, F801). RE2 keeps every pattern linear in the bounded input.
+// claim (F789, F801). A few fixed encodings are undone first (decode.go,
+// G0 M30 D920); any other still passes. RE2 keeps every pattern linear in the bounded input.
 //
 // Findings name a kind and a location, never the value (HR-649). A location
 // keeps a JSON member name only when the name is a plain word that nothing
@@ -82,32 +83,49 @@ func (Classifier) Classify(ctx context.Context, in ports.Input) ([]domain.Findin
 		return nil, err
 	}
 	base := baseOf(in.Location)
+	d := newDecoder()
 	var found []domain.Finding
 	finished, err := walk(in.Content, func(pointer, text string) {
-		for _, k := range Kinds(text) {
-			found = append(found, domain.Finding{Kind: k, Location: location(base, pointer)})
-		}
+		found = append(found, d.classify(location(base, pointer), text)...)
 	})
 	if err != nil {
-		return domain.Pick(found), err
+		return domain.Pick(d.bounded(found)), err
 	}
 	if !finished {
-		for _, k := range Kinds(string(in.Content)) {
-			found = append(found, domain.Finding{Kind: k, Location: base})
-		}
+		found = append(found, d.classify(base, string(in.Content))...)
 	}
 	// A server-sent events answer is also walked event by event, so a JSON
 	// escape in a data line is decoded before it is matched. This pass only
 	// adds: the raw text above is always scanned, so a body that merely
 	// looks like SSE hides nothing in its other lines (D533, D553).
 	if events, ok := sseData(in.Content); ok {
-		more, err := classifyEvents(base, events)
+		more, err := classifyEvents(d, base, events)
 		found = append(found, more...)
 		if err != nil {
-			return domain.Pick(found), err
+			return domain.Pick(d.bounded(found)), err
 		}
 	}
-	return domain.Pick(found), nil
+	return domain.Pick(d.bounded(found)), nil
+}
+
+// classify flags text at loc: its plain kinds, then what the decoding layers
+// read in it (G0 M30 D920, D921).
+func (d *decoder) classify(loc, text string) []domain.Finding {
+	plain := Kinds(text)
+	out := make([]domain.Finding, 0, len(plain))
+	for _, k := range plain {
+		out = append(out, domain.Finding{Kind: k, Location: loc})
+	}
+	return append(out, d.findings(loc, text, plain)...)
+}
+
+// bounded adds decode_bound when decoding stopped at its budget, so a scan
+// that did not read everything never reads as finished (D920, HR-650).
+func (d *decoder) bounded(found []domain.Finding) []domain.Finding {
+	if d.over {
+		found = append(found, domain.Finding{Kind: domain.KindScanIncomplete, Location: domain.IncompleteDecodeBound})
+	}
+	return found
 }
 
 func baseOf(loc string) string {
@@ -300,22 +318,18 @@ func sseData(raw []byte) ([][]byte, bool) {
 
 // classifyEvents walks each event's data as JSON, under its index, and reads
 // what is not JSON as text.
-func classifyEvents(base string, events [][]byte) ([]domain.Finding, error) {
+func classifyEvents(d *decoder, base string, events [][]byte) ([]domain.Finding, error) {
 	var found []domain.Finding
 	for i, data := range events {
 		prefix := "/" + strconv.Itoa(i)
 		finished, err := walk(data, func(pointer, text string) {
-			for _, k := range Kinds(text) {
-				found = append(found, domain.Finding{Kind: k, Location: location(base, prefix+pointer)})
-			}
+			found = append(found, d.classify(location(base, prefix+pointer), text)...)
 		})
 		if err != nil {
 			return domain.Pick(found), err
 		}
 		if !finished {
-			for _, k := range Kinds(string(data)) {
-				found = append(found, domain.Finding{Kind: k, Location: location(base, prefix)})
-			}
+			found = append(found, d.classify(location(base, prefix), string(data))...)
 		}
 	}
 	return domain.Pick(found), nil

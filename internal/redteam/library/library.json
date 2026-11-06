@@ -1145,6 +1145,56 @@
       "T1027": "Obfuscated files or information (T1027): the duplicate member hides the real value from one of two readers."
     }
   },
+  "RT-200": {
+    "digest": "650410b363ac93b059108772ace94131289136d18ec2b0abc462e5a70effae00",
+    "tier": "business",
+    "atlas": [
+      "AML.T0068",
+      "AML.T0051.001"
+    ],
+    "attack": [
+      "T1698"
+    ],
+    "technique_why": {
+      "AML.T0051.001": "Indirect prompt injection (AML.T0051.001): an outbound comment carries the hidden phrase.",
+      "AML.T0068": "LLM prompt obfuscation (AML.T0068): the injection phrase is encoded so that a plain match misses it.",
+      "T1698": "Indirect prompt injection (T1698): the hidden text reaches an outbound comment."
+    }
+  },
+  "RT-201": {
+    "digest": "764a1677a99c898c50e680dbcf2de478275fa3fad1a1a8656b0eb2e943bc12c0",
+    "tier": "community",
+    "attack": [
+      "T1537"
+    ],
+    "technique_why": {
+      "T1537": "Transfer data to cloud account (T1537): the agent shares the repository with the public or moves it to an account the organization does not own."
+    }
+  },
+  "RT-202": {
+    "digest": "ae29622aefbec64ba747222a96c4ff8136981c32a336c82db63f67cc7a064020",
+    "tier": "business",
+    "atlas": [
+      "AML.T0091.000"
+    ],
+    "attack": [
+      "T1550.001"
+    ],
+    "technique_why": {
+      "AML.T0091.000": "Application access token (AML.T0091.000): a copied MCP token bound to a client's key is used without that key.",
+      "T1550.001": "Application access token (T1550.001): the bound token is sent as a bearer token, or under DPoP with no proof."
+    }
+  },
+  "RT-203": {
+    "digest": "882c29221c21641a40f85bc10e3f8c45164c4cef82bfa3960f6198bbda520cd6",
+    "tier": "community",
+    "atlas": [
+      "AML.T0081"
+    ],
+    "technique_why": {
+      "AML.T0081": "Modify AI agent configuration (AML.T0081): the agent rewrites its own memory file to persist instructions."
+    }
+  },
   "RT-260": {
     "digest": "c917e88f00ab7079bb682ed8910c4fc428f9679cdc487522fa9c7a1d2a957105",
     "tier": "community",

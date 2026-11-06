@@ -2077,6 +2077,7 @@ type PcExecutionAttempt struct {
 	AccessMode     *string
 	RecordedBy     string
 	TargetRef      *string
+	OutcomeCode    *string
 }
 
 type PcExecutionReceipt struct {
@@ -2816,6 +2817,7 @@ type PcMcpAuthorizationCode struct {
 	UsedAt          *time.Time
 	RunID           *ids.UUID
 	ReusedAt        *time.Time
+	DpopJkt         *string
 }
 
 type PcMcpCatalogSetting struct {
@@ -2840,6 +2842,7 @@ type PcMcpClient struct {
 	ActivatedAt    *time.Time
 	RemovedBy      *ids.UUID
 	RemovedAt      *time.Time
+	DpopBound      bool
 }
 
 type PcMcpRefreshToken struct {
@@ -2853,6 +2856,7 @@ type PcMcpRefreshToken struct {
 	State     string
 	CreatedAt time.Time
 	ExpiresAt time.Time
+	DpopJkt   *string
 }
 
 type PcMcpServer struct {
@@ -2916,6 +2920,7 @@ type PcModelConnection struct {
 	PriceCacheRead     *money.Decimal
 	PriceCacheWrite    *money.Decimal
 	UpdatedAt          time.Time
+	CapturePrompts     bool
 }
 
 type PcModelDraft struct {
@@ -3194,6 +3199,15 @@ type PcOutcomeMetricSample struct {
 	Reasons     []byte
 	Collected   bool
 	SampledAt   time.Time
+}
+
+type PcOwnedAccount struct {
+	OrgID   ids.OrgID
+	ID      ids.UUID
+	Kind    string
+	Value   string
+	AddedBy string
+	AddedAt time.Time
 }
 
 type PcPackagePin struct {
@@ -4615,6 +4629,24 @@ type PcUser struct {
 	UpdatedAt   time.Time
 	LastLoginAt *time.Time
 	AccountID   *ids.UUID
+}
+
+type PcVectorstoreConnection struct {
+	OrgID          ids.OrgID
+	ConnectionID   ids.UUID
+	Host           string
+	Port           int32
+	Database       string
+	DbUser         string
+	Sslmode        string
+	CaPem          *string
+	Internal       bool
+	SchemaName     string
+	TableName      string
+	Dimensions     int32
+	Distance       string
+	WriterAgentIds []ids.UUID
+	UpdatedAt      time.Time
 }
 
 type PcVerification struct {

@@ -36,6 +36,9 @@ type ClientMetadata struct {
 	ClientID     string
 	Name         string
 	RedirectURIs []string
+	// DPoPBound is the document's "dpop_bound_access_tokens": the client
+	// asks that every token it gets be DPoP-bound (G0 M30 D911).
+	DPoPBound bool
 }
 
 // Client kinds an access token names.
@@ -61,6 +64,9 @@ type AccessClaims struct {
 	Client     ids.UUID
 	// Scope is the run's narrowed operations; empty is the whole grant.
 	Scope []string
+	// JKT is the thumbprint of the DPoP key the token is bound to (cnf.jkt);
+	// empty is a bearer token (G0 M30 D912).
+	JKT string
 }
 
 // Minter signs access tokens with the mcp_tokens keys.

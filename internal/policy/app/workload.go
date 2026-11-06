@@ -13,7 +13,8 @@ import (
 
 // Policy rules see how the Authority verified the workload behind an action
 // as `workload` (G0 M26 D402, HR-627): `workload.proof` is "pap" for a
-// PAP/1 proof of possession and "bearer" for an MCP access token, and
+// PAP/1 proof of possession, "bearer" for an MCP access token and "dpop"
+// for a DPoP-bound one (G0 M30 D913), and
 // `workload.attestation` is the verified attestation level. Both come from
 // the Authority's own verification, never from the request; bearer proof is
 // always level 0.
@@ -23,11 +24,14 @@ const workloadType = "pc.Workload"
 const (
 	ProofPAP    = "pap"
 	ProofBearer = "bearer"
+	// ProofDPoP is a DPoP-bound MCP access token (G0 M30 D913), still
+	// level 0.
+	ProofDPoP = "dpop"
 )
 
 // Workload is the verified workload of an action.
 type Workload struct {
-	// Proof is ProofPAP or ProofBearer; "" is ProofPAP.
+	// Proof is ProofPAP, ProofBearer or ProofDPoP; "" is ProofPAP.
 	Proof       string
 	Attestation int
 }

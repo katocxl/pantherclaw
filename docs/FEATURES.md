@@ -47,6 +47,7 @@ Each pillar table has the columns `ID | Feature | What the backend delivers | Ph
 | M27 | Agent Detection & Response: behaviour profiles, content signals, playbooks, SIEM packs, the read-only MCP server |
 | M28 | Threat map: MITRE ATLAS and ATT&CK Enterprise lanes from evidence, labels on signals and exports, signed report, Navigator export, history |
 | M29 | Model connections and token budgets: the agent reaches its model through the gateway, token caps on grants, envelopes and runs, a fake model, estimates and the monthly token report |
+| M30 | Gaps from the threat map. Agent identity protection: DPoP-bound MCP tokens. Runtime firewall: read limits and share checks, agent configuration and memory, decoding before content signals, a vector-store connector |
 | post-1.0 | Not yet scheduled to a milestone |
 
 Milestone numbers are identifiers, not delivery order. Delivery order ([ADR-0017](adr/0017-coding-agents-first-and-proven-coverage.md)): M1 … M9, M12, then the v0.1.0 preview, then M11.1, M10, M11, M14, UI, M13 and v1.0 (UI moved ahead of M13 by the founder on 2026-10-20).
@@ -915,6 +916,33 @@ An agent reaches its model through the gateway, which holds the key, checks each
 | F987 | Cost estimates | Organization-set prices per million tokens on a model connection give an estimate per call and per run, labelled an estimate. No price list ships. | Next | Team | M29 | new |
 | F988 | Monthly token report | `GetTokenReport` and `pclaw tokens report`: one UTC month's calls and tokens by team, agent, connection or model, with estimates and the fixed statement. | Next | Team | M29 | new |
 | F989 | Console token views | Console run and approval token lines, model connection settings (max output tokens, provider-side tools, prices on Team) and the monthly token report page on Team. | Next | Community | M29 | new |
+
+### M30 rows: Gaps from the threat map
+
+M30 closes gaps the threat map named, in two groups ([G0 M30](g0/M30.md), [ADR-0057](adr/0057-firewall-gaps-from-the-threat-map.md)):
+
+- **Agent identity protection** (Badge) keeps a client's MCP token from working for anyone else: tokens bound to the client's own key with DPoP (F990, F991).
+- **Runtime firewall** decides more of what an agent does: read limits and share checks (F995–F999), agent configuration and memory (F1000, F1001), decoding before content signals (F992) and a vector-store connector (F993, F994).
+
+The follow-ups to M29's model connections (F1002, F1003) and the threat-map updates (F1004) complete the milestone. Bound tokens and decoding are on every edition; the rest takes its parent feature's edition (founder answer E). Campaigns through a model connection are deferred (G0 M30 D945d).
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F990 | DPoP-bound MCP tokens | A client with a registered key gets MCP tokens bound to it (RFC 9449) at the token endpoint and the ID-JAG exchange; each call proves the key with a nonce and a single-use proof. Standard clients keep the 5-minute bearer. | Next | Community | M30 | new |
+| F991 | Binding shown | Token metadata lists the DPoP algorithms, the MCP client read shows whether a client is bound, and the issuance audit entry names `dpop` or `bearer`. | Next | Community | M30 | new |
+| F992 | Decoded content signals | Content signals also match injection phrases and secret formats in base64, hex, URL and escape encodings, HTML entities, look-alike letters and invisible characters; a finding names its layers. | Next | Community | M30 | F938 |
+| F993 | `pc.vectorstore` connector | A pgvector connection kind with `vector_query`, `vector_upsert` and `vector_delete`, and `pclaw connections vectorstore ddl` printing the table for an admin to create. | Next | Community | M30 | F759 |
+| F994 | Vector-store writers and provenance | A writer list per connection; other agents' writes wait for a person; every entry carries the run, agent and transaction that wrote it. | Next | Community | M30 | new |
+| F995 | Read limits | A count rule can count reads or writes only; the `read-limits` grant template, off until a grant uses it. | Next | Community | M30 | F113 |
+| F996 | Enumeration alert | Built-in rule `pc.reads.enumeration`: one run reading 60 distinct targets in 10 minutes raises an INFERRED alert. | Next | Business | M30 | F932 |
+| F997 | Scheduled-send alert | Built-in rule `pc.exfil.scheduled_sends`: one agent writing to one public connection from 12 runs in 24 hours raises an INFERRED alert. | Next | Business | M30 | F932 |
+| F998 | Owned accounts | `OwnedAccountService` and `pclaw org accounts`: the AWS accounts, GitHub organizations, email domains, GCP projects and Azure tenants the organization owns; adding one is a protected change. | Next | Community | M30 | F123 |
+| F999 | Share checks | New AWS and GitHub operations (bucket policy and ACL, repository visibility and transfer) whose shares to the public or an unlisted account wait for a person. | Next | Community | M30 | F123 |
+| F1000 | Agent config digests and drift | Scans report agent configuration and memory files by digest, credential formats found in them by format, and a changed digest writes `agent.config_changed` and raises `pc.agent.config_changed`. | Next | Community | M30 | F883 |
+| F1001 | Configuration writes asked and fenced | `pclaw hook` asks the gateway before writing a listed configuration or memory file (`agent_config.write`); the sandbox binds them read-only and copy-out lists their changes apart. | Next | Community | M30 | PN-008.2 |
+| F1002 | Opt-in prompt capture | Per model connection, off by default; turning it on is a protected change with a security key; bodies kept per the capture profile. | Next | Business | M30 | new |
+| F1003 | Resume an approved hold | An identical request through the edge after approval within 24 hours reuses its action id, so the approved hold releases it and no other request. | Next | Community | M30 | new |
+| F1004 | Threat-map updates | Seven Prevent controls for the M30 checks and M29's token caps, decoded content in the content hold, `prevent.query_scope` counting connector refusals, and `NARROWED_TRIGGER` for automations whose trigger tests more than the rule. | Next | Community | M30 | F960 |
 
 ## Product boundaries (non-goals, kept verbatim in spirit)
 

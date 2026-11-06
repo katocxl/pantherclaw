@@ -69,7 +69,7 @@ func mcpClient(r dbq.PcMcpClient) *pantherclawv1.McpClient {
 	return &pantherclawv1.McpClient{
 		Id: r.ID.String(), ClientUrl: r.ClientUrl, AgentId: r.AgentID.String(), InstanceId: r.InstanceID.String(), State: r.State,
 		CreateTime: timestamppb.New(r.CreatedAt), ClientName: r.ClientName, RedirectUris: r.RedirectUris,
-		DocumentDigest: hex.EncodeToString(r.DocumentDigest),
+		DocumentDigest: hex.EncodeToString(r.DocumentDigest), DpopBound: r.DpopBound,
 	}
 }
 

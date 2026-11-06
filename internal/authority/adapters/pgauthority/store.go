@@ -746,6 +746,9 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		if e.DispatchMS >= 0 {
 			attempt.DispatchMs = &e.DispatchMS
 		}
+		if e.OutcomeCode != "" {
+			attempt.OutcomeCode = &e.OutcomeCode // G0 M30 D947a
+		}
 		if err := q.InsertExecutionAttempt(ctx, attempt); err != nil {
 			return err
 		}

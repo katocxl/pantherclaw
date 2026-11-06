@@ -31,6 +31,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/katocxl/pantherclaw/internal/agentconfig"
 )
 
 // Finding kinds.
@@ -40,6 +42,7 @@ const (
 	KindEnvSecret    = "env_secret"
 	KindHook         = "hook"
 	KindSkill        = "skill"
+	KindAgentConfig  = "agent_config"
 )
 
 // Limits keep a scan bounded on large trees. MaxNesting bounds the nesting
@@ -138,6 +141,7 @@ func Run(o Options) []Finding {
 			out = append(out, skillFindings(o, dir)...)
 		}
 	}
+	out = append(out, agentConfigFindings(o)...)
 	out = append(out, envSecrets(o.Host, "environment", o.Environ)...)
 	slices.SortFunc(out, func(a, b Finding) int {
 		if c := strings.Compare(a.Kind, b.Kind); c != 0 {
@@ -164,13 +168,14 @@ func clientConfigs(o Options) []clientConfig {
 	// The AI Assistant's mcp.json paths that the IDEs' registries set, read
 	// beside the default ones.
 	var jbGlobal, jbProject []string
+	// The client paths are agentconfig's table (G0 M30 D940); the JetBrains
+	// paths, which the IDEs set, and $CODEX_HOME and $GEMINI_CLI_HOME stay here.
 	if o.ConfigDir != "" {
-		add("claude_desktop", filepath.Join(o.ConfigDir, "Claude", "claude_desktop_config.json"), "mcpServers")
-		add("vscode", filepath.Join(o.ConfigDir, "Code", "User", "mcp.json"), "servers")
-		add("vscode", filepath.Join(o.ConfigDir, "Code", "User", "settings.json"), "mcp", "servers")
-		// %APPDATA% on Windows, $XDG_CONFIG_HOME on Linux.
-		add("devin_desktop", filepath.Join(o.ConfigDir, "devin", "mcp_config.json"), "mcpServers")
-		add("zed", filepath.Join(o.ConfigDir, "zed", "settings.json"), "context_servers")
+		for _, e := range agentconfig.OfRoot(agentconfig.RootConfig) {
+			if e.Servers != nil {
+				add(e.Client, filepath.Join(o.ConfigDir, filepath.FromSlash(e.Glob)), e.Servers...)
+			}
+		}
 		// A contained scan lists no directory it may not read (D287).
 		if jetBrains := filepath.Join(o.ConfigDir, "JetBrains"); o.allowed(jetBrains) {
 			for _, p := range jetBrainsConfigs(jetBrains) {
@@ -180,19 +185,17 @@ func clientConfigs(o Options) []clientConfig {
 		}
 	}
 	if o.Home != "" {
-		add("claude_desktop", filepath.Join(o.Home, "Library", "Application Support", "Claude", "claude_desktop_config.json"), "mcpServers")
-		add("claude_code", filepath.Join(o.Home, ".claude.json"), "mcpServers")
-		add("cursor", filepath.Join(o.Home, ".cursor", "mcp.json"), "mcpServers")
-		add("windsurf", filepath.Join(o.Home, ".codeium", "windsurf", "mcp_config.json"), "mcpServers")
-		add("devin_desktop", filepath.Join(o.Home, ".config", "devin", "mcp_config.json"), "mcpServers")
-		add("zed", filepath.Join(o.Home, ".config", "zed", "settings.json"), "context_servers")
-		add("junie", filepath.Join(o.Home, ".junie", "mcp", "mcp.json"), "mcpServers")
-		add("jetbrains_ai", filepath.Join(o.Home, ".ai", "mcp", "mcp.json"), "mcpServers")
-		for _, p := range jbGlobal {
-			add("jetbrains_ai", resolvePath(o.Home, p), "mcpServers")
+		for _, e := range agentconfig.OfRoot(agentconfig.RootHome) {
+			if e.Servers == nil {
+				continue
+			}
+			add(e.Client, filepath.Join(o.Home, filepath.FromSlash(e.Glob)), e.Servers...)
+			if e.Client == "jetbrains_ai" {
+				for _, p := range jbGlobal {
+					add("jetbrains_ai", resolvePath(o.Home, p), "mcpServers")
+				}
+			}
 		}
-		add("codex", filepath.Join(o.Home, ".codex", "config.toml"), "mcp_servers")
-		add("gemini_cli", filepath.Join(o.Home, ".gemini", "settings.json"), "mcpServers")
 	}
 	if o.CodexHome != "" {
 		add("codex", filepath.Join(o.CodexHome, "config.toml"), "mcp_servers")
@@ -201,20 +204,20 @@ func clientConfigs(o Options) []clientConfig {
 		add("gemini_cli", filepath.Join(o.GeminiCLIHome, ".gemini", "settings.json"), "mcpServers")
 	}
 	for _, p := range o.Paths {
-		add("project", filepath.Join(p, ".mcp.json"), "mcpServers")
-		add("cursor", filepath.Join(p, ".cursor", "mcp.json"), "mcpServers")
-		add("vscode", filepath.Join(p, ".vscode", "mcp.json"), "servers")
-		add("zed", filepath.Join(p, ".zed", "settings.json"), "context_servers")
-		add("junie", filepath.Join(p, ".junie", "mcp", "mcp.json"), "mcpServers")
-		add("jetbrains_ai", filepath.Join(p, ".ai", "mcp", "mcp.json"), "mcpServers")
-		for _, j := range jbProject {
-			add("jetbrains_ai", resolvePath(p, j), "mcpServers")
+		for _, e := range agentconfig.OfRoot(agentconfig.RootProject) {
+			if e.Servers == nil {
+				continue
+			}
+			add(e.Client, filepath.Join(p, filepath.FromSlash(e.Glob)), e.Servers...)
+			if e.Client == "jetbrains_ai" {
+				for _, j := range jbProject {
+					add("jetbrains_ai", resolvePath(p, j), "mcpServers")
+				}
+				for _, w := range jetBrainsWorkspaces(p) {
+					add("jetbrains_ai", w, "mcpServers")
+				}
+			}
 		}
-		for _, w := range jetBrainsWorkspaces(p) {
-			add("jetbrains_ai", w, "mcpServers")
-		}
-		add("codex", filepath.Join(p, ".codex", "config.toml"), "mcp_servers")
-		add("gemini_cli", filepath.Join(p, ".gemini", "settings.json"), "mcpServers")
 	}
 	return out
 }

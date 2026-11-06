@@ -495,7 +495,11 @@ func dispatches(kind string, d *defs.Definition) bool {
 		return d.Dispatch != nil && d.Dispatch.A2A != nil
 	case "postgres":
 		// Structured reads (D9, D64), likewise only through a sender.
-		return d.Dispatch != nil && d.Dispatch.SQL != nil
+		return d.Dispatch != nil && d.Dispatch.SQL != nil && !slices.Contains(defs.VectorOperations, d.Dispatch.SQL.Operation)
+	case "vectorstore":
+		// A retrieval index's queries and writes (G0 M30 D922), through
+		// the gateway's vectorstore sender only.
+		return d.Dispatch != nil && d.Dispatch.SQL != nil && slices.Contains(defs.VectorOperations, d.Dispatch.SQL.Operation)
 	case "model":
 		// A model provider's API (G0 M29 D811, D813), through the gateway's
 		// model path only.
@@ -890,8 +894,12 @@ func (p *Pipeline) boundaries(ctx context.Context, s *state) {
 	p.policyRules(ctx, s)
 	p.external(ctx, s) // G0 M16 D81 (external.go)
 	s.disclosure()
+	if p.at(8) {
+		p.shares(ctx, s) // G0 M30 D935, D935a (shares.go)
+	}
 	p.dataFlow(ctx, s)      // G0 M16 D76 (dataflow.go)
 	s.contentHold()         // G0 M27 D507, D512 (content.go)
+	s.vectorWriterHold()    // G0 M30 D924 (vectorstore_m30.go)
 	p.boundariesM14(ctx, s) // G0 M14 D11, D78, D89 (scope.go)
 	p.consequenceBoundaries(ctx, s)
 	p.budgets(ctx, s)

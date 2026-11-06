@@ -237,7 +237,7 @@ var catalog = append([]Permission{
 	PermCoverageRead, PermCoverageManage, PermCoverageReassess,
 	PermSandboxRun,
 	PermRedteamRun, PermRedteamRead,
-}, slices.Concat(reflexCatalog, automationsCatalog, m14Catalog, uiCatalog, m13DataCatalog, m13SupportCatalog, m16Catalog, m17Catalog, m18Catalog, m23Catalog, m24Catalog, m25Catalog, m27Catalog, m27ContentCatalog, m28Catalog)...)
+}, slices.Concat(reflexCatalog, automationsCatalog, m14Catalog, uiCatalog, m13DataCatalog, m13SupportCatalog, m16Catalog, m17Catalog, m18Catalog, m23Catalog, m24Catalog, m25Catalog, m27Catalog, m27ContentCatalog, m28Catalog, m30Catalog)...)
 
 // humanOnly permissions can never be exercised by a service account or an
 // API key, whatever their bindings say (ARCHITECTURE §10: "pck_ keys never
@@ -248,7 +248,7 @@ var humanOnly = append([]Permission{
 	PermGatewayManage, PermConnectionManage, PermConnectionTest, PermCredentialSeal, PermContainmentKillSwitch, PermAgentRestore,
 	PermTransactionReconcile, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
 	PermReleaseWindowManage, PermCoverageManage, PermExternalCheckManage, PermConsequenceRuleManage,
-}, slices.Concat(reflexHumanOnly, automationsHumanOnly, m27ContentHumanOnly)...)
+}, slices.Concat(reflexHumanOnly, automationsHumanOnly, m27ContentHumanOnly, m30HumanOnly)...)
 
 // Catalog returns every grantable permission in a stable order.
 func Catalog() []Permission { return slices.Clone(catalog) }

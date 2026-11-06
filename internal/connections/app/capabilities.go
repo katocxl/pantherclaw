@@ -216,6 +216,16 @@ func declareKind(out *Capabilities, c Connection) {
 		// G0 M14 D16, D100.
 		out.Enforcement = Support{Supported, "The gateway builds every query itself from the reviewed manifest: " +
 			"parameterized, in a read-only transaction, with a row cap and a statement timeout (HR-307, HR-308)."}
+	case KindVectorstore:
+		// G0 M30 D922-D924.
+		out.Enforcement = Support{Supported, "The gateway builds every statement itself against the connection's one table, " +
+			"parameterized, fills each record's provenance from the permit, and holds a write by an agent not on the " +
+			"writer list for a person (HR-704, HR-705)."}
+		out.Limits = append(out.Limits, Limit{
+			"CONTENT_AS_WRITTEN",
+			"Records are returned as written: content signals flag listed phrases and formats only, so a record that " +
+				"misleads in other words passes.",
+		})
 	case KindModel:
 		// G0 M29 D812, D813, D814.
 		out.Enforcement = Support{Supported, "The gateway strictly parses each model request, decides on its metadata and " +

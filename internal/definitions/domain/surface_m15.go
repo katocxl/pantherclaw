@@ -338,7 +338,7 @@ func paramEqual(a, b ParamSpec) bool {
 	return a.Type == b.Type && a.Material == b.Material && a.Required == b.Required && a.Unit == b.Unit &&
 		slices.Equal(a.Currencies, b.Currencies) && a.Min == b.Min && a.Max == b.Max && slices.Equal(a.Values, b.Values) &&
 		a.Pattern == b.Pattern && a.MaxLength == b.MaxLength && a.MaxItems == b.MaxItems && a.Disclosure == b.Disclosure &&
-		a.MaxBytes == b.MaxBytes && a.MaxEntropy == b.MaxEntropy
+		a.MaxBytes == b.MaxBytes && a.MaxEntropy == b.MaxEntropy && a.Share == b.Share
 }
 
 // validateElicitationFields checks that the mcp mappings of d declaring

@@ -359,6 +359,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	_ = m14core // the M14 streams' wiring registers its kinds here (G0 M14 D64)
 	wireM14Data(m14core, m6)
 	wireM29Model(m14core)
+	wireM30Vectorstore(m14core, m6)
 	// Sealing a GitHub App credential schedules an org scan, and a daily one
 	// follows, so coverage reads its installation's permissions (F048).
 	ghScans := &githubapp.Scans{Pool: pool, Ents: bill}
@@ -997,6 +998,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerM24Catalog(rs, d)
 	registerM27Content(rs, d)
 	registerM28ThreatMap(rs, d)
+	registerM30(rs, d)
 	d.extDeps = registerM26Provisioning(rs, d)
 	registerM26SaaS(rs, d)
 	authzen := registerAuthZEN(rs, d)

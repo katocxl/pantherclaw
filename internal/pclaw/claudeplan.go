@@ -54,7 +54,7 @@ func (p *initPlan) addHook(target claudeSettings, hook *jsonNode) error {
 	if err := addHook(s.doc, hook); err != nil {
 		return &exitError{code: 1, msg: "pclaw init: " + s.path + ": " + err.Error() + "; it is left as it is"}
 	}
-	p.done = append(p.done, "Every Bash, PowerShell and Monitor command now asks PantherClaw first; when it cannot answer, the command is blocked.")
+	p.done = append(p.done, "Every Bash, PowerShell and Monitor command, and every write to an agent configuration or memory file, now asks PantherClaw first; when it cannot answer, it is blocked.")
 	return nil
 }
 

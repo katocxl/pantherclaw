@@ -24,9 +24,10 @@ import (
 //     workload_token_on_oauth_route, token_for_other_server,
 //     proof_on_oauth_route; clients: unbound_client, key_of_no_instance,
 //     removed_binding; the code flow: code_replay, wrong_verifier,
-//     unregistered_redirect, refresh_reuse. Harness-only: it seeds an
-//     issuer and a person and runs the token endpoint against the
-//     simulated IdP.
+//     unregistered_redirect, refresh_reuse; bound tokens (G0 M30 D913,
+//     RT-202): bound_token_as_bearer, bound_token_without_proof.
+//     Harness-only: it seeds an issuer and a person and runs the token
+//     endpoint against the simulated IdP.
 const stepIdpProbe = "idp.probe"
 
 // IdpAttacks are the idp.probe attacks.
@@ -35,6 +36,7 @@ var IdpAttacks = []string{
 	"mcp_token_on_pap_route", "workload_token_on_oauth_route", "token_for_other_server", "proof_on_oauth_route",
 	"unbound_client", "key_of_no_instance", "removed_binding",
 	"code_flow", "code_replay", "wrong_verifier", "unregistered_redirect", "refresh_reuse",
+	"bound_token_as_bearer", "bound_token_without_proof",
 }
 
 func init() {

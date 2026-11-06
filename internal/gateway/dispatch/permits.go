@@ -46,13 +46,19 @@ type permitClaims struct {
 		// Approval is the approval the decision rests on (HR-038), checked
 		// against the pinned approver keys before BeginDispatch.
 		Approval *proof.Approval `json:"approval,omitzero"`
+		// Run and Agent are a vectorstore write's provenance (G0 M30 D923,
+		// HR-704); other permits carry neither.
+		Run   string `json:"run,omitzero"`
+		Agent string `json:"agent,omitzero"`
 	} `json:"pap"`
 }
 
-// permitWant is what the permit must bind (HR-009).
+// permitWant is what the permit must bind (HR-009). Run and Agent are not
+// checked: they are what a verified permit carried, filled after verify.
 type permitWant struct {
 	PermitID, Txn, Act string
 	Epoch              int64
+	Run, Agent         string
 }
 
 // permitVerifier checks dispatch permits against the Authority's JWKS.
@@ -73,9 +79,15 @@ func newPermitVerifier(jwksURL string, client *http.Client, gatewayID, org strin
 	return &permitVerifier{jwksURL: jwksURL, client: client, gatewayID: gatewayID, org: org, now: time.Now}
 }
 
-// verify checks the signature, typ, audience, expiry and every binding,
-// and returns the approval the permit carries, if any.
-func (pv *permitVerifier) verify(ctx context.Context, token string, want permitWant) (*proof.Approval, error) {
+// verify checks the signature, typ, audience, expiry and every binding.
+// Dispatch reads the approval through claims (G0 M30 D923a).
+func (pv *permitVerifier) verify(ctx context.Context, token string, want permitWant) error {
+	_, err := pv.claims(ctx, token, want)
+	return err
+}
+
+// claims is verify, returning every verified claim.
+func (pv *permitVerifier) claims(ctx context.Context, token string, want permitWant) (*permitClaims, error) {
 	v, err := pv.verifierFor(ctx, token)
 	if err != nil {
 		return nil, err
@@ -105,7 +117,7 @@ func (pv *permitVerifier) verify(ctx context.Context, token string, want permitW
 	case c.Pap.Epoch <= 0 || c.Pap.Epoch != want.Epoch:
 		return nil, fmt.Errorf("%w: epoch mismatch", ErrPermitInvalid)
 	}
-	return c.Pap.Approval, nil
+	return &c, nil
 }
 
 // verifierFor returns a verifier that knows the token's kid, refetching the

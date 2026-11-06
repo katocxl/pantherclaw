@@ -146,8 +146,12 @@ message ContentFinding {
   // pii_national_id, classifier_flag or scan_incomplete.
   string kind = 1 [(buf.validate.field).string.pattern = "^[a-z_]{1,32}$"];
   // Where, such as result/content/0/text; for scan_incomplete, over_bound,
-  // classifier_unavailable or builtin_failed.
+  // classifier_unavailable, builtin_failed or decode_bound.
   string location = 2 [(buf.validate.field).string.pattern = "^[!-~]{1,128}$"];
+  // The decoding layers a hit was found through, joined by "+" in
+  // application order (base64, hex, url, escape, entity, confusable,
+  // zero_width); empty for a plain hit (G0 M30 D921).
+  string encoding = 3 [(buf.validate.field).string.pattern = "^[a-z0-9_+]{0,64}$"];
 }
 
 // ContentScan is whether the gateway scanned a body for content signals (G0
@@ -519,6 +523,10 @@ message RecordExecutionRequest {
   // D818); sent only for model operations. A token reservation settles at
   // their total when reported is true (D821).
   ModelUsage model_usage = 13;
+  // The code of a connector's refusal after the decision, e.g.
+  // table_not_allowed (G0 M30 D947a); empty otherwise. The threat map counts
+  // it against a Prevent control's outcome codes.
+  string outcome_code = 14 [(buf.validate.field).string.pattern = "^([a-z][a-z0-9_]{0,63})?$"];
 }
 
 // ModelUsage is the token usage of one model call (G0 M29 D818). OpenAI's
