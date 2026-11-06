@@ -1284,10 +1284,10 @@
     "digest": "af1c5fb368f47df7c9b219b8c68213543fa19fc6e4632acbf907c704f4567a85",
     "tier": "business",
     "attack": [
-      "T1562.001"
+      "T1685"
     ],
     "technique_why": {
-      "T1562.001": "Disable or modify tools (T1562.001): forged probe evidence would make coverage read enforced while the pod has other routes."
+      "T1685": "Disable or modify tools (T1685): forged probe evidence would make coverage read enforced while the pod has other routes."
     }
   },
   "RT-219": {

@@ -7,9 +7,9 @@ tier: business
 attacker: A1
 threats: [T-338]
 rules: [HR-741, HR-738]
-attack: [T1562.001]
+attack: [T1685]
 technique_why:
-  T1562.001: "Disable or modify tools (T1562.001): forged probe evidence would make coverage read enforced while the pod has other routes."
+  T1685: "Disable or modify tools (T1685): forged probe evidence would make coverage read enforced while the pod has other routes."
 requires: [payments]
 harness_only: true
 steps:
