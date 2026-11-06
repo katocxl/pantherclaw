@@ -55,7 +55,7 @@ var (
 
 // readSecret reads a one-line secret file.
 func readSecret(path string) (string, error) {
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(path) //nolint:gosec // G304: the operator names the file
 	if err != nil {
 		return "", err
 	}

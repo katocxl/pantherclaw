@@ -35,12 +35,12 @@ import (
 //     answers an AWS event stream whose metadata event carries the usage.
 const (
 	OpVertex         = "vertex"
-	OpVertexToken    = "vertex_token"
+	OpVertexToken    = "vertex_token" //nolint:gosec // G101: an operation name, not a credential
 	OpBedrock        = "converse"
 	OpBedrockStream  = "converse_stream"
 	VertexVersion    = "vertex-2023-10-16"
 	eventStreamType  = "application/vnd.amazon.eventstream"
-	vertexTokenGrant = "urn:ietf:params:oauth:grant-type:jwt-bearer"
+	vertexTokenGrant = "urn:ietf:params:oauth:grant-type:jwt-bearer" //nolint:gosec // G101: a grant type, not a credential
 )
 
 func (s *Server) cloudRoutes(mux *http.ServeMux) {
@@ -242,16 +242,16 @@ func frame(headers map[string]string, payload []byte) []byte {
 		if !ok {
 			continue
 		}
-		h.WriteByte(byte(len(name)))
+		h.WriteByte(byte(len(name))) //nolint:gosec // G115: one of the four fixed header names above
 		h.WriteString(name)
 		h.WriteByte(7)
-		_ = binary.Write(&h, binary.BigEndian, uint16(len(v)))
+		_ = binary.Write(&h, binary.BigEndian, uint16(len(v))) //nolint:gosec // G115: the simulator's own short header values
 		h.WriteString(v)
 	}
 	total := 12 + h.Len() + len(payload) + 4
 	out := make([]byte, 0, total)
-	out = binary.BigEndian.AppendUint32(out, uint32(total))
-	out = binary.BigEndian.AppendUint32(out, uint32(h.Len()))
+	out = binary.BigEndian.AppendUint32(out, uint32(total))   //nolint:gosec // G115: a simulated frame, far below 4 GiB
+	out = binary.BigEndian.AppendUint32(out, uint32(h.Len())) //nolint:gosec // G115: four short headers
 	out = binary.BigEndian.AppendUint32(out, crc32.ChecksumIEEE(out))
 	out = append(out, h.Bytes()...)
 	out = append(out, payload...)
