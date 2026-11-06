@@ -979,7 +979,9 @@ Agent pods in a customer's own cluster get one route out, through the edge as a 
 
 ### M33 rows: Browser and computer-use agents
 
-An agent's browser asks PantherClaw, through `pclaw` on the same machine, before it opens a page, submits a form, saves a download or clicks a marked element; secret and challenge fields are left to a person in a takeover; computer-use actions are asked through the SDKs ([G0 M33](g0/M33.md), [ADR-0060](adr/0060-browser-and-computer-use-agents.md)). The extension is cooperative (PARTIAL). Each row takes its parent feature's edition, or Community where the parent is ungated.
+An agent's browser asks PantherClaw, through `pclaw` on the same machine, before it opens a page, submits a form, saves a download or clicks a marked element; secret and challenge fields are left to a person in a takeover; computer-use actions are asked through the SDKs ([G0 M33](g0/M33.md), [ADR-0060](adr/0060-browser-and-computer-use-agents.md), [runbook](runbooks/browser-agents.md)). The extension is cooperative (PARTIAL). Each row takes its parent feature's edition, or Community where the parent is ungated.
+
+Every row is the runtime firewall (D1205): each browser or computer action is decided per call, allowed, held for a person or refused, and answers "may this agent do this, here, now?" The extension holds navigations, submits, downloads and marked clicks until the native host answers (F1030, F1034), unlisted sites hold (F1031), secret and challenge fields are refused in the page and at the gateway (F1032), a takeover always holds for an approver (F1033), and the policy generator deploys the extension with incognito and guest mode off (F1035). Computer use is asked through the SDK wrappers (F1036) and gated on the model route (F1037), and capture keeps no images (F1038). The cloaking compare (F1039) only alerts and is PARTIAL. The host signs each question with the desktop workload key, which stays agent identity protection as before; M33 adds no identity control.
 
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |

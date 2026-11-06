@@ -850,14 +850,15 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 
 ### M33 — Browser and computer-use agents
 **HR:** HR-745..759 · **F:** F1030–F1039 · **ADR:** 0060 · **G0:** [g0/M33.md](g0/M33.md).
-- **Code first**, like M30–M32: three streams on pushed branches, assembled on `code/m33` from `code/m32`; tests come in the testing phase.
-- **Packages:** `pc.browser` (navigate, form submit, download, marked click, takeover) and `pc.computer` (`computer.input`), with the `url` param type and `normurl`, `urlhost`, `urlquery`.
-- **Extension and host** (FQ33-1): a managed Manifest V3 extension that reaches PantherClaw only through `pclaw browser host` over native messaging; it fails closed and sends no page content. Cooperative (PARTIAL).
-- **Site list** (FQ33-2): an action on an unlisted site holds for a person, and an empty list holds every site; a takeover always holds.
-- **Secret fields** (FQ33-4): no agent input into password, one-time-code, payment or challenge fields, refused in the page and at the gateway; a person does it in a takeover.
-- **Computer use:** SDK wrappers ask before each action; the model route gates declaring computer use; capture keeps no images.
-- **Cloaking compare** (FQ33-3): on the customer's gateway for marked sites only, alert only, PARTIAL.
-- **Threat map:** `prevent.browser_sites` and `prevent.browser_secret_fields`.
+- **Code first**, like M30–M32: three streams on pushed branches, assembled on `code/m33` from `code/m32`; tests in Phase B (land/m33), with the `pc.browser` and `pc.computer` goldens, RT-220..RT-224 and the `TestE2E_M33` exit test. Runbook: [browser-agents.md](runbooks/browser-agents.md). The extension's own tests come with its package and CI.
+- **Runtime firewall** (D1205): every M33 control decides a browser or computer action per call. The desktop workload key that signs the host's questions is unchanged agent identity protection; M33 adds no identity control.
+  - Packages: `pc.browser` (navigate, form submit, download, marked click, takeover) and `pc.computer` (`computer.input`), with the `url` param type and `normurl`, `urlhost`, `urlquery`.
+  - Extension and host (FQ33-1): a managed Manifest V3 extension that reaches PantherClaw only through `pclaw browser host` over native messaging; it fails closed and sends no page content. `pclaw browser install-host` and `pclaw browser policy generate` (incognito and guest off; installs nothing). Cooperative (PARTIAL, R-78).
+  - Site list (FQ33-2): an action on an unlisted site holds for a person, and an empty list holds every site; adding a site needs a second person. A takeover always holds for an approver, at most 10 minutes (R-79).
+  - Secret fields (FQ33-4): no agent input into password, one-time-code, payment or challenge fields, refused in the page and at the gateway (`BROWSER_SECRET_FIELD`); a person does it in a takeover.
+  - Computer use: SDK wrappers ask before each action (R-81); the model route gates declaring computer use (`computer_use`); capture keeps no images.
+  - Cloaking compare (FQ33-3): on the customer's gateway for marked sites only, alert only, PARTIAL (R-80).
+- **Threat map:** `prevent.browser_sites` (AML.T0100, AML.T0131) and `prevent.browser_secret_fields` (T1696.001); the cloaking detection carries AML.T0134.
 - Migration `00370`.
 
 ---
