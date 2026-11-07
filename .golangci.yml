@@ -6,7 +6,8 @@
 version: "2"
 
 run:
-  timeout: 5m
+  # 10m: a full-repo run reports 0 issues and then hits 5m on this tree (D1219).
+  timeout: 10m
   tests: true
   # Test files behind the custom build tags are linted too. One file stays
   # unlinted: test/e2e/range_nosandbox_test.go builds only with integration
