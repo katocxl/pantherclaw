@@ -351,6 +351,8 @@ tasks:
       - cd integrations/langchain/python && {{.PYTHON}} -m unittest discover -s tests
       - cd integrations/openai-agents/python && {{.PYTHON}} -m unittest discover -s tests
       - cd integrations/crewai/python && {{.PYTHON}} -m unittest discover -s tests
+      # The ADK callback on a stand-in tool (G0 M34 D996, HR-767).
+      - cd integrations/google-adk/python && {{.PYTHON}} -m unittest discover -s tests
 
   sdk:crewai-real:
     desc: The CrewAI wrapper's tests inside the real CrewAI (Python 3.13), in a throwaway environment outside every committed lock (M14 D60; local only while CrewAI's chromadb has open advisories)

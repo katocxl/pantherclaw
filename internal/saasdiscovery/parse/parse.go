@@ -52,6 +52,8 @@ func Recording(source string, raw []byte) (*domain.Report, error) {
 		return copilotRecording(raw)
 	case domain.SourceChatGPTEnterprise:
 		return chatGPTRecording(raw)
+	case domain.SourceAWSAgentCore, domain.SourceVertexAgentEngine, domain.SourceAzureFoundry:
+		return runtimeRecording(source, raw)
 	}
 	return nil, ErrSource
 }

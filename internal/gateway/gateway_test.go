@@ -111,6 +111,9 @@ type fakeAuthority struct {
 	// observeCode answers RecordToolObservation for a verified workload
 	// without recording it (connection_not_served).
 	observeCode string
+	// reasons, when set, are a refusal's reasons instead of the default
+	// GRANT_AMOUNT_EXCEEDED (G0 M34: RUNTIME_ACCOUNT_MISMATCH, RUN_NOT_ACTIVE).
+	reasons []*pb.Reason
 
 	mu        sync.Mutex
 	authorize int
@@ -202,6 +205,9 @@ func (f *fakeAuthority) Authorize(ctx context.Context, req *pb.AuthorizeRequest)
 			Presentation: pb.DecisionPresentation_DECISION_PRESENTATION_DENY, FailingCategory: "authority",
 			DecisiveCode: "GRANT_AMOUNT_EXCEEDED", TransactionId: f.txn,
 			NextActions: []*pb.NextAction{{Code: "inspect_transaction", Label: "pclaw txn show " + f.txn, Url: "https://pc.example/app/evidence/transactions/" + f.txn}},
+		}
+		if f.reasons != nil {
+			res.Reasons = f.reasons
 		}
 	}
 	if f.noPermit || (f.decision != pb.Decision_DECISION_ALLOW && !monitor) {

@@ -59,6 +59,10 @@ const (
 	// ChannelA2A is a call to a peer agent through the gateway's A2A face
 	// (G0 M14 D31), mapped by A2A method name.
 	ChannelA2A Channel = "a2a"
+	// ChannelRuntime is a cloud agent runtime's gateway asking before it
+	// runs a tool itself (G0 M34 D990). It has no mappings of its own: the
+	// gateway maps its calls through the mcp mappings.
+	ChannelRuntime Channel = "runtime"
 )
 
 // Mapping maps one MCP tool, HTTP route or hook call onto the definition.
@@ -275,6 +279,8 @@ func (d *Definition) validateMapping(i int) error {
 		return invalid("%s: the sdk channel maps through hook and mcp mappings and has none of its own", at)
 	case ChannelAuthZEN:
 		return invalid("%s: the authzen channel maps through http and mcp mappings and has none of its own", at)
+	case ChannelRuntime:
+		return invalid("%s: the runtime channel maps through mcp mappings and has none of its own", at)
 	case ChannelA2A:
 		// Mapped by A2A method name, like an mcp tool (G0 M14 D9).
 		if m.Tool != "" || m.Path != "" || !slices.Contains(A2AMethods, m.Method) {

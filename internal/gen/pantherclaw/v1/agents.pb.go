@@ -2686,7 +2686,9 @@ type ScanFinding struct {
 	// local scan (env_secret carries the credential's kind and nothing of its
 	// value, G0 M24 D233, D238); from a gateway's organization scan (G0 M8,
 	// HR-209), "github_app", "github_workflow" or "github_mcp_config"; from a
-	// gateway's SaaS scan (G0 M26 D407), "copilot_studio_agent" or "chatgpt_gpt".
+	// gateway's SaaS or runtime scan (G0 M26 D407, M34 D997),
+	// "copilot_studio_agent", "chatgpt_gpt", "agentcore_runtime",
+	// "vertex_reasoning_engine" or "foundry_agent".
 	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	// Stable key of the finding on the scanning machine (hex SHA-256), so a
 	// later scan of the same thing is only counted.
@@ -3264,12 +3266,12 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"page_token\x18\x03 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[A-Za-z0-9_-]*$R\tpageToken\"y\n" +
 	"\x18ListAgentChangesResponse\x125\n" +
 	"\achanges\x18\x01 \x03(\v2\x1b.pantherclaw.v1.AgentChangeR\achanges\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x8d\x03\n" +
-	"\vScanFinding\x12\xa3\x01\n" +
-	"\x04kind\x18\x01 \x01(\tB\x8e\x01\xbaH\x8a\x01r\x87\x01R\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xc8\x03\n" +
+	"\vScanFinding\x12\xde\x01\n" +
+	"\x04kind\x18\x01 \x01(\tB\xc9\x01\xbaH\xc5\x01r\xc2\x01R\n" +
 	"mcp_serverR\ragent_projectR\x04hookR\x05skillR\n" +
 	"env_secretR\n" +
-	"github_appR\x0fgithub_workflowR\x11github_mcp_configR\x14copilot_studio_agentR\vchatgpt_gptR\x04kind\x12'\n" +
+	"github_appR\x0fgithub_workflowR\x11github_mcp_configR\x14copilot_studio_agentR\vchatgpt_gptR\x11agentcore_runtimeR\x17vertex_reasoning_engineR\rfoundry_agentR\x04kind\x12'\n" +
 	"\x03key\x18\x02 \x01(\tB\x15\xbaH\x12r\x102\x0e^[0-9a-f]{64}$R\x03key\x12p\n" +
 	"\n" +
 	"attributes\x18\x03 \x03(\v2+.pantherclaw.v1.ScanFinding.AttributesEntryB#\xbaH \x9a\x01\x1d\x10\x10\"\x12r\x102\x0e^[a-z_]{1,32}$*\x05r\x03\x18\x80\x02R\n" +

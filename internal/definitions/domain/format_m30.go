@@ -35,10 +35,47 @@ var awsRestActions = map[string]string{
 // param.
 var awsRestHeaders = []string{"x-amz-acl"}
 
-// awsRestAction is the S3 action of an aws-rest template.
+// awsRestRoutes are the aws-rest reads keyed by method and exact path
+// template, trailing "/" kept (G0 M34 D993a): the Amazon Bedrock AgentCore
+// control plane's lists. They are reads only, with no aws_resource (so the
+// session's resource is "*"), and take JSON body fields and query by the
+// normal rules; no subresource, body_param or header_params.
+var awsRestRoutes = map[string]string{
+	methodPost + " /runtimes/":                    "ListAgentRuntimes",
+	methodGet + " /gateways/":                     "ListGateways",
+	methodGet + " /gateways/{target.id}/targets/": "ListGatewayTargets",
+}
+
+// awsRestAction is the action of an aws-rest template: an S3 action named by
+// its method and subresource, or a route's.
 func awsRestAction(h *HTTPDispatch) (string, bool) {
+	if h.Subresource == "" {
+		a, ok := awsRestRoutes[h.Method+" "+h.Path]
+		return a, ok
+	}
 	a, ok := awsRestActions[h.Method+" "+h.Subresource]
 	return a, ok
+}
+
+// AWSRestS3 reports whether an aws-rest template is one of S3's, whose path
+// segment is a bucket name (G0 M30 D934a), rather than a route of the route
+// table (G0 M34 D993a).
+func AWSRestS3(h *HTTPDispatch) bool {
+	return h.Encoding == EncodingAWSRest && h.Subresource != ""
+}
+
+// validateAWSRestRoute checks an aws-rest template of the route table.
+func (d *Definition) validateAWSRestRoute(at string, h *HTTPDispatch) error {
+	if _, ok := awsRestRoutes[h.Method+" "+h.Path]; !ok {
+		return invalid("%s: aws-rest without a subresource is one of the listed routes", at)
+	}
+	switch {
+	case d.Access != AccessRead:
+		return invalid("%s: an aws-rest route is a read", at)
+	case h.AWSResource != "", len(h.AWSExtraResources) > 0, h.BodyParam != "", len(h.HeaderParams) > 0, h.IdempotencyHeader != "":
+		return invalid("%s: an aws-rest route has no aws_resource, aws_extra_resources, body_param, header_params or idempotency header", at)
+	}
+	return nil
 }
 
 // validateAWSRestDispatch checks an aws-rest template: a method and fixed
@@ -47,6 +84,9 @@ func awsRestAction(h *HTTPDispatch) (string, bool) {
 // a content param, and header_params from the allowed headers to enum
 // params.
 func (d *Definition) validateAWSRestDispatch(at string, h *HTTPDispatch) error {
+	if h.Subresource == "" {
+		return d.validateAWSRestRoute(at, h)
+	}
 	if _, ok := awsRestAction(h); !ok {
 		return invalid("%s: aws-rest is a PUT with subresource policy or acl", at)
 	}
@@ -58,6 +98,9 @@ func (d *Definition) validateAWSRestDispatch(at string, h *HTTPDispatch) error {
 		return invalid("%s: aws-rest sends no body fields, query or idempotency header", at)
 	}
 	if err := d.validateAWSResource(at, h.AWSResource); err != nil {
+		return err
+	}
+	if err := d.validateAWSExtraResources(at, h); err != nil {
 		return err
 	}
 	if h.BodyParam != "" {

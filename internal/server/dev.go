@@ -97,6 +97,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 		"\"anthropic\", \"openai\", \"vertex\" and \"bedrock\" to this fake model (pantherclaw-sim model: "+devSimModelURL+
 		"; vertex and bedrock at its /vertex/models and /bedrock), held by the gateway (G0 M29 D811, G0 M31 D962a)")
 	saas := devSaaSFlags(fs)
+	runtimes := devRuntimesFlags(fs) // G0 M34 D998
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -141,7 +142,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 		}
 	}
 	if (*targetURL != "" || *shell || *browser || *githubURL != "" || *stripeURL != "" || *postgresFile != "" || *slackURL != "" || *a2aURL != "" ||
-		*jiraURL != "" || *gitlabURL != "" || *awsECSURL != "" || *modelURL != "" || *googleURL != "" || *m365URL != "" || saas.any()) &&
+		*jiraURL != "" || *gitlabURL != "" || *awsECSURL != "" || *modelURL != "" || *googleURL != "" || *m365URL != "" || saas.any() || runtimes.any()) &&
 		*gatewayOut == "" {
 		return errTargetNeedsGateway
 	}
@@ -237,6 +238,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 		pkgs = append(pkgs, devPackage{pcm365.Name, pcm365.Version, pcm365.Package})
 	}
 	pkgs = append(pkgs, saas.packages()...)
+	pkgs = append(pkgs, runtimes.packages()...)
 	if err := seedPackages(ctx, pool, org, signer, pkgs...); err != nil {
 		return err
 	}
@@ -356,6 +358,9 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 				"--oauth-scope https://graph.microsoft.com/.default\n", c.ID, c.Name, *m365URL, c.ID, *m365URL)
 		}
 		if err := saas.seed(ctx, cfg, pool, org, gw, stdout); err != nil {
+			return err
+		}
+		if err := runtimes.seed(ctx, cfg, pool, org, gw, stdout); err != nil {
 			return err
 		}
 		if *a2aURL != "" {

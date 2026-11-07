@@ -713,6 +713,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err := githubapp.Register(jreg, ghScans); err != nil {
 			return err
 		}
+		if evidenceJobs, err = registerM34DiscoveryJobs(evidenceJobs, jreg, pool, bill, log); err != nil { // G0 M34 D997
+			return err
+		}
 		rewrapJobs, closeKeystore, err := registerKeyRewrap(ctx, jreg, cfg, pool, kp, log)
 		if err != nil {
 			return err
@@ -1000,6 +1003,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err := registerKubernetesClosure(rs, d, workload, runs); err != nil {
 		return nil, err
 	}
+	registerM34Runtimes(rs, d, workload, runs)
 	if err := registerAutomationTemplates(rs, d, autos); err != nil {
 		return nil, err
 	}

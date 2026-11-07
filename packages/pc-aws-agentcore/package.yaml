@@ -1,0 +1,156 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agents that look at Amazon Bedrock AgentCore
+# (G0 M34 D993, D993a; HR-763). It reaches the AgentCore control plane,
+# bedrock-agentcore-control.<region>.amazonaws.com, through an http
+# connection whose credential is of kind aws_sigv4, sealed with
+# --aws-service bedrock-agentcore: PantherClaw holds a base access key that
+# signs nothing but an sts:AssumeRole of one role, once per dispatch, for 15
+# minutes, with a session policy that allows exactly the one AgentCore
+# action the operation names below (HR-525). The agent never holds a key,
+# and the base key never reaches AgentCore.
+#
+# In M34 it reads only: the agent runtimes, the gateways, and one gateway's
+# targets. The control plane speaks aws-rest: a closed route table, keyed
+# by method and exact path template, names each action, never the agent
+# (HR-526). Reads carry no aws_resource, so the session's resource is "*".
+#
+# UNCONFIRMED: the API shape is taken from AWS's published reference and
+# checked only against the simulator, until a real account check (R-85).
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.aws-agentcore
+version: 1.0.0
+publisher: pantherclaw
+summary: List Amazon Bedrock AgentCore runtimes, gateways and gateway targets (API shape unconfirmed)
+
+definitions:
+  - operation: agentcore.runtimes.list
+    summary: List the AgentCore agent runtimes of the connection's account and region
+    access: read
+    target:
+      type: aws_agentcore_region
+      id_pattern: '^agentcore$'
+      account: none
+    params: {}
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-05
+    mappings:
+      - channel: mcp
+        tool: agentcore_list_runtimes
+        route: agentcore-runtimes-list
+        description: >-
+          List the Amazon Bedrock AgentCore agent runtimes of the account and
+          region this connection reaches.
+        input_schema:
+          type: object
+          additionalProperties: false
+          properties: {}
+        extract:
+          target_id: "'agentcore'"
+          params: {}
+    dispatch:
+      http:
+        method: POST
+        path: /runtimes/
+        encoding: aws-rest
+
+  - operation: agentcore.gateways.list
+    summary: List the AgentCore gateways of the connection's account and region
+    access: read
+    target:
+      type: aws_agentcore_region
+      id_pattern: '^agentcore$'
+      account: none
+    params: {}
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-05
+    mappings:
+      - channel: mcp
+        tool: agentcore_list_gateways
+        route: agentcore-gateways-list
+        description: >-
+          List the Amazon Bedrock AgentCore gateways of the account and region
+          this connection reaches.
+        input_schema:
+          type: object
+          additionalProperties: false
+          properties: {}
+        extract:
+          target_id: "'agentcore'"
+          params: {}
+    dispatch:
+      http:
+        method: GET
+        path: /gateways/
+        encoding: aws-rest
+
+  - operation: agentcore.gateway_targets.list
+    summary: List the targets of one AgentCore gateway
+    access: read
+    target:
+      type: aws_agentcore_gateway
+      id_pattern: '^[0-9A-Za-z][0-9A-Za-z-]{0,99}$'
+      account: none
+    params: {}
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-05
+    mappings:
+      - channel: mcp
+        tool: agentcore_list_gateway_targets
+        route: agentcore-gateway-targets-list
+        description: >-
+          List the targets of one Amazon Bedrock AgentCore gateway, by the
+          gateway's id.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [gateway_id]
+          properties:
+            gateway_id:
+              type: string
+              description: The gateway's id
+              pattern: '^[0-9A-Za-z][0-9A-Za-z-]{0,99}$'
+        extract:
+          target_id: input.gateway_id
+          params: {}
+    dispatch:
+      http:
+        method: GET
+        path: /gateways/{target.id}/targets/
+        encoding: aws-rest

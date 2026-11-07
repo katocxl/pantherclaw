@@ -227,10 +227,11 @@ const (
 const CoveragePartial = "PARTIAL"
 
 // Cooperative reports whether a transaction's channel is a cooperative one
-// (the hook, the SDK, an AuthZEN enforcement point: G0 M14 D4), whose agent
-// or enforcement point performs the allowed action itself.
+// (the hook, the SDK, an AuthZEN enforcement point: G0 M14 D4; a cloud
+// agent runtime's gateway: G0 M34 D990), whose agent or enforcement point
+// performs the allowed action itself.
 func Cooperative(channel string) bool {
-	return channel == "hook" || channel == "sdk" || channel == "authzen"
+	return channel == "hook" || channel == "sdk" || channel == "authzen" || channel == "runtime"
 }
 
 // UnverifiableReason says why the effect of an accepted or delegated

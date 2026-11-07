@@ -27,7 +27,6 @@ var Unaddressed = []UnaddressedEntry{
 	{ID: "AML.T0092", Why: "Manipulate user LLM chat history (AML.T0092): chat history lives in the assistant, not in PantherClaw's evidence."},
 	{ID: "AML.T0094", Why: "Delay execution of LLM instructions (AML.T0094): a delayed instruction is only seen when it turns into an action."},
 	{ID: "AML.T0096", Why: "AI service API (AML.T0096): command and control over an AI provider's API has no PantherClaw control."},
-	{ID: "AML.T0103", Why: "Deploy AI agent (AML.T0103): an agent launched apart from PantherClaw is only found by discovery; it has no PantherClaw control."},
 	{ID: "AML.T0108", Why: "AI agent (AML.T0108): an agent used as a command channel beyond its grants has no PantherClaw control yet."},
 	{ID: "AML.T0119", Why: "Exploit automated artifact processing pipeline (AML.T0119): pipelines that process artifacts have no PantherClaw control."},
 	{ID: "AML.T0121", Why: "AI agent environment reconstruction (AML.T0121): an agent rebuilding its own environment has no PantherClaw control yet."},
@@ -38,6 +37,5 @@ var Unaddressed = []UnaddressedEntry{
 	// ATT&CK
 	{ID: "T1080", Why: "Taint shared content (T1080): granted writes to a shared repository are allowed; PantherClaw does not judge their content."},
 	{ID: "T1528", Why: "Steal application access token (T1528): theft of a token happens where it is stored; PantherClaw acts only on its later use."},
-	{ID: "T1651", Why: "Cloud administration command (T1651): commands run through a cloud's own management service have no PantherClaw control yet."},
 	{ID: "T1699", Why: "Direct prompt injection (T1699): it happens in the model's conversation; PantherClaw decides on the actions that follow."},
 }

@@ -1260,6 +1260,7 @@ type PcConnection struct {
 	AgentHosts       []string
 	Simulated        bool
 	ModelRelay       bool
+	RuntimeTarget    *string
 }
 
 type PcConnectionCapability struct {
@@ -4012,6 +4013,16 @@ type PcSaasScanRun struct {
 	StartedBy      string
 	CreatedAt      time.Time
 	FinishedAt     *time.Time
+}
+
+type PcSaasScanSchedule struct {
+	OrgID         ids.OrgID
+	Source        string
+	ConnectionID  ids.UUID
+	Tenant        string
+	CreatedBy     string
+	CreatedAt     time.Time
+	LastStartedAt *time.Time
 }
 
 type PcSamlConnection struct {

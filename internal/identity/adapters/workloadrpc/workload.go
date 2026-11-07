@@ -47,6 +47,9 @@ import (
 // Prefix is the URL path prefix of WorkloadService procedures.
 const Prefix = "/" + pantherclawv1connect.WorkloadServiceName + "/"
 
+// RuntimePrefix is the URL path prefix of PAP-authenticated RuntimeService procedures.
+const RuntimePrefix = "/" + pantherclawv1connect.RuntimeServiceName + "/"
+
 // MaxBody bounds a workload request body; WorkloadService messages are
 // small (the largest field is a 16 KiB attestation token).
 const MaxBody = 64 << 10
@@ -67,7 +70,7 @@ func RawBody(next http.Handler, clientIP httpx.ClientIPFunc) http.Handler {
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, Prefix) && !strings.HasPrefix(r.URL.Path, LaunchPrefix) &&
-			!strings.HasPrefix(r.URL.Path, KubernetesPrefix) {
+			!strings.HasPrefix(r.URL.Path, KubernetesPrefix) && !strings.HasPrefix(r.URL.Path, RuntimePrefix) {
 			next.ServeHTTP(w, r)
 			return
 		}

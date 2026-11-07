@@ -356,7 +356,15 @@ type Result struct {
 	// Explanation is the Authority's agent-safe explanation (F330,
 	// HR-400); nil when no decision was asked for.
 	Explanation *pb.AgentExplanation
+	// SafeDetail is the decisive reason's detail when the Authority writes
+	// it as an agent-safe sentence (agentSafeDetails); "" otherwise.
+	SafeDetail string
 }
+
+// agentSafeDetails are the decisive reason codes whose detail the Authority
+// writes as an agent-safe sentence, which a face may show the agent as is
+// (G0 M34 D994a: RUNTIME_ACCOUNT_MISMATCH).
+var agentSafeDetails = map[string]bool{"RUNTIME_ACCOUNT_MISMATCH": true}
 
 // Lap is one step's duration.
 type Lap struct {
@@ -466,6 +474,12 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 		return r
 	}
 	def, bound, want := d.def, d.bound, d.want
+	if runtimeChannel(c) {
+		// A cloud agent runtime's gateway runs the tool itself (G0 M34
+		// D990, HR-760): the action is always delegated, never forwarded
+		// upstream, whatever the connection's kind.
+		return e.delegate(ctx, r, want, t)
+	}
 	if cooperative(c) {
 		return e.delegateSDK(ctx, r, conn, def, bound, want, t)
 	}
@@ -516,6 +530,9 @@ func (e *Engine) decide(ctx context.Context, c Call, findings []*pb.PayloadFindi
 	for _, rs := range ar.GetReasons() {
 		r.Reasons = append(r.Reasons, rs.GetCode())
 	}
+	if rs := ar.GetReasons(); len(rs) > 0 && agentSafeDetails[rs[0].GetCode()] {
+		r.SafeDetail = rs[0].GetDetail()
+	}
 	if rs := ar.GetReasons(); r.Decision == pb.Decision_DECISION_CANNOT_AUTHORIZE && len(rs) > 0 && rs[0].GetCode() == "IDENTITY_UNVERIFIED" {
 		// The workload could not be verified: a PAP-Error, so it can retry
 		// with a fresh nonce or token (PAP-1 §12).
@@ -536,7 +553,7 @@ func (e *Engine) decide(ctx context.Context, c Call, findings []*pb.PayloadFindi
 	// obligations applied) or, in monitor mode, the requested one.
 	bound := c.Action
 	if !r.Monitor {
-		if (conn.GetKind() == "local" || cooperative(c)) && len(ar.GetObligations()) > 0 {
+		if (conn.GetKind() == "local" || cooperative(c) || runtimeChannel(c)) && len(ar.GetObligations()) > 0 {
 			// A cooperative client runs the action as it asked: it can
 			// honor no obligation (HR-186).
 			return ctx, decided{}, r.fail(EnforcementFailed, CodeObligation), false

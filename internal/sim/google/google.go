@@ -293,6 +293,27 @@ func (s *Server) token(w http.ResponseWriter, r *http.Request) {
 	write(w, http.StatusOK, map[string]any{"access_token": tok, "token_type": "Bearer", "expires_in": int(TokenLifetime / time.Second)})
 }
 
+// Token serves the token endpoint, for simulators that issue their tokens
+// through this one (vertexagent, G0 M34 D998). Mount it at /token.
+func (s *Server) Token(w http.ResponseWriter, r *http.Request) { s.token(w, r) }
+
+// Authorize checks that r carries an unexpired token this simulator issued
+// holding one of scopes. It returns 0, or the HTTP status and the Google
+// error reason to refuse with.
+func (s *Server) Authorize(r *http.Request, scopes []string) (int, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	g, issued := s.issued[tok]
+	switch {
+	case !ok || !issued || s.faults.ExpireTokens || !s.now().Before(g.expires):
+		return http.StatusUnauthorized, "authError"
+	case !slices.ContainsFunc(g.Scopes, func(sc string) bool { return slices.Contains(scopes, sc) }):
+		return http.StatusForbidden, "insufficientPermissions"
+	}
+	return 0, ""
+}
+
 // verify checks a JWT-bearer assertion and returns what it grants. The
 // caller holds s.mu.
 func (s *Server) verify(assertion, audience string) (Grant, error) {

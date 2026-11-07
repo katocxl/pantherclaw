@@ -30,6 +30,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/mcp"
 	"github.com/katocxl/pantherclaw/internal/gateway/mcpauth"
 	"github.com/katocxl/pantherclaw/internal/gateway/modelface"
+	runtimeface "github.com/katocxl/pantherclaw/internal/gateway/runtime"
 	"github.com/katocxl/pantherclaw/internal/gateway/sdk"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
@@ -72,7 +73,9 @@ type Gateway struct {
 	sdk      *sdk.Handler
 	a2a      *a2aface.Handler
 	model    *modelface.Handler
-	log      *slog.Logger
+	// runtime is the cloud agent runtime face (G0 M34 D994).
+	runtime *runtimeface.Handler
+	log     *slog.Logger
 	// reportDrift, driftEvery and driftPoll drive the drift checks
 	// (drift.go).
 	reportDrift DriftReporter
@@ -91,7 +94,7 @@ type Gateway struct {
 }
 
 // Handler returns the gateway's agent-facing HTTP handler: `/mcp/{connection}`
-// (mcp), `/mcp-oauth/{connection}` and its metadata (mcpauth), `/hook/{connection}` (hook), `/sdk/{connection}` (sdk), `/a2a/{connection}` (a2a) and
+// (mcp), `/mcp-oauth/{connection}` and its metadata (mcpauth), `/hook/{connection}` (hook), `/runtime/agentcore` (runtime), `/sdk/{connection}` (sdk), `/a2a/{connection}` (a2a) and
 // `/{connection}/…` (httpproxy).
 func (g *Gateway) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -101,6 +104,10 @@ func (g *Gateway) Handler() http.Handler {
 		}
 		if _, ok := mcpauth.Path(r.URL.EscapedPath()); ok && g.mcpOAuth != nil {
 			g.mcpOAuth.ServeHTTP(w, r)
+			return
+		}
+		if runtimeface.Serves(r.URL.EscapedPath()) {
+			g.runtime.ServeHTTP(w, r) // G0 M34 D994: before the HTTP proxy
 			return
 		}
 		if _, ok := hook.Path(r.URL.EscapedPath()); ok {
@@ -338,13 +345,14 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 	}
 	g = &Gateway{
 		run: d.Run, containment: d.Containment, config: d.Configuration, broker: d.Broker, engine: engine,
-		http:  httpproxy.New(engine, d.Configuration, cfg.PublicURL, log),
-		mcp:   mcp.New(engine, d.Configuration, cfg.PublicURL, log),
-		hook:  hook.New(engine, d.Configuration, cfg.PublicURL, log),
-		sdk:   sdk.New(engine, d.Configuration, cfg.PublicURL, log),
-		a2a:   a2aface.New(engine, d.Configuration, a2aPeer, cfg.PublicURL, log).WithCardSigner(d.SignAgentCard),
-		model: modelface.New(engine, d.ModelCalls, d.Configuration, cfg.PublicURL, log),
-		log:   log, reportDrift: d.ReportDrift, reportInventory: d.ReportInventory, driftEvery: DriftEvery, driftPoll: driftPoll,
+		http:    httpproxy.New(engine, d.Configuration, cfg.PublicURL, log),
+		mcp:     mcp.New(engine, d.Configuration, cfg.PublicURL, log),
+		hook:    hook.New(engine, d.Configuration, cfg.PublicURL, log),
+		runtime: runtimeface.New(engine, d.Configuration, cfg.PublicURL, log),
+		sdk:     sdk.New(engine, d.Configuration, cfg.PublicURL, log),
+		a2a:     a2aface.New(engine, d.Configuration, a2aPeer, cfg.PublicURL, log).WithCardSigner(d.SignAgentCard),
+		model:   modelface.New(engine, d.ModelCalls, d.Configuration, cfg.PublicURL, log),
+		log:     log, reportDrift: d.ReportDrift, reportInventory: d.ReportInventory, driftEvery: DriftEvery, driftPoll: driftPoll,
 		verifications: d.Verifications, verifyEvery: VerifyEvery, verifyHintGap: verifyHintGap,
 		submitScan: d.SubmitScan,
 		status:     newStatus(d.ReportStatus),

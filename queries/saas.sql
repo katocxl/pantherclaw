@@ -149,3 +149,35 @@ SELECT x.id, x.source, x.tenant, x.finished_at FROM (
 WHERE x.state = 'FAILED' OR x.not_scanned <> '{}'::jsonb
 ORDER BY x.finished_at DESC
 LIMIT sqlc.arg(max_rows);
+
+-- Daily scan schedules (G0 M34 D997, migration 00382). Setting one again
+-- keeps it and names the person who set it last.
+-- name: UpsertSaasScanSchedule :one
+INSERT INTO pc.saas_scan_schedules (org_id, source, connection_id, tenant, created_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(source), sqlc.arg(connection_id), sqlc.arg(tenant), sqlc.arg(created_by))
+ON CONFLICT (org_id, source, connection_id, tenant) DO UPDATE SET created_by = excluded.created_by
+RETURNING *;
+
+-- name: DeleteSaasScanSchedule :one
+DELETE FROM pc.saas_scan_schedules
+WHERE org_id = sqlc.arg(org_id) AND source = sqlc.arg(source) AND connection_id = sqlc.arg(connection_id)
+  AND tenant = sqlc.arg(tenant)
+RETURNING *;
+
+-- The org's schedules, for the daily job and the CLI.
+-- name: ListSaasScanSchedules :many
+SELECT * FROM pc.saas_scan_schedules
+WHERE org_id = sqlc.arg(org_id)
+ORDER BY source, connection_id, tenant;
+
+-- Locks one schedule, so two daily jobs start one scan.
+-- name: LockSaasScanSchedule :one
+SELECT * FROM pc.saas_scan_schedules
+WHERE org_id = sqlc.arg(org_id) AND source = sqlc.arg(source) AND connection_id = sqlc.arg(connection_id)
+  AND tenant = sqlc.arg(tenant)
+FOR UPDATE;
+
+-- name: MarkSaasScanScheduleStarted :exec
+UPDATE pc.saas_scan_schedules SET last_started_at = now()
+WHERE org_id = sqlc.arg(org_id) AND source = sqlc.arg(source) AND connection_id = sqlc.arg(connection_id)
+  AND tenant = sqlc.arg(tenant);

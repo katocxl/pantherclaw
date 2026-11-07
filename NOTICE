@@ -25,6 +25,7 @@ their own agents and target systems:
   integrations/claude-agent-sdk/ Claude Agent SDK integrations (TypeScript, Python)
   integrations/chromium-extension/ Browser extension for agent browsers (Chromium)
   integrations/crewai/     CrewAI integration (Python)
+  integrations/google-adk/ Google Agent Development Kit integration (Python)
   integrations/langchain/  LangChain integration (Python)
   integrations/mcp/        MCP TypeScript SDK integration
   integrations/openai-agents/ OpenAI Agents SDK integration (Python)

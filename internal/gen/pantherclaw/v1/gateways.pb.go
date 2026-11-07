@@ -2783,7 +2783,11 @@ type GatewayConnection struct {
 	Vectorstore *VectorstoreConfig `protobuf:"bytes,28,opt,name=vectorstore,proto3" json:"vectorstore,omitempty"`
 	// A snowflake connection's confirmed configuration and manifest (G0 M31
 	// D962); unset until a first one is confirmed, and nothing is sent.
-	Snowflake     *SnowflakeConfig `protobuf:"bytes,29,opt,name=snowflake,proto3" json:"snowflake,omitempty"`
+	Snowflake *SnowflakeConfig `protobuf:"bytes,29,opt,name=snowflake,proto3" json:"snowflake,omitempty"`
+	// The cloud agent runtime target the connection is bound to (G0 M34
+	// D991), "agentcore:<gateway ARN>/<target name>": the runtime face finds
+	// the connection of a tool call by it. Empty when unbound.
+	RuntimeTarget string `protobuf:"bytes,30,opt,name=runtime_target,json=runtimeTarget,proto3" json:"runtime_target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2991,6 +2995,13 @@ func (x *GatewayConnection) GetSnowflake() *SnowflakeConfig {
 		return x.Snowflake
 	}
 	return nil
+}
+
+func (x *GatewayConnection) GetRuntimeTarget() string {
+	if x != nil {
+		return x.RuntimeTarget
+	}
+	return ""
 }
 
 // RouteModeSetting is one route's mode.
@@ -6935,7 +6946,7 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\bresponse\x18\x05 \x01(\bR\bresponse\x12\x19\n" +
 	"\bbyte_cap\x18\x06 \x01(\x05R\abyteCap\x12;\n" +
 	"\vexpire_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTime\"\xf1\a\n" +
+	"expireTime\"\x98\b\n" +
 	"\x11GatewayConnection\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -6966,7 +6977,8 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"modelRelay\x121\n" +
 	"\x05model\x18\x1b \x01(\v2\x1b.pantherclaw.v1.ModelConfigR\x05model\x12C\n" +
 	"\vvectorstore\x18\x1c \x01(\v2!.pantherclaw.v1.VectorstoreConfigR\vvectorstore\x12=\n" +
-	"\tsnowflake\x18\x1d \x01(\v2\x1f.pantherclaw.v1.SnowflakeConfigR\tsnowflake\"<\n" +
+	"\tsnowflake\x18\x1d \x01(\v2\x1f.pantherclaw.v1.SnowflakeConfigR\tsnowflake\x12%\n" +
+	"\x0eruntime_target\x18\x1e \x01(\tR\rruntimeTarget\"<\n" +
 	"\x10RouteModeSetting\x12\x14\n" +
 	"\x05route\x18\x01 \x01(\tR\x05route\x12\x12\n" +
 	"\x04mode\x18\x02 \x01(\tR\x04mode\"P\n" +

@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math/big"
 	"net"
 	"net/http"
@@ -129,6 +130,12 @@ type stack struct {
 	// model is the fake model and the seeded model connections "anthropic"
 	// and "openai" to it (G0 M29, options.model; m29_model_support_test.go).
 	model *modelSim
+	// seedOut is dev seed's output, for the connections an option's extra
+	// seed flags made (G0 M34, options.seedArgs).
+	seedOut string
+	// m34 is the cloud agent runtime fixture (G0 M34,
+	// m34_runtimes_support_test.go), once a test set it up.
+	m34 *m34Fixture
 }
 
 type options struct {
@@ -227,6 +234,13 @@ type options struct {
 	// "anthropic" and "openai" to it, the simulator's key sealed for the
 	// gateway (dev seed --model-url, G0 M29 D811, D826).
 	model bool
+	// seedArgs are more dev seed flags, such as the M34 runtime targets'
+	// (m34_runtimes_support_test.go); the test that asks for them seals their
+	// connections' credentials, with brokerKey.
+	seedArgs []string
+	// serverSections are set in the server's configuration before it first
+	// starts (G0 M34: identity.aws_sts_hosts).
+	serverSections map[string]any
 }
 
 // freePorts are the ports freeAddr has handed out in this test binary.
@@ -321,6 +335,15 @@ func start(t *testing.T, o options) *stack {
 	if o.hubKey != "" {
 		cfg["dev"] = map[string]any{"hub_key_file": o.hubKey}
 	}
+	for k, v := range o.serverSections {
+		old, isMap := cfg[k].(map[string]any)
+		add, addMap := v.(map[string]any)
+		if isMap && addMap {
+			maps.Copy(old, add) // a section the stack has keeps its other settings
+			continue
+		}
+		cfg[k] = v
+	}
 	write := func(name string) string {
 		b, err := json.Marshal(cfg)
 		if err != nil {
@@ -404,6 +427,7 @@ func start(t *testing.T, o options) *stack {
 		s.model = startModelSim(t)
 		args = append(args, "--model-url", s.model.url)
 	}
+	args = append(args, o.seedArgs...)
 	var out, errb bytes.Buffer
 	if code := server.Run(context.Background(), args, &out, &errb, noEnv); code != 0 {
 		t.Fatalf("dev seed: %d %s", code, errb.String())
@@ -413,6 +437,7 @@ func start(t *testing.T, o options) *stack {
 		t.Fatalf("dev seed output %q", out.String())
 	}
 	s.org, s.conn = ids.MustParse[ids.Org](m[1]), mustUUID(t, c[1])
+	s.seedOut = out.String()
 	if o.billing {
 		activePlan(t, s.db.AppPool(t), s.org) // before anything calls the API (G0 UI D9)
 	}

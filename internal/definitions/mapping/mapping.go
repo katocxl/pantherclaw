@@ -120,7 +120,7 @@ func New(pkg *domain.Package, limits celenv.Limits) (*Mapper, error) {
 				m.a2a[mp.Method] = c
 			case domain.ChannelMCPResource:
 				m.resources = append(m.resources, c)
-			case domain.ChannelSDK, domain.ChannelAuthZEN:
+			case domain.ChannelSDK, domain.ChannelAuthZEN, domain.ChannelRuntime:
 				// Never a mapping's channel: package validation refuses it.
 			}
 		}
@@ -270,6 +270,14 @@ func (m *Mapper) Hook(ctx context.Context, tc Context, kind string, input []byte
 // is sdk (F099). Shell commands go through the hook face (HR-200).
 func (m *Mapper) SDK(ctx context.Context, tc Context, tool string, input []byte) (actionir.Parsed, error) {
 	return m.byName(ctx, tc, m.mcp, tool, input, domain.ChannelSDK)
+}
+
+// Runtime maps a cloud agent runtime gateway's tool call (G0 M34 D990,
+// HR-760) through the package's MCP mapping of the tool, by tool name and
+// JSON arguments, exactly as the MCP face maps it except that the action's
+// channel is runtime, stamped before canonicalization.
+func (m *Mapper) Runtime(ctx context.Context, tc Context, tool string, args []byte) (actionir.Parsed, error) {
+	return m.byName(ctx, tc, m.mcp, tool, args, domain.ChannelRuntime)
 }
 
 // A2A maps a peer agent call by A2A method name and JSON params (G0 M14

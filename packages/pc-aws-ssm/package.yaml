@@ -1,0 +1,176 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agents that run commands on Amazon EC2
+# instances through AWS Systems Manager (G0 M34 D993a item 3, D1002;
+# founder decision FQ34-4; HR-763). It reaches SSM's JSON API,
+# ssm.<region>.amazonaws.com, through an http connection whose credential
+# is of kind aws_sigv4, sealed with --aws-service ssm: PantherClaw holds a
+# base access key that signs nothing but an sts:AssumeRole of one role, once
+# per dispatch, for 15 minutes, with a session policy that allows exactly
+# ssm:SendCommand on exactly two ARNs: the target instance and the one
+# AWS-owned document the operation names (HR-525, aws_extra_resources). The
+# agent never holds a key, and the base key never reaches SSM.
+#
+# SSM speaks aws-json: a POST to / whose fixed X-Amz-Target names the
+# operation, never the agent (HR-526). The document is a literal of the
+# package, so the agent chooses only the instance and the commands.
+#
+# A command runs on the instance with the SSM agent's privileges: an
+# irreversible code.execute. No template grants it. The commands are a
+# command param, so an approval shows them in full (HR-034).
+#
+# UNCONFIRMED: the API shape is taken from AWS's published reference and
+# checked only against the simulator, until a real account check (R-85).
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.aws-ssm
+version: 1.0.0
+publisher: pantherclaw
+summary: Run shell or PowerShell commands on an Amazon EC2 instance through AWS Systems Manager (API shape unconfirmed)
+
+definitions:
+  - operation: aws.ssm.send_command
+    summary: Run shell commands on an EC2 instance (AWS-RunShellScript)
+    access: write
+    target:
+      type: aws_ec2_instance
+      id_pattern: '^i-[0-9a-f]{8,17}$'
+      account: none
+    params:
+      commands:
+        type: command
+        material: true
+        required: true
+        max_length: 8192
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: code.execute
+        description: Runs shell commands on the instance with the SSM agent's privileges
+    reversibility: irreversible
+    dedupe_key: [target.id, params.commands]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Run shell commands on EC2 instance {target.id}
+      fields:
+        - target.id
+        - params.commands
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-05
+    mappings:
+      - channel: mcp
+        tool: aws_ssm_send_command
+        route: aws-ssm-send-command
+        description: >-
+          Run shell commands on an Amazon EC2 instance, by its instance id,
+          through AWS Systems Manager (AWS-RunShellScript). Every run holds
+          for a person unless a grant names it.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [instance_id, commands]
+          properties:
+            instance_id:
+              type: string
+              description: The instance's id (i-...)
+              pattern: '^i-[0-9a-f]{8,17}$'
+            commands:
+              type: string
+              description: The shell commands to run
+              maxLength: 8192
+        extract:
+          target_id: input.instance_id
+          params:
+            commands: input.commands
+    dispatch:
+      http:
+        method: POST
+        path: /
+        encoding: aws-json
+        aws_resource: 'arn:{aws.partition}:ec2:{aws.region}:{aws.account}:instance/{target.id}'
+        aws_extra_resources:
+          - 'arn:{aws.partition}:ssm:{aws.region}::document/AWS-RunShellScript'
+        headers:
+          X-Amz-Target: AmazonSSM.SendCommand
+        body:
+          DocumentName: literal.AWS-RunShellScript
+          InstanceIds[]: target.id
+          Parameters[commands][]: params.commands
+
+  - operation: aws.ssm.send_powershell_command
+    summary: Run PowerShell commands on an EC2 instance (AWS-RunPowerShellScript)
+    access: write
+    target:
+      type: aws_ec2_instance
+      id_pattern: '^i-[0-9a-f]{8,17}$'
+      account: none
+    params:
+      commands:
+        type: command
+        material: true
+        required: true
+        max_length: 8192
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: code.execute
+        description: Runs PowerShell commands on the instance with the SSM agent's privileges
+    reversibility: irreversible
+    dedupe_key: [target.id, params.commands]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Run PowerShell commands on EC2 instance {target.id}
+      fields:
+        - target.id
+        - params.commands
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-05
+    mappings:
+      - channel: mcp
+        tool: aws_ssm_send_powershell_command
+        route: aws-ssm-send-powershell-command
+        description: >-
+          Run PowerShell commands on an Amazon EC2 instance, by its instance
+          id, through AWS Systems Manager (AWS-RunPowerShellScript). Every
+          run holds for a person unless a grant names it.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [instance_id, commands]
+          properties:
+            instance_id:
+              type: string
+              description: The instance's id (i-...)
+              pattern: '^i-[0-9a-f]{8,17}$'
+            commands:
+              type: string
+              description: The PowerShell commands to run
+              maxLength: 8192
+        extract:
+          target_id: input.instance_id
+          params:
+            commands: input.commands
+    dispatch:
+      http:
+        method: POST
+        path: /
+        encoding: aws-json
+        aws_resource: 'arn:{aws.partition}:ec2:{aws.region}:{aws.account}:instance/{target.id}'
+        aws_extra_resources:
+          - 'arn:{aws.partition}:ssm:{aws.region}::document/AWS-RunPowerShellScript'
+        headers:
+          X-Amz-Target: AmazonSSM.SendCommand
+        body:
+          DocumentName: literal.AWS-RunPowerShellScript
+          InstanceIds[]: target.id
+          Parameters[commands][]: params.commands

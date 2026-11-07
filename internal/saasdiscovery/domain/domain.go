@@ -22,15 +22,29 @@ import (
 const (
 	SourceCopilotStudio     = "copilot_studio"
 	SourceChatGPTEnterprise = "chatgpt_enterprise"
+	// The cloud agent runtimes (G0 M34 D997): agents deployed in Amazon
+	// Bedrock AgentCore, Vertex AI Agent Engine and Azure AI Foundry.
+	SourceAWSAgentCore      = "aws_agentcore"
+	SourceVertexAgentEngine = "vertex_agent_engine"
+	SourceAzureFoundry      = "azure_foundry"
 )
 
 // Sources lists them.
-var Sources = []string{SourceChatGPTEnterprise, SourceCopilotStudio}
+var Sources = []string{
+	SourceAWSAgentCore, SourceAzureFoundry, SourceChatGPTEnterprise, SourceCopilotStudio, SourceVertexAgentEngine,
+}
+
+// RuntimeSources are the cloud agent runtimes, scanned daily by default
+// (FQ34-3).
+var RuntimeSources = []string{SourceAWSAgentCore, SourceAzureFoundry, SourceVertexAgentEngine}
 
 // Kinds of finding, one to a source.
 const (
-	KindCopilotAgent = "copilot_studio_agent"
-	KindCustomGPT    = "chatgpt_gpt"
+	KindCopilotAgent          = "copilot_studio_agent"
+	KindCustomGPT             = "chatgpt_gpt"
+	KindAgentCoreRuntime      = "agentcore_runtime"
+	KindVertexReasoningEngine = "vertex_reasoning_engine"
+	KindFoundryAgent          = "foundry_agent"
 )
 
 // KindOf is the kind a source's findings are, "" for no source.
@@ -40,6 +54,12 @@ func KindOf(source string) string {
 		return KindCopilotAgent
 	case SourceChatGPTEnterprise:
 		return KindCustomGPT
+	case SourceAWSAgentCore:
+		return KindAgentCoreRuntime
+	case SourceVertexAgentEngine:
+		return KindVertexReasoningEngine
+	case SourceAzureFoundry:
+		return KindFoundryAgent
 	}
 	return ""
 }
@@ -61,6 +81,13 @@ func CollectorOf(source string) (Collector, bool) {
 		return Collector{Package: "pc.copilot-studio", CredentialKind: "oauth_client"}, true //nolint:gosec // G101: a credential kind's name, not a credential
 	case SourceChatGPTEnterprise:
 		return Collector{Package: "pc.chatgpt-enterprise", CredentialKind: "static"}, true
+	// The runtimes' read-only collectors are the D993 packages (G0 M34 D997).
+	case SourceAWSAgentCore:
+		return Collector{Package: "pc.aws-agentcore", CredentialKind: "aws_sigv4"}, true
+	case SourceVertexAgentEngine:
+		return Collector{Package: "pc.vertex-agent-engine", CredentialKind: "google_service_account"}, true
+	case SourceAzureFoundry:
+		return Collector{Package: "pc.azure-foundry", CredentialKind: "oauth_client"}, true //nolint:gosec // G101: a credential kind's name, not a credential
 	}
 	return Collector{}, false
 }
@@ -72,6 +99,10 @@ const (
 	ReadBotComponents = "bot_components"
 	ReadGPTs          = "gpts"
 	ReadGPTConfigs    = "gpt_configs"
+	// The runtimes read one list each (G0 M34 D997a).
+	ReadRuntimes         = "runtimes"
+	ReadReasoningEngines = "reasoning_engines"
+	ReadAgents           = "agents"
 )
 
 // Reads are what a scan of source reads.
@@ -81,6 +112,12 @@ func Reads(source string) []string {
 		return []string{ReadBotComponents, ReadBots}
 	case SourceChatGPTEnterprise:
 		return []string{ReadGPTConfigs, ReadGPTs}
+	case SourceAWSAgentCore:
+		return []string{ReadRuntimes}
+	case SourceVertexAgentEngine:
+		return []string{ReadReasoningEngines}
+	case SourceAzureFoundry:
+		return []string{ReadAgents}
 	}
 	return nil
 }
@@ -129,6 +166,11 @@ var attributes = map[string][]string{
 		"tenant", "agent_id", "name", "visibility", "created_at", "owner_ref", "tool_kinds", "action_domains",
 		"tools_incomplete",
 	},
+	// The runtimes keep metadata only: never an agent's code, container,
+	// instructions, environment or role (G0 M34 D997).
+	KindAgentCoreRuntime:      {"tenant", "agent_id", "name", "region", "created_at", "updated_at", "status"},
+	KindVertexReasoningEngine: {"tenant", "agent_id", "name", "location", "created_at", "updated_at", "status"},
+	KindFoundryAgent:          {"tenant", "agent_id", "name", "location", "created_at", "updated_at", "status"},
 }
 
 // AttrUnread is how a gateway's finding, which reaches the server ahead of
@@ -147,6 +189,10 @@ var sideReads = map[string][]string{KindCopilotAgent: {ReadBotComponents}, KindC
 var materialKeys = map[string][]string{
 	KindCopilotAgent: {"state", "auth_mode", "auth_trigger", "access_policy", "skills", "skill_count", "knowledge_count"},
 	KindCustomGPT:    {"visibility", "tool_kinds", "action_domains", "tools_incomplete"},
+	// A runtime agent's status (G0 M34 D997a).
+	KindAgentCoreRuntime:      {"status"},
+	KindVertexReasoningEngine: {"status"},
+	KindFoundryAgent:          {"status"},
 }
 
 // MaterialKeys are the material attributes of kind.
@@ -238,6 +284,39 @@ var tenantRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 // TenantOK reports whether t can name a tenant: the Dataverse organization or
 // the ChatGPT workspace a report covers.
 func TenantOK(t string) bool { return tenantRe.MatchString(t) }
+
+var (
+	awsAccountRe    = regexp.MustCompile(`^[0-9]{12}$`)
+	gcpProjectRe    = regexp.MustCompile(`^[a-z][a-z0-9-]{5,29}$`)
+	gcpLocationRe   = regexp.MustCompile(`^[a-z]+-[a-z]+[0-9]+$`)
+	foundryProjecRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+)
+
+// SourceTenantOK reports whether t can name a tenant of source (G0 M34
+// D997a): an AWS account for AgentCore, <project>/<location> for Vertex
+// Agent Engine, a project name for Foundry, else TenantOK.
+func SourceTenantOK(source, t string) bool {
+	switch source {
+	case SourceAWSAgentCore:
+		return awsAccountRe.MatchString(t)
+	case SourceVertexAgentEngine:
+		_, _, ok := VertexTenant(t)
+		return ok
+	case SourceAzureFoundry:
+		return foundryProjecRe.MatchString(t)
+	}
+	return TenantOK(t)
+}
+
+// VertexTenant splits a Vertex Agent Engine tenant into its project and
+// location.
+func VertexTenant(t string) (project, location string, ok bool) {
+	project, location, ok = strings.Cut(t, "/")
+	if !ok || !gcpProjectRe.MatchString(project) || !gcpLocationRe.MatchString(location) {
+		return "", "", false
+	}
+	return project, location, true
+}
 
 // Finding is one agent found: a kind, a key stable across imports and scans,
 // and untrusted attributes.

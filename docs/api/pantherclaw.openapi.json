@@ -9132,6 +9132,114 @@
         }
       }
     },
+    "/pantherclaw.v1.ConnectionService/SetConnectionRuntimeTarget": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ConnectionService"
+        ],
+        "summary": "SetConnectionRuntimeTarget",
+        "description": "SetConnectionRuntimeTarget binds an mcp connection whose credential the\n agent holds to one target of a cloud agent runtime's gateway (G0 M34\n D991, HR-762): the gateway's runtime face decides that target's tool\n calls through it. The target is \"agentcore:\u003cgateway ARN\u003e/\u003ctarget name\u003e\",\n unique in the org. It replaces any earlier target and is audited\n (connection.runtime_target_set).\n permission: connection.manage",
+        "operationId": "pantherclaw.v1.ConnectionService.SetConnectionRuntimeTarget",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetConnectionRuntimeTargetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetConnectionRuntimeTargetResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ConnectionService/ClearConnectionRuntimeTarget": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ConnectionService"
+        ],
+        "summary": "ClearConnectionRuntimeTarget",
+        "description": "ClearConnectionRuntimeTarget removes a connection's runtime target; the\n runtime face then finds no connection for that target. Audited\n (connection.runtime_target_cleared).\n permission: connection.manage",
+        "operationId": "pantherclaw.v1.ConnectionService.ClearConnectionRuntimeTarget",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ClearConnectionRuntimeTargetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ClearConnectionRuntimeTargetResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.ConsequenceRuleService/ProposeConsequenceRule": {
       "post": {
         "tags": [
@@ -30195,6 +30303,60 @@
         }
       }
     },
+    "/pantherclaw.v1.RuntimeService/StartRuntimeRun": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.RuntimeService"
+        ],
+        "summary": "StartRuntimeRun",
+        "description": "StartRuntimeRun starts a run of the caller's instance under the run\n grant of the issuer entry the instance was attested by (HR-761). An\n issuer entry without a run grant is refused (RUNTIME_NO_RUN_GRANT). The\n caller starts a new run when the previous one ended. Audited\n (runtime.run_started).\n permission: workload.run",
+        "operationId": "pantherclaw.v1.RuntimeService.StartRuntimeRun",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.StartRuntimeRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.StartRuntimeRunResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.SaasDiscoveryService/ImportSaasReport": {
       "post": {
         "tags": [
@@ -30509,6 +30671,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.SetSaasAgentOwnerResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.SaasDiscoveryService/SetSaaSScanSchedule": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.SaasDiscoveryService"
+        ],
+        "summary": "SetSaaSScanSchedule",
+        "description": "SetSaaSScanSchedule asks for, or (daily false) stops, a daily scan of a\n connection (G0 M34 D997, HR-768). A daily job then starts one scan per\n schedule, with origin schedule, initiated by the person who set it. People\n only. Audited (saas.scan_schedule_set / saas.scan_schedule_cleared).\n permission: agent.manage",
+        "operationId": "pantherclaw.v1.SaasDiscoveryService.SetSaaSScanSchedule",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetSaaSScanScheduleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetSaaSScanScheduleResponse"
                 }
               }
             }
@@ -40444,9 +40660,12 @@
               "github_workflow",
               "github_mcp_config",
               "copilot_studio_agent",
-              "chatgpt_gpt"
+              "chatgpt_gpt",
+              "agentcore_runtime",
+              "vertex_reasoning_engine",
+              "foundry_agent"
             ],
-            "description": "\"mcp_server\", \"agent_project\", \"hook\", \"skill\" or \"env_secret\" from a\n local scan (env_secret carries the credential's kind and nothing of its\n value, G0 M24 D233, D238); from a gateway's organization scan (G0 M8,\n HR-209), \"github_app\", \"github_workflow\" or \"github_mcp_config\"; from a\n gateway's SaaS scan (G0 M26 D407), \"copilot_studio_agent\" or \"chatgpt_gpt\"."
+            "description": "\"mcp_server\", \"agent_project\", \"hook\", \"skill\" or \"env_secret\" from a\n local scan (env_secret carries the credential's kind and nothing of its\n value, G0 M24 D233, D238); from a gateway's organization scan (G0 M8,\n HR-209), \"github_app\", \"github_workflow\" or \"github_mcp_config\"; from a\n gateway's SaaS or runtime scan (G0 M26 D407, M34 D997),\n \"copilot_studio_agent\", \"chatgpt_gpt\", \"agentcore_runtime\",\n \"vertex_reasoning_engine\" or \"foundry_agent\"."
           },
           "key": {
             "type": "string",
@@ -53628,6 +53847,36 @@
         "additionalProperties": false,
         "description": "CapabilitySupport is one capability's level and why."
       },
+      "pantherclaw.v1.ClearConnectionRuntimeTargetRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "Connection id."
+          }
+        },
+        "title": "ClearConnectionRuntimeTargetRequest",
+        "additionalProperties": false,
+        "description": "ClearConnectionRuntimeTargetRequest unbinds a connection's runtime target.",
+        "required": [
+          "connectionId"
+        ]
+      },
+      "pantherclaw.v1.ClearConnectionRuntimeTargetResponse": {
+        "type": "object",
+        "properties": {
+          "connection": {
+            "title": "connection",
+            "description": "The connection.",
+            "$ref": "#/components/schemas/pantherclaw.v1.Connection"
+          }
+        },
+        "title": "ClearConnectionRuntimeTargetResponse",
+        "additionalProperties": false,
+        "description": "ClearConnectionRuntimeTargetResponse returns the connection."
+      },
       "pantherclaw.v1.Connection": {
         "type": "object",
         "properties": {
@@ -53807,6 +54056,11 @@
             "title": "snowflake",
             "description": "snowflake is a snowflake connection's configuration and manifest (G0\n M31 D962).",
             "$ref": "#/components/schemas/pantherclaw.v1.SnowflakeConfig"
+          },
+          "runtimeTarget": {
+            "type": "string",
+            "title": "runtime_target",
+            "description": "The cloud agent runtime target the connection is bound to (G0 M34\n D991), \"agentcore:\u003cgateway ARN\u003e/\u003ctarget name\u003e\"; empty when unbound."
           }
         },
         "title": "Connection",
@@ -56190,6 +56444,45 @@
         "title": "SetA2APublicUrlResponse",
         "additionalProperties": false,
         "description": "SetA2APublicUrlResponse returns the connection; its a2a_status names the pin\n state, so the console can link the pin page."
+      },
+      "pantherclaw.v1.SetConnectionRuntimeTargetRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "Connection id."
+          },
+          "runtimeTarget": {
+            "type": "string",
+            "title": "runtime_target",
+            "maxLength": 512,
+            "minLength": 1,
+            "pattern": "^agentcore:arn:aws[a-z-]*:bedrock-agentcore:[a-z0-9-]+:[0-9]{12}:gateway/[A-Za-z0-9-]{1,100}/[A-Za-z0-9-]{1,100}$",
+            "description": "\"agentcore:\u003cgateway ARN\u003e/\u003ctarget name\u003e\"; the server checks the ARN and\n the target name."
+          }
+        },
+        "title": "SetConnectionRuntimeTargetRequest",
+        "additionalProperties": false,
+        "description": "SetConnectionRuntimeTargetRequest binds a connection to a runtime target\n (G0 M34 D991).",
+        "required": [
+          "connectionId",
+          "runtimeTarget"
+        ]
+      },
+      "pantherclaw.v1.SetConnectionRuntimeTargetResponse": {
+        "type": "object",
+        "properties": {
+          "connection": {
+            "title": "connection",
+            "description": "The connection.",
+            "$ref": "#/components/schemas/pantherclaw.v1.Connection"
+          }
+        },
+        "title": "SetConnectionRuntimeTargetResponse",
+        "additionalProperties": false,
+        "description": "SetConnectionRuntimeTargetResponse returns the connection."
       },
       "pantherclaw.v1.SetRouteModeRequest": {
         "type": "object",
@@ -58797,7 +59090,7 @@
           "channel": {
             "type": "string",
             "title": "channel",
-            "description": "For a channel: \"http\", \"mcp\", \"sdk\", \"hook\", \"authzen\" or \"a2a\"."
+            "description": "For a channel: \"http\", \"mcp\", \"sdk\", \"hook\", \"authzen\", \"a2a\" or\n \"runtime\" (G0 M34 D990)."
           },
           "locator": {
             "type": "string",
@@ -69281,6 +69574,11 @@
             "title": "snowflake",
             "description": "A snowflake connection's confirmed configuration and manifest (G0 M31\n D962); unset until a first one is confirmed, and nothing is sent.",
             "$ref": "#/components/schemas/pantherclaw.v1.SnowflakeConfig"
+          },
+          "runtimeTarget": {
+            "type": "string",
+            "title": "runtime_target",
+            "description": "The cloud agent runtime target the connection is bound to (G0 M34\n D991), \"agentcore:\u003cgateway ARN\u003e/\u003ctarget name\u003e\": the runtime face finds\n the connection of a tool call by it. Empty when unbound."
           }
         },
         "title": "GatewayConnection",
@@ -75834,7 +76132,7 @@
           "runGrantId": {
             "type": "string",
             "title": "run_grant_id",
-            "description": "Kubernetes only: the grant a pod's run is started under (G0 M32\n D973); empty: none."
+            "description": "Kubernetes and the cloud presets only: the grant a pod's run (G0 M32\n D973) or a cloud agent runtime's run (G0 M34 D992) is started under;\n empty: none."
           }
         },
         "title": "IssuerRevision",
@@ -76269,7 +76567,7 @@
               "null"
             ],
             "title": "run_grant_id",
-            "description": "Kubernetes only: the grant a pod's run is started under\n (KubernetesService.StartPodRun, G0 M32 D973). Part of the revision, so\n it changes only through a new revision and its approval; empty: the\n entry starts no runs.",
+            "description": "Kubernetes and the cloud presets only: the grant a pod's run\n (KubernetesService.StartPodRun, G0 M32 D973) or a cloud agent runtime's\n run (RuntimeService.StartRuntimeRun, G0 M34 D992) is started under. Part\n of the revision, so\n it changes only through a new revision and its approval; empty: the\n entry starts no runs.",
             "anyOf": [
               {
                 "format": "uuid"
@@ -76289,7 +76587,7 @@
         },
         "title": "ProposeIssuerEntryRequest",
         "additionalProperties": false,
-        "description": "ProposeIssuerEntryRequest proposes a new entry or a new revision.\nrun_grant_id is only for a kubernetes binding:\n```\nthis.run_grant_id == '' || has(this.kubernetes)\n```\n\n",
+        "description": "ProposeIssuerEntryRequest proposes a new entry or a new revision.\nrun_grant_id is only for a kubernetes, gcp, aws, azure_mi or entra_agent binding:\n```\nthis.run_grant_id == '' || has(this.kubernetes) || has(this.gcp) || has(this.aws) || has(this.azure_mi) || has(this.entra_agent)\n```\n\n",
         "required": [
           "agentId",
           "reason"
@@ -95568,6 +95866,36 @@
         "additionalProperties": false,
         "description": "TerminateRunResponse is the action."
       },
+      "pantherclaw.v1.StartRuntimeRunRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "pattern": "^[A-Za-z0-9._:/-]{1,200}$",
+            "description": "A name the caller gives the run, for example\n \"agentcore:\u003cfunction name\u003e:\u003clog stream\u003e\"."
+          }
+        },
+        "title": "StartRuntimeRunRequest",
+        "additionalProperties": false,
+        "description": "StartRuntimeRunRequest names the run.",
+        "required": [
+          "name"
+        ]
+      },
+      "pantherclaw.v1.StartRuntimeRunResponse": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "title": "run_id",
+            "description": "The run id."
+          }
+        },
+        "title": "StartRuntimeRunResponse",
+        "additionalProperties": false,
+        "description": "StartRuntimeRunResponse is the run."
+      },
       "pantherclaw.v1.SaasScanState": {
         "type": "string",
         "title": "SaasScanState",
@@ -95893,6 +96221,44 @@
         "additionalProperties": false,
         "description": "ListSaasScansResponse is one page."
       },
+      "pantherclaw.v1.SaaSScanSchedule": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "source",
+            "description": "The source."
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "description": "The connection scanned."
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by",
+            "description": "The person who set it; each scan is started as them."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was set.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "lastStartTime": {
+            "title": "last_start_time",
+            "description": "When the daily job last started a scan of it; unset before the first.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "tenant": {
+            "type": "string",
+            "title": "tenant",
+            "description": "The tenant each scan covers (G0 M34 D997a)."
+          }
+        },
+        "title": "SaaSScanSchedule",
+        "additionalProperties": false,
+        "description": "SaaSScanSchedule is a daily scan of one connection (G0 M34 D997)."
+      },
       "pantherclaw.v1.SaasAgent": {
         "type": "object",
         "properties": {
@@ -96052,12 +96418,12 @@
           "source": {
             "type": "string",
             "title": "source",
-            "description": "\"copilot_studio\" or \"chatgpt_enterprise\"."
+            "description": "\"copilot_studio\", \"chatgpt_enterprise\", \"aws_agentcore\",\n \"vertex_agent_engine\" or \"azure_foundry\"."
           },
           "origin": {
             "type": "string",
             "title": "origin",
-            "description": "\"import\" or \"gateway\"."
+            "description": "\"import\", \"gateway\" or \"schedule\" (a daily scan, G0 M34 D997)."
           },
           "tenant": {
             "type": "string",
@@ -96158,6 +96524,64 @@
         "title": "NotScannedEntry",
         "additionalProperties": false
       },
+      "pantherclaw.v1.SetSaaSScanScheduleRequest": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "source",
+            "enum": [
+              "copilot_studio",
+              "chatgpt_enterprise",
+              "aws_agentcore",
+              "vertex_agent_engine",
+              "azure_foundry"
+            ],
+            "description": "The source."
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "A connection of the source's package."
+          },
+          "daily": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "daily",
+            "description": "True asks for a daily scan; false stops it."
+          },
+          "tenant": {
+            "type": "string",
+            "title": "tenant",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$",
+            "description": "The tenant each scan covers, as StartSaasScan's (G0 M34 D997a): an\n AgentCore account, a Vertex \u003cproject\u003e/\u003clocation\u003e, a Foundry project."
+          }
+        },
+        "title": "SetSaaSScanScheduleRequest",
+        "additionalProperties": false,
+        "description": "SetSaaSScanScheduleRequest sets or stops a daily scan.",
+        "required": [
+          "source",
+          "connectionId",
+          "tenant"
+        ]
+      },
+      "pantherclaw.v1.SetSaaSScanScheduleResponse": {
+        "type": "object",
+        "properties": {
+          "schedule": {
+            "title": "schedule",
+            "description": "The schedule; unset when daily was false.",
+            "$ref": "#/components/schemas/pantherclaw.v1.SaaSScanSchedule"
+          }
+        },
+        "title": "SetSaaSScanScheduleResponse",
+        "additionalProperties": false,
+        "description": "SetSaaSScanScheduleResponse returns the schedule."
+      },
       "pantherclaw.v1.SetSaasAgentOwnerRequest": {
         "type": "object",
         "properties": {
@@ -96233,15 +96657,18 @@
             "title": "source",
             "enum": [
               "copilot_studio",
-              "chatgpt_enterprise"
+              "chatgpt_enterprise",
+              "aws_agentcore",
+              "vertex_agent_engine",
+              "azure_foundry"
             ],
-            "description": "\"copilot_studio\" or \"chatgpt_enterprise\"."
+            "description": "\"copilot_studio\", \"chatgpt_enterprise\", \"aws_agentcore\",\n \"vertex_agent_engine\" or \"azure_foundry\" (G0 M34 D997)."
           },
           "tenant": {
             "type": "string",
             "title": "tenant",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
-            "description": "The Dataverse organization id, or the ChatGPT workspace id."
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$",
+            "description": "The Dataverse organization id, or the ChatGPT workspace id.\n For the runtime sources (G0 M34 D997a): an AgentCore account, a Vertex\n \u003cproject\u003e/\u003clocation\u003e, a Foundry project."
           }
         },
         "title": "StartSaasScanRequest",
@@ -105841,6 +106268,10 @@
     {
       "name": "pantherclaw.v1.ResponseService",
       "description": "ResponseService contains, terminates, revokes and restores (G0 M10;\n F547, F552, F561, F288, F013, F243, F230, F134, F555, F564, F568, F570,\n F541; HR-248..HR-252). A containment control is enforced in the\n Authority's decision path: DENY_ALL and DENY_OPERATION deny CONTAINED,\n HOLD_WRITES holds every non-read action for one independent responder.\n Adding or lifting one raises the containment epoch in the same\n transaction. Each request is a response action whose paths (the gateways\n serving the scope, the affected agents' coverage routes, agent-held\n credentials, dispatches in flight) are confirmed one by one: the action\n is CONFIRMED only when every material path is. A control wider than one\n run or agent needs the digest of its current preview. Lifting is a\n restoration, decided by an independent reviewer; closing an incident lifts\n nothing. The kill switch stays on the emergency-stop page."
+    },
+    {
+      "name": "pantherclaw.v1.RuntimeService",
+      "description": "RuntimeService is called by a cloud agent runtime's PantherClaw component,\n for example the AgentCore interceptor (G0 M34 D992). Like WorkloadService\n it is authenticated by PAP/1, never by user or service-account\n credentials: the caller is an L2 instance enrolled by cloud attestation\n (aws_iam, gcp_workload, azure_mi or entra_agent_id), and every call\n carries a PAP-Proof signed with its workload key and its workload token."
     },
     {
       "name": "pantherclaw.v1.SaasDiscoveryService",

@@ -456,12 +456,16 @@ func (e *env) brokerKey(t *testing.T, gateway ids.UUID) ids.UUID {
 func (e *env) connection(t *testing.T, gateway, key ids.UUID, pkg, kind string) ids.UUID {
 	t.Helper()
 	conn := ids.NewV7()
+	scheme := "Bearer"
+	if kind == "aws_sigv4" {
+		scheme = "AWS4-HMAC-SHA256"
+	}
 	e.exec(t, `INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, access_mode, allowed_hosts, default_mode,
 		credential_header, credential_scheme, created_by, updated_by) VALUES ($1, $2, $3, 'http', $4, $5, 'https://api.vendor.test',
-		'pantherclaw_held', ARRAY['api.vendor.test'], 'enforce', 'Authorization', 'Bearer', 'test', 'test')`, e.org, conn, "c-"+conn.String(), gateway, pkg)
+		'pantherclaw_held', ARRAY['api.vendor.test'], 'enforce', 'Authorization', $6, 'test', 'test')`, e.org, conn, "c-"+conn.String(), gateway, pkg, scheme)
 	e.exec(t, `INSERT INTO pc.credentials (org_id, id, connection_id, version, broker_key_id, sealed, allowed_hosts, header, scheme, created_by, kind)
-		VALUES ($1, $2, $3, 1, $4, $5, ARRAY['api.vendor.test'], 'Authorization', 'Bearer', 'test', $6)`,
-		e.org, ids.NewV7(), conn, key, append([]byte{0x01}, make([]byte, 1200)...), kind)
+		VALUES ($1, $2, $3, 1, $4, $5, ARRAY['api.vendor.test'], 'Authorization', $7, 'test', $6)`,
+		e.org, ids.NewV7(), conn, key, append([]byte{0x01}, make([]byte, 1200)...), kind, scheme)
 	return conn
 }
 

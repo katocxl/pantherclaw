@@ -90,7 +90,7 @@ func (q *Queries) GatewayConnectionRoutes(ctx context.Context, orgID ids.OrgID, 
 
 const gatewayConnections = `-- name: GatewayConnections :many
 
-SELECT org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts, simulated, model_relay FROM pc.connections
+SELECT org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts, simulated, model_relay, runtime_target FROM pc.connections
 WHERE org_id = $1 AND gateway_id = $2 AND state <> 'RETIRED'
 ORDER BY name
 `
@@ -138,6 +138,7 @@ func (q *Queries) GatewayConnections(ctx context.Context, orgID ids.OrgID, gatew
 			&i.AgentHosts,
 			&i.Simulated,
 			&i.ModelRelay,
+			&i.RuntimeTarget,
 		); err != nil {
 			return nil, err
 		}

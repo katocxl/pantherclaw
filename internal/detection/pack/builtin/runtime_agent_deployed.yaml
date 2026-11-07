@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.runtime.agent_deployed
+version: "1"
+title: New agent found in a cloud agent runtime
+description: >-
+  A discovery scan found an agent deployed in Amazon Bedrock AgentCore,
+  Vertex AI Agent Engine or Azure AI Foundry that PantherClaw had not
+  recorded before (G0 M34 D997). Scans read metadata only, through a
+  read-only collector credential, daily or when a person starts one.
+  Someone checks whether the deploy was intended and names the agent's
+  owner. An alert only: nothing is held or contained.
+severity: LOW
+attention: ALERT
+basis: OBSERVED
+atlas: [AML.T0103]
+edition: business
+on: [audit.agent.discovered]
+match: event.attrs.?source.orValue("") in ["aws_agentcore", "vertex_agent_engine", "azure_foundry"]
+group: agent
+tests:
+  - name: an agentcore runtime found
+    fires: true
+    events:
+      - kind: audit.agent.discovered
+        actor_type: user
+        actor_id: 01930000-0000-7000-8000-0000000000u1
+        outcome: success
+        subjects: {agent: 01930000-0000-7000-8000-0000000000a1}
+        attrs: {object_type: agent, discovery_id: 01930000-0000-7000-8000-0000000000d1, source: aws_agentcore}
+  - name: a vertex reasoning engine found again after a dismissal
+    fires: true
+    events:
+      - kind: audit.agent.discovered
+        actor_type: user
+        actor_id: 01930000-0000-7000-8000-0000000000u1
+        outcome: success
+        subjects: {agent: 01930000-0000-7000-8000-0000000000a1}
+        attrs: {object_type: agent, discovery_id: 01930000-0000-7000-8000-0000000000d1, source: vertex_agent_engine, reopened: "true"}
+  - name: a copilot studio agent found
+    fires: false
+    events:
+      - kind: audit.agent.discovered
+        actor_type: user
+        actor_id: 01930000-0000-7000-8000-0000000000u1
+        outcome: success
+        subjects: {agent: 01930000-0000-7000-8000-0000000000a1}
+        attrs: {object_type: agent, discovery_id: 01930000-0000-7000-8000-0000000000d1, source: copilot_studio}

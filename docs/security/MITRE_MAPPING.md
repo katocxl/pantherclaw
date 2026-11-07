@@ -11,7 +11,7 @@ Every technique of both matrices has exactly one place:
 - **Outside PantherClaw:** the technique needs something PantherClaw does not see; the kind of tool that covers it is named.
 - **No PantherClaw control yet:** the technique is within an agent platform's reach and PantherClaw ships no control for it; why is given.
 
-Mapping digest: `4f3025dbd3620e4ca2e9f7ed13ff232ae10ba72498f6ebf9ea26c61189a059d9`.
+Mapping digest: `3c7a646923e8e4e3bfb591856fab65aaa575842e9e465600f2835250618d79b4`.
 
 | Framework | Catalogue version | Catalogue digest |
 |---|---|---|
@@ -97,7 +97,7 @@ Mapping digest: `4f3025dbd3620e4ca2e9f7ed13ff232ae10ba72498f6ebf9ea26c61189a059d
 | [AML.T0100](https://atlas.mitre.org/techniques/AML.T0100) | AI Agent Clickbait | Mapped | prevent `prevent.browser_sites`; scenarios `RT-220` |
 | [AML.T0053](https://atlas.mitre.org/techniques/AML.T0053) | AI Agent Tool Invocation | Mapped | prevent `prevent.grant_scope`, `prevent.mapped_routes`; rules `pc.authority.self_issue`; kinds `behavior.NEW_TOOL`; Hub playbooks `pc.playbook.rogue-sub-agent`, `pc.playbook.rogue-sub-agent-contain`; scenarios `RT-001`, `RT-002`, `RT-019`, `RT-121`, `RT-211`, `RT-212`, `RT-213`, `RT-214`, `RT-223` |
 | [AML.T0050](https://atlas.mitre.org/techniques/AML.T0050) | Command and Scripting Interpreter | Mapped | Hub rules `org.hub.held_merge_then_shell`, `org.hub.shell_merge_attempt`; scenarios `RT-003` |
-| [AML.T0103](https://atlas.mitre.org/techniques/AML.T0103) | Deploy AI Agent | No PantherClaw control yet | Deploy AI agent (AML.T0103): an agent launched apart from PantherClaw is only found by discovery; it has no PantherClaw control. |
+| [AML.T0103](https://atlas.mitre.org/techniques/AML.T0103) | Deploy AI Agent | Mapped | prevent `prevent.agent_deploy`; rules `pc.runtime.agent_deployed`; scenarios `RT-227` |
 | [AML.T0051](https://atlas.mitre.org/techniques/AML.T0051) | LLM Prompt Injection | Mapped (partly) | AML.T0051.001: prevent `prevent.content_hold`; rules `pc.tools.description_injection`; kinds `content.injection_phrase`; Hub playbooks `pc.playbook.poisoned-mcp-server`; scenarios `RT-154`, `RT-158`, `RT-159`, `RT-163`, `RT-200`; campaigns `RT-140`, `RT-141`, `RT-142`, `RT-143`, `RT-144`, `RT-145`, `RT-146`, `RT-147`<br>AML.T0051.000 not covered<br>AML.T0051.002 not covered |
 | [AML.T0011](https://atlas.mitre.org/techniques/AML.T0011) | User Execution | Outside PantherClaw: covered by security awareness | It needs a person. |
 
@@ -296,7 +296,7 @@ Mapping digest: `4f3025dbd3620e4ca2e9f7ed13ff232ae10ba72498f6ebf9ea26c61189a059d
 | Technique | Name | Place | Mapped to it |
 |---|---|---|---|
 | [T1197](https://attack.mitre.org/techniques/T1197) | BITS Jobs | Outside PantherClaw: covered by EDR | It needs an endpoint. |
-| [T1651](https://attack.mitre.org/techniques/T1651) | Cloud Administration Command | No PantherClaw control yet | Cloud administration command (T1651): commands run through a cloud's own management service have no PantherClaw control yet. |
+| [T1651](https://attack.mitre.org/techniques/T1651) | Cloud Administration Command | Mapped | prevent `prevent.cloud_admin_command`; scenarios `RT-228` |
 | [T1059](https://attack.mitre.org/techniques/T1059) | Command and Scripting Interpreter | Mapped (partly) | T1059.004: Hub rules `org.hub.held_merge_then_shell`, `org.hub.shell_merge_attempt`; scenarios `RT-003`<br>T1059.001 not covered<br>T1059.002 not covered<br>T1059.003 not covered<br>T1059.005 not covered<br>T1059.006 not covered<br>T1059.007 not covered<br>T1059.008 not covered<br>T1059.009 not covered<br>T1059.010 not covered<br>T1059.011 not covered<br>T1059.012 not covered<br>T1059.013 not covered |
 | [T1609](https://attack.mitre.org/techniques/T1609) | Container Administration Command | Mapped | scenarios `RT-215` |
 | [T1610](https://attack.mitre.org/techniques/T1610) | Deploy Container | Mapped | prevent `prevent.kubernetes_admission`; scenarios `RT-215` |
@@ -644,3 +644,5 @@ Abuse cases from [THREAT_MODEL](THREAT_MODEL.md) that no library range scenario 
 | T-341 | AML.T0098 | — |
 | T-343 | AML.T0053 | — |
 | T-344 | AML.T0134 | — |
+| T-347 | AML.T0103 | — |
+| T-348 | — | T1651 |
