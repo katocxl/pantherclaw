@@ -7,6 +7,7 @@ tier: business
 attacker: A5
 threats: [T-345]
 rules: [HR-760, HR-764, HR-766]
+techniques_none: "Tests PantherClaw's workload authentication: a runtime call without a proof is refused."
 requires: [payments]
 harness_only: true
 steps:

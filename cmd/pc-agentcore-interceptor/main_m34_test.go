@@ -105,7 +105,7 @@ func isDeny(out []byte, id any) bool {
 		return false
 	}
 	r := d.MCP.Response
-	return r.StatusCode == 200 && r.Body.ID == id && r.Body.Result.IsError && len(r.Body.Result.Content) == 1 &&
+	return r.StatusCode == http.StatusOK && r.Body.ID == id && r.Body.Result.IsError && len(r.Body.Result.Content) == 1 &&
 		r.Body.Result.Content[0].Text == cannotDecide
 }
 
@@ -165,13 +165,17 @@ func TestHR766_TheInterceptorFailsClosed(t *testing.T) {
 		"HTTP 403 refusal": {face: &fakeFace{status: 403, body: `{"code":"origin_not_allowed"}`}, arn: testARN, id: "call-9"},
 		"not JSON":         {face: &fakeFace{status: 200, body: `<html>`}, arn: testARN, id: "call-9"},
 		"other version":    {face: &fakeFace{status: 200, body: `{"interceptorOutputVersion":"2.0","mcp":{"transformedGatewayRequest":{}}}`}, arn: testARN, id: "call-9"},
-		"both answers": {face: &fakeFace{status: 200, body: `{"interceptorOutputVersion":"1.0","mcp":{"transformedGatewayRequest":{},"transformedGatewayResponse":{}}}`},
-			arn: testARN, id: "call-9"},
+		"both answers": {
+			face: &fakeFace{status: 200, body: `{"interceptorOutputVersion":"1.0","mcp":{"transformedGatewayRequest":{},"transformedGatewayResponse":{}}}`},
+			arn:  testARN, id: "call-9",
+		},
 		"unknown member": {face: &fakeFace{status: 200, body: `{"interceptorOutputVersion":"1.0","mcp":{"somethingElse":{}}}`}, arn: testARN, id: "call-9"},
 		"too large answer": {face: &fakeFace{status: 200, body: `{"interceptorOutputVersion":"1.0","mcp":{"transformedGatewayRequest":{"body":"` +
 			strings.Repeat("a", maxAnswer) + `"}}}`}, arn: testARN, id: "call-9"},
-		"deadline passed": {face: &fakeFace{status: 200, body: passAnswer, hang: 2 * time.Second}, arn: testARN,
-			dead: time.Now().Add(deadlineMargin + 100*time.Millisecond), id: "call-9"},
+		"deadline passed": {
+			face: &fakeFace{status: 200, body: passAnswer, hang: 2 * time.Second}, arn: testARN,
+			dead: time.Now().Add(deadlineMargin + 100*time.Millisecond), id: "call-9",
+		},
 		"event over 1 MiB": {face: ok(), arn: testARN, event: big, id: nil},
 	} {
 		var logs bytes.Buffer

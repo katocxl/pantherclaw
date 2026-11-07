@@ -30,7 +30,7 @@ import (
 // TestT345_AGatewayThatCannotAskRunsNothing is T-345's stack part: a tool
 // call PantherClaw did not decide never passes. A face call without the
 // instance's proof is refused before any answer, a method the face does
-// not decide is an error, and the interceptor that cannot enrol answers
+// not decide is an error, and the interceptor that cannot enroll answers
 // every call with a tool error.
 //
 // Covers: HR-760, HR-761, HR-764, HR-766
@@ -47,7 +47,7 @@ func TestT345_AGatewayThatCannotAskRunsNothing(t *testing.T) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(runtimeface.HeaderGateway, agentcore.GatewayARN)
-	res, err := http.DefaultClient.Do(req)
+	res, err := m34HTTP.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestT345_AGatewayThatCannotAskRunsNothing(t *testing.T) {
 	req.Header.Set("PAP-Proof", "forged")
 	req.Header.Set("PAP-Run-Id", rt.run)
 	req.Header.Set(runtimeface.HeaderGateway, agentcore.GatewayARN)
-	res, err = http.DefaultClient.Do(req)
+	res, err = m34HTTP.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,11 +86,11 @@ func TestT345_AGatewayThatCannotAskRunsNothing(t *testing.T) {
 		t.Fatalf("a method the face does not decide: %s", a.Raw)
 	}
 
-	// The interceptor that cannot enrol lets nothing through.
+	// The interceptor that cannot enroll lets nothing through.
 	ic := s.runInterceptor(t, s.m34.awsSession(t, m34Function, "sts:GetCallerIdentity"))
 	for range 2 {
 		if a := s.invoke(t, ic, "get_refund", map[string]any{"refund": "re_t345"}); a.Pass || !strings.Contains(a.Text, "PantherClaw cannot decide this tool call") {
-			t.Fatalf("the interceptor that cannot enrol: %s\n%s", a.Raw, ic.logs.String())
+			t.Fatalf("the interceptor that cannot enroll: %s\n%s", a.Raw, ic.logs.String())
 		}
 	}
 	if n := s.row(t, "SELECT count(*)::text FROM pc.transactions WHERE run_id = $1", rt.run); n != "0" {

@@ -25,7 +25,7 @@ import (
 const serviceAccountLifetime = 300 * time.Second
 
 // jwtBearerGrant is the JWT-bearer grant type (RFC 7523 §2.1).
-const jwtBearerGrant = "urn:ietf:params:oauth:grant-type:jwt-bearer"
+const jwtBearerGrant = "urn:ietf:params:oauth:grant-type:jwt-bearer" //nolint:gosec // G101: a grant type, not a credential
 
 // ErrServiceAccountToken reports a token endpoint that did not issue a
 // usable access token for a service account assertion; the dispatch fails

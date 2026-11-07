@@ -247,7 +247,7 @@ func (c *Comparer) Run(ctx context.Context) error {
 type page struct {
 	status int32
 	bytes  int64
-	print  Fingerprint
+	sig    Fingerprint
 }
 
 func (c *Comparer) compare(ctx context.Context, j Job) {
@@ -255,8 +255,13 @@ func (c *Comparer) compare(ctx context.Context, j Job) {
 	if err != nil {
 		return
 	}
-	a, errA := c.fetch(ctx, u, j.UserAgent, j.AcceptLanguage)
-	b, errB := c.fetch(ctx, u, c.plainUA, "")
+	// The fetches send the address without its user info, query or
+	// fragment (scheme://host/path), so nothing the agent's address carried
+	// in them reaches the site again (D1221 L5, R-80); the report's path
+	// digest is still the D986 one, of the path and the query.
+	addr := &url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path, RawPath: u.RawPath}
+	a, errA := c.fetch(ctx, addr, j.UserAgent, j.AcceptLanguage)
+	b, errB := c.fetch(ctx, addr, c.plainUA, "")
 	if errA != nil || errB != nil {
 		c.failures.Add(1)
 		c.failMetric.Add(ctx, 1)
@@ -264,7 +269,7 @@ func (c *Comparer) compare(ctx context.Context, j Job) {
 			slog.String("host", j.Host), slog.Bool("agent_failed", errA != nil), slog.Bool("plain_failed", errB != nil))
 		return
 	}
-	sim := Similarity(a.print, b.print)
+	sim := Similarity(a.sig, b.sig)
 	if sim >= mismatchBelow && ok2xx(a.status) == ok2xx(b.status) {
 		return
 	}
@@ -328,7 +333,7 @@ func (c *Comparer) fetch(ctx context.Context, u *url.URL, userAgent, acceptLangu
 		if res.StatusCode < 100 || res.StatusCode > 599 {
 			return page{}, errStatus
 		}
-		return page{status: int32(res.StatusCode), bytes: int64(len(body)), print: Sign(Text(body))}, nil
+		return page{status: int32(res.StatusCode), bytes: int64(len(body)), sig: Sign(Text(body))}, nil
 	}
 }
 

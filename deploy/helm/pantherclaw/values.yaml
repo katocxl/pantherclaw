@@ -136,7 +136,7 @@ gateway:
 
 # The admission webhook (G0 M32 D967, D969): off by default. It fails
 # closed (failurePolicy Fail, FQ32-1): while the API is down, no pod starts
-# in a protected namespace.
+# in an enforced namespace.
 admission:
   enabled: false
   port: 8444
@@ -157,7 +157,7 @@ admission:
   # chart owns (kept on uninstall) and reused on upgrade; the API stages it
   # (0400) at start. A GitOps re-render (helm template) generates a new one
   # and rolls the API pods (checksum/admission-webhook): until the new pods
-  # are ready, pods in protected namespaces may be denied (failing closed,
+  # are ready, pods in enforced namespaces may be denied (failing closed,
   # FQ32-1).
 
 # Agent namespaces (G0 M32 D965, D969). For each one the chart renders the

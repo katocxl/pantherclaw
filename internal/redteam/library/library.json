@@ -1036,13 +1036,321 @@
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own permissions: a caller with no permission gets a refusal, not data."
   },
+  "RT-190": {
+    "digest": "9da899a17116faa3aafaf40d92dd4e3af37028f3a4a8398f3bfe093a2c8dde53",
+    "tier": "community",
+    "asi": [
+      "ASI03"
+    ],
+    "asi_why": {
+      "ASI03": "Identity and privilege abuse (ASI03): the agent calls its model with a provider key it found in the workspace."
+    },
+    "atlas": [
+      "AML.T0055"
+    ],
+    "attack": [
+      "T1552.001"
+    ],
+    "technique_why": {
+      "AML.T0055": "Unsecured credentials (AML.T0055): the agent finds a model provider key in the workspace and uses it.",
+      "T1552.001": "Credentials in files (T1552.001): the key sits in a workspace file the agent reads."
+    }
+  },
+  "RT-191": {
+    "digest": "cc0367eaf27ea6df05eef1af61d4be78b3c81296046fbd421456097f0b7121f9",
+    "tier": "community",
+    "atlas": [
+      "AML.T0024"
+    ],
+    "attack": [
+      "T1567"
+    ],
+    "technique_why": {
+      "AML.T0024": "Exfiltration via AI inference API (AML.T0024): the agent sends its prompt to a model provider no connection governs.",
+      "T1567": "Exfiltration over web service (T1567): the other provider is an ordinary HTTPS service outside PantherClaw."
+    }
+  },
+  "RT-192": {
+    "digest": "fdac086074635f65ccd70e4095d434f004fd60f7517530488c0dd81892598c91",
+    "tier": "community",
+    "atlas": [
+      "AML.T0034"
+    ],
+    "attack": [
+      "T1496.004"
+    ],
+    "technique_why": {
+      "AML.T0034": "Cost harvesting (AML.T0034): the agent spends model tokens past what its grant allows.",
+      "T1496.004": "Cloud service hijacking (T1496.004): the provider account's capacity is spent outside its purpose."
+    }
+  },
+  "RT-193": {
+    "digest": "41c0b22a1119444c05f38a3ef38009f3623f5acd835cb00cc69825aad3d48369",
+    "tier": "community",
+    "atlas": [
+      "AML.T0024"
+    ],
+    "attack": [
+      "T1552.001"
+    ],
+    "technique_why": {
+      "AML.T0024": "Exfiltration via AI inference API (AML.T0024): a workspace secret leaves in the prompt to the model.",
+      "T1552.001": "Credentials in files (T1552.001): the token pasted into the prompt came from a workspace file."
+    }
+  },
+  "RT-194": {
+    "digest": "95913054ca813252664c06d5b1ecb0e9aa0e87dfeb3ffb19fe542a43650447ac",
+    "tier": "community",
+    "atlas": [
+      "AML.T0029"
+    ],
+    "attack": [
+      "T1499.003"
+    ],
+    "technique_why": {
+      "AML.T0029": "Denial of AI service (AML.T0029): an oversized request ties up the model route.",
+      "T1499.003": "Application exhaustion flood (T1499.003): the body is sized to exhaust the gateway's memory."
+    }
+  },
+  "RT-195": {
+    "digest": "a04dd30c879d00692ab85e9708032eae0850683e5eaefbeeef642f0725a7bee4",
+    "tier": "community",
+    "techniques_none": "Tests how PantherClaw records a model answer the provider cut off: UNKNOWN, the reservation kept."
+  },
+  "RT-196": {
+    "digest": "ebd02d69c86873eb9fc87593ca30ed128a1c07ea084e16e4b5823a8f8f481df7",
+    "tier": "community",
+    "atlas": [
+      "AML.T0086"
+    ],
+    "attack": [
+      "T1567"
+    ],
+    "technique_why": {
+      "AML.T0086": "Exfiltration via AI agent tool invocation (AML.T0086): the provider's own web search would fetch or send data with no PantherClaw decision.",
+      "T1567": "Exfiltration over web service (T1567): the provider's tool reaches the web from the provider's servers."
+    }
+  },
+  "RT-197": {
+    "digest": "87f04c16dea724d1b78aad231fd7ed9a8c45dbc5c4dfb99fd0b67e8b0a3d13df",
+    "tier": "community",
+    "atlas": [
+      "AML.T0034"
+    ],
+    "attack": [
+      "T1027"
+    ],
+    "technique_why": {
+      "AML.T0034": "Cost harvesting (AML.T0034): the second max_tokens would let the model spend more than the decision reserved.",
+      "T1027": "Obfuscated files or information (T1027): the duplicate member hides the real value from one of two readers."
+    }
+  },
+  "RT-200": {
+    "digest": "650410b363ac93b059108772ace94131289136d18ec2b0abc462e5a70effae00",
+    "tier": "business",
+    "atlas": [
+      "AML.T0068",
+      "AML.T0051.001"
+    ],
+    "attack": [
+      "T1698"
+    ],
+    "technique_why": {
+      "AML.T0051.001": "Indirect prompt injection (AML.T0051.001): an outbound comment carries the hidden phrase.",
+      "AML.T0068": "LLM prompt obfuscation (AML.T0068): the injection phrase is encoded so that a plain match misses it.",
+      "T1698": "Indirect prompt injection (T1698): the hidden text reaches an outbound comment."
+    }
+  },
+  "RT-201": {
+    "digest": "764a1677a99c898c50e680dbcf2de478275fa3fad1a1a8656b0eb2e943bc12c0",
+    "tier": "community",
+    "attack": [
+      "T1537"
+    ],
+    "technique_why": {
+      "T1537": "Transfer data to cloud account (T1537): the agent shares the repository with the public or moves it to an account the organization does not own."
+    }
+  },
+  "RT-202": {
+    "digest": "ae29622aefbec64ba747222a96c4ff8136981c32a336c82db63f67cc7a064020",
+    "tier": "business",
+    "atlas": [
+      "AML.T0091.000"
+    ],
+    "attack": [
+      "T1550.001"
+    ],
+    "technique_why": {
+      "AML.T0091.000": "Application access token (AML.T0091.000): a copied MCP token bound to a client's key is used without that key.",
+      "T1550.001": "Application access token (T1550.001): the bound token is sent as a bearer token, or under DPoP with no proof."
+    }
+  },
+  "RT-203": {
+    "digest": "882c29221c21641a40f85bc10e3f8c45164c4cef82bfa3960f6198bbda520cd6",
+    "tier": "community",
+    "atlas": [
+      "AML.T0081"
+    ],
+    "technique_why": {
+      "AML.T0081": "Modify AI agent configuration (AML.T0081): the agent rewrites its own memory file to persist instructions."
+    }
+  },
+  "RT-210": {
+    "digest": "0080f5f0878df90f38a8a63cec678fa609642886edbb01945f2523a7a8594fed",
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's own importer: a drafted package still carrying review_required is refused by the decoder, whoever signed it."
+  },
+  "RT-211": {
+    "digest": "190dac50b2aa30fffaa998f2b4017f71092985deeeb4ab8e3f621cc007538a68",
+    "tier": "business",
+    "atlas": [
+      "AML.T0053"
+    ],
+    "technique_why": {
+      "AML.T0053": "AI agent tool invocation (AML.T0053): the agent calls its own Gmail send tool with a crafted subject."
+    }
+  },
+  "RT-212": {
+    "digest": "37c07c0c4540dcea3f2aec34dde41ce1c876db558f58cc21c00c043b0512ab8f",
+    "tier": "business",
+    "atlas": [
+      "AML.T0053"
+    ],
+    "attack": [
+      "T1567.002"
+    ],
+    "technique_why": {
+      "AML.T0053": "AI agent tool invocation (AML.T0053): the agent calls its own Drive share tool.",
+      "T1567.002": "Exfiltration to cloud storage (T1567.002): sharing a file to anyone or an outside account takes it out of the organization."
+    }
+  },
+  "RT-213": {
+    "digest": "4125c3bc6350e260e8c32016b832ed8d3210a7e8ffd364d447582097f8065f8c",
+    "tier": "business",
+    "atlas": [
+      "AML.T0053"
+    ],
+    "technique_why": {
+      "AML.T0053": "AI agent tool invocation (AML.T0053): the agent passes its own GraphQL document to the Linear create tool."
+    }
+  },
+  "RT-214": {
+    "digest": "c0f82c5c43ec73afd44832576196c732e48b0a0eb3335b98794451cf7a66425d",
+    "tier": "business",
+    "atlas": [
+      "AML.T0053"
+    ],
+    "technique_why": {
+      "AML.T0053": "AI agent tool invocation (AML.T0053): the agent calls its own Gmail send tool naming another mailbox."
+    }
+  },
+  "RT-215": {
+    "digest": "10da6d78381739eb9f656fcb8395a286db4fdd2b05edef0710ba6ccc7044dab3",
+    "tier": "business",
+    "attack": [
+      "T1610",
+      "T1611",
+      "T1609"
+    ],
+    "technique_why": {
+      "T1609": "Container administration command (T1609): an ephemeral container is added to a running agent pod.",
+      "T1610": "Deploy container (T1610): a pod is created in an enforced namespace without the edge sidecar that routes it through the gateway.",
+      "T1611": "Escape to host (T1611): a pod asks for the host network or a mounted token to get around the edge."
+    }
+  },
+  "RT-216": {
+    "digest": "798b7c9d654c48959a8f40d12bd203545113af3a90ad3fa9a2265b6632c41b0b",
+    "tier": "business",
+    "attack": [
+      "T1078.001"
+    ],
+    "technique_why": {
+      "T1078.001": "Default accounts (T1078.001): code in the pod uses the pod's own attested identity to start runs nobody approved."
+    }
+  },
+  "RT-217": {
+    "digest": "7fff4707e8c317d98a88c7311228771486d47d203d7e63f9cd8a525a67c70be1",
+    "tier": "business",
+    "attack": [
+      "T1552.007",
+      "T1199"
+    ],
+    "technique_why": {
+      "T1199": "Trusted relationship (T1199): a pod of another service account poses as the org's gateway.",
+      "T1552.007": "Container API (T1552.007): a projected token read from a pod is replayed to enrol a gateway."
+    }
+  },
+  "RT-218": {
+    "digest": "af1c5fb368f47df7c9b219b8c68213543fa19fc6e4632acbf907c704f4567a85",
+    "tier": "business",
+    "attack": [
+      "T1685"
+    ],
+    "technique_why": {
+      "T1685": "Disable or modify tools (T1685): forged probe evidence would make coverage read enforced while the pod has other routes."
+    }
+  },
+  "RT-219": {
+    "digest": "fcbd4e1ffd1e5eb6d4583cb426cc1e446aeb51d6a92024b98e72616b61c290a6",
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's own verdict: the server's checks decide a kube closure, not the probe's say-so."
+  },
+  "RT-220": {
+    "digest": "a96531c33fe017c22586fd415105283886128daf822c98d2bbf9de23e6cdf2b6",
+    "tier": "community",
+    "atlas": [
+      "AML.T0100",
+      "AML.T0131"
+    ],
+    "technique_why": {
+      "AML.T0100": "AI agent clickbait (AML.T0100): a page lures the agent's browser to a site nobody listed.",
+      "AML.T0131": "Crafted AI assistant links (AML.T0131): a link dressed as a listed site leads the agent elsewhere."
+    }
+  },
+  "RT-221": {
+    "digest": "28779a70903000bb7adc06a9a933bb80211af8bffe7c762640ad514073a85bde",
+    "tier": "community",
+    "atlas": [
+      "AML.T0098"
+    ],
+    "technique_why": {
+      "AML.T0098": "AI agent tool credential harvesting (AML.T0098): a page asks the agent's browser to send a password it was given."
+    }
+  },
+  "RT-222": {
+    "digest": "61f59608283e44eb5c0315e575dc9d75a67d81cb7005e806085caf5bb5694165",
+    "tier": "community",
+    "techniques_none": "Tests PantherClaw's own hand-over: a takeover is always held for a person and is bounded."
+  },
+  "RT-223": {
+    "digest": "2110c0fc886a75bcbe18bb50790e1965d3697b217ca184ec8b25040ea30e136e",
+    "tier": "community",
+    "atlas": [
+      "AML.T0053"
+    ],
+    "technique_why": {
+      "AML.T0053": "AI agent tool invocation (AML.T0053): the agent clicks and types on its screen through a computer-use tool."
+    }
+  },
+  "RT-224": {
+    "digest": "eee01aa74e745205f174c3606d279af54f897bed6ffe7eb4d97ed68865b02fdb",
+    "tier": "community",
+    "atlas": [
+      "AML.T0134"
+    ],
+    "technique_why": {
+      "AML.T0134": "AI targeted cloaking (AML.T0134): a site shows the agent's browser a different page than a person would see."
+    }
+  },
   "RT-225": {
     "digest": "b9aff30b5fe3e5ffadd0b62c33f07d1b55d8ecccd797bf2ad47c6e4f561ed8be",
-    "tier": "business"
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's workload authentication: a runtime call without a proof is refused."
   },
   "RT-226": {
     "digest": "d65208d5bcb1ddf7aab657062b8c29045229252b383ee3c87a99b4566f9fa87c",
-    "tier": "business"
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's account binding: an interceptor identity cannot decide a gateway in another account."
   },
   "RT-227": {
     "digest": "172b14654fb4bc4f09cd16d9b28234b8941bacf15351f5b27e5edd107365f818",
@@ -1066,6 +1374,27 @@
   },
   "RT-229": {
     "digest": "105a6e76cfeb1db7e42a2b1351d0f90227043ceebd1b48d5de9d5a016d716cd1",
-    "tier": "business"
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's scan reporting: stale collector credentials cannot yield successful discovery."
+  },
+  "RT-260": {
+    "digest": "c917e88f00ab7079bb682ed8910c4fc428f9679cdc487522fa9c7a1d2a957105",
+    "tier": "community",
+    "asi": [
+      "ASI03"
+    ],
+    "asi_why": {
+      "ASI03": "Identity and privilege abuse (ASI03): a stolen token is replayed again and again with a used proof and with another key."
+    },
+    "atlas": [
+      "AML.T0091.000"
+    ],
+    "attack": [
+      "T1550.001"
+    ],
+    "technique_why": {
+      "AML.T0091.000": "Application access token (AML.T0091.000): a stolen token is replayed in a burst with a used proof and without its key.",
+      "T1550.001": "Application access token (T1550.001): the replayed token and proofs stand in for the agent's own sign-in."
+    }
   }
 }

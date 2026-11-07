@@ -5,6 +5,7 @@ package pclaw
 
 import (
 	"context"
+	binenc "encoding/binary"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
@@ -116,16 +117,22 @@ func browserPolicyGenerate(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	const root = `HKEY_LOCAL_MACHINE\Software\Policies\Google\Chrome`
+	// The same policy goes under Chrome's and Chromium's roots: a managed
+	// Chromium build reads only its own.
 	var reg strings.Builder
-	reg.WriteString("Windows Registry Editor Version 5.00\r\n\r\n")
-	reg.WriteString("[" + root + "]\r\n")
-	reg.WriteString(`"ExtensionSettings"=` + regString(string(settingsJSON)) + "\r\n")
-	reg.WriteString(`"IncognitoModeAvailability"=dword:00000001` + "\r\n")
-	reg.WriteString(`"BrowserGuestModeEnabled"=dword:00000000` + "\r\n\r\n")
-	reg.WriteString("[" + root + `\3rdparty\extensions\` + *extID + `\policy]` + "\r\n")
-	reg.WriteString(`"host_name"=` + regString(*hostName) + "\r\n")
-	reg.WriteString(`"click_rules"=` + regString(string(rulesJSON)) + "\r\n")
+	reg.WriteString("Windows Registry Editor Version 5.00\r\n")
+	for _, root := range []string{
+		`HKEY_LOCAL_MACHINE\Software\Policies\Google\Chrome`,
+		`HKEY_LOCAL_MACHINE\Software\Policies\Chromium`,
+	} {
+		reg.WriteString("\r\n[" + root + "]\r\n")
+		reg.WriteString(`"ExtensionSettings"=` + regString(string(settingsJSON)) + "\r\n")
+		reg.WriteString(`"IncognitoModeAvailability"=dword:00000001` + "\r\n")
+		reg.WriteString(`"BrowserGuestModeEnabled"=dword:00000000` + "\r\n\r\n")
+		reg.WriteString("[" + root + `\3rdparty\extensions\` + *extID + `\policy]` + "\r\n")
+		reg.WriteString(`"host_name"=` + regString(*hostName) + "\r\n")
+		reg.WriteString(`"click_rules"=` + regString(string(rulesJSON)) + "\r\n")
+	}
 
 	if err := os.MkdirAll(*out, 0o755); err != nil { //nolint:gosec // G301: policy files are not secret
 		return err
@@ -140,6 +147,7 @@ func browserPolicyGenerate(ctx context.Context, a *app, args []string) error {
 	_, _ = fmt.Fprintln(a.stdout, "wrote "+jsonPath)
 	_, _ = fmt.Fprintln(a.stdout, "wrote "+regPath)
 	_, _ = fmt.Fprintln(a.stdout, "Nothing is installed: deploy these files with your device management. They turn off incognito and guest mode.")
+	_, _ = fmt.Fprintln(a.stdout, "On Linux copy chrome-policy.json into /etc/opt/chrome/policies/managed (Chrome) and /etc/chromium/policies/managed (Chromium). The .reg file sets both the Chrome and the Chromium keys.")
 	return nil
 }
 
@@ -155,7 +163,7 @@ func utf16LE(s string) []byte {
 	b := make([]byte, 0, 2+2*len(units))
 	b = append(b, 0xFF, 0xFE)
 	for _, u := range units {
-		b = append(b, byte(u), byte(u>>8))
+		b = binenc.LittleEndian.AppendUint16(b, u)
 	}
 	return b
 }

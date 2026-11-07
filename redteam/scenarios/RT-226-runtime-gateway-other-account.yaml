@@ -7,6 +7,7 @@ tier: business
 attacker: A4
 threats: [T-346]
 rules: [HR-762, HR-765]
+techniques_none: "Tests PantherClaw's account binding: an interceptor identity cannot decide a gateway in another account."
 requires: [payments]
 harness_only: true
 steps:

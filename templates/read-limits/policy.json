@@ -1,3 +1,10 @@
 {
-  "rules": []
+  "rules": [
+    {
+      "id": "rl-rows", "per": "org", "kind": "CONSTRAIN",
+      "summary": "a database row read returns at most 500 rows; a read asking for more is clamped to 500",
+      "operations": ["postgres.rows.read"], "when": "true", "reason": "READ_ROWS_CLAMPED",
+      "constraint": {"kind": "count_max", "param": "limit", "max": "500"}
+    }
+  ]
 }

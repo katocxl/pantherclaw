@@ -54,11 +54,20 @@ ALTER TABLE pc.model_connections FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON pc.model_connections
     USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
     WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
+CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.model_connections
+    FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
 
 GRANT SELECT, INSERT ON pc.model_connections TO pc_app;
 GRANT UPDATE (max_output_tokens, allowed_server_tools, price_currency, price_input, price_output, price_cache_read,
     price_cache_write, updated_at) ON pc.model_connections TO pc_app;
 GRANT SELECT ON pc.model_connections TO pc_audit_ro;
+-- +goose StatementBegin
+DO $$ BEGIN
+    IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_deleter') THEN
+        GRANT SELECT, DELETE ON pc.model_connections TO pc_deleter;
+    END IF;
+END $$;
+-- +goose StatementEnd
 
 -- +goose Down
 -- The rollback refuses while a model connection exists, and never deletes

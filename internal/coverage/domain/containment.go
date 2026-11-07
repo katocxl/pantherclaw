@@ -13,7 +13,7 @@ const (
 	// ContainmentSandbox is pclaw's Docker sandbox (G0 M9): its probes,
 	// pclaw's configuration checks and the external canary.
 	ContainmentSandbox Containment = "sandbox"
-	// ContainmentKubernetes is an agent pod in a protected namespace with
+	// ContainmentKubernetes is an agent pod in an enforced namespace with
 	// the edge as its native sidecar (G0 M32 D970). Its report is signed
 	// with the pod's attested workload key; the server makes its checks.
 	ContainmentKubernetes Containment = "kubernetes"

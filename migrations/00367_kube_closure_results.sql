@@ -12,6 +12,9 @@
 ALTER TABLE pc.kube_closures
     ADD COLUMN results jsonb CHECK (results IS NULL OR (jsonb_typeof(results) = 'array'
                                                         AND octet_length(results::text) <= 65536));
+-- kube_closures is new in this milestone (00362) and holds one row per
+-- signed pod report, so building the index locks it only briefly.
+-- squawk-ignore require-concurrent-index-creation
 CREATE INDEX kube_closures_control ON pc.kube_closures (org_id, cluster, evaluated_at DESC)
     WHERE kind = 'control' AND result = 'PASSED';
 

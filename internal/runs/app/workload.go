@@ -105,6 +105,13 @@ func (s *Service) StartForWorkloadTx(ctx context.Context, tx db.TenantTx, in Wor
 		p.PrincipalUserID = &principal
 	case gdomain.PrincipalServiceAccount:
 		p.PrincipalSaID = &principal
+	case gdomain.PrincipalInstance:
+		// A cloud runtime names its own refusal (D992). A pod run keeps
+		// K8S_RUN_GRANT_PRINCIPAL.
+		if in.Runtime {
+			return Run{}, ErrRuntimeRunGrantPrincipal
+		}
+		return Run{}, ErrRunGrantPrincipal
 	default:
 		if in.Runtime {
 			return Run{}, ErrRuntimeRunGrantPrincipal

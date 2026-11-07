@@ -5,14 +5,17 @@
 // asks the local connection's /hook face (package pc.computer, hook tool
 // `computer`) about each input action a model asks for: an Anthropic
 // `computer_*` tool use (decideAnthropic) or an OpenAI computer_call
-// (decideOpenAI). Only an allow lets the action run. Screenshots, waits,
+// (decideOpenAI); Bedrock Converse toolUse blocks for the same Anthropic tool
+// go to decideAnthropic. The model's call id (id, toolUseId or call_id) is
+// the call, so a held action asked again with the same id is the same call.
+// Only an allow lets the action run. Screenshots, waits,
 // cursor positions and zooms read the screen and are allowed locally,
 // never sent. An action the guard does not know is refused locally
 // (COMPUTER_ACTION_UNKNOWN), and any failure refuses (fail closed, HR-200).
 // Every decision is cooperative and PARTIAL: only actions sent through the
 // guard are decided.
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { Client, HookResult } from "./client.ts";
 
 export const CODE_ACTION_UNKNOWN = "COMPUTER_ACTION_UNKNOWN";
@@ -30,6 +33,13 @@ export interface ComputerDecision {
 /** An Anthropic computer tool use block. */
 export interface AnthropicToolUse {
   id?: string;
+  name?: string;
+  input?: Record<string, unknown>;
+}
+
+/** The same tool on Bedrock: a Converse toolUse block. */
+export interface BedrockToolUse {
+  toolUseId?: string;
   name?: string;
   input?: Record<string, unknown>;
 }
@@ -79,8 +89,13 @@ function allowedLocally(): ComputerDecision {
   return { allowed: true, held: false, code: "", reason: localReason, transaction_id: "" };
 }
 
+// The model's call id as the call. An id that cannot be one maps to a digest
+// of it, so a held action asked again with the same id sends the same call;
+// only a missing id gets a random one.
 function callId(raw: unknown): string {
-  return typeof raw === "string" && callRe.test(raw) ? raw : `pc-${randomBytes(16).toString("hex")}`;
+  if (typeof raw === "string" && callRe.test(raw)) return raw;
+  if (typeof raw === "string" && raw) return `pc-${createHash("sha256").update(raw).digest("hex").slice(0, 32)}`;
+  return `pc-${randomBytes(16).toString("hex")}`;
 }
 
 function int(v: unknown): number | undefined {
@@ -134,11 +149,17 @@ export class ComputerUseGuard {
     return { allowed: false, held: false, code: code || CODE_CANNOT_DECIDE, reason: res.why, transaction_id: txn };
   }
 
-  /** Decides an Anthropic computer tool use (`{id, name, input}`). Never throws. */
-  async decideAnthropic(toolUse: AnthropicToolUse): Promise<ComputerDecision> {
+  /**
+   * Decides an Anthropic computer tool use (`{id, name, input}`), or the same
+   * tool on Bedrock: a Converse toolUse block (`{toolUseId, name, input}`,
+   * alone or as `{toolUse: {...}}`). Never throws.
+   */
+  async decideAnthropic(toolUse: AnthropicToolUse | BedrockToolUse | { toolUse: BedrockToolUse }): Promise<ComputerDecision> {
     try {
-      if (!isObject(toolUse)) return refused(CODE_ACTION_UNKNOWN, "a computer tool use is an object");
-      const { name, input } = toolUse;
+      let use: unknown = toolUse;
+      if (isObject(use) && isObject(use.toolUse)) use = use.toolUse;
+      if (!isObject(use)) return refused(CODE_ACTION_UNKNOWN, "a computer tool use is an object");
+      const { name, input } = use;
       if (typeof name !== "string" || !(name === "computer" || name.startsWith("computer_")) || !isObject(input)) {
         return refused(CODE_ACTION_UNKNOWN, "PantherClaw decides computer tool uses only");
       }
@@ -155,7 +176,7 @@ export class ComputerUseGuard {
         // key and hold_key name keys; type types text; a click or a scroll names the modifier keys held.
         out[kind === "type" ? "text" : "keys"] = text;
       }
-      out.call = callId(toolUse.id);
+      out.call = callId(Object.hasOwn(use, "id") ? use.id : use.toolUseId);
       return await this.#ask(out);
     } catch (e) {
       return refused(CODE_CANNOT_DECIDE, `PantherClaw cannot decide: ${e instanceof Error ? e.message : String(e)}`);

@@ -33,9 +33,11 @@ import (
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
+	"github.com/katocxl/pantherclaw/internal/gateway/browsercompare"
 	"github.com/katocxl/pantherclaw/internal/gateway/connectors"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
+	"github.com/katocxl/pantherclaw/internal/gateway/hook"
 	"github.com/katocxl/pantherclaw/internal/gateway/httpproxy"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
@@ -457,6 +459,10 @@ type harness struct {
 	// its configuration (G0 M9 track C); sup is it, which the test runs.
 	connectors func(connectors.Configuration) *connectors.Supervisor
 	sup        *connectors.Supervisor
+	// compare, when set, takes the hook face's cloaking compare jobs, and
+	// compareSites are the configuration's compare sites (G0 M33 D986).
+	compare      hook.Comparer
+	compareSites []browsercompare.Site
 }
 
 // compile decodes and compiles a package file (mock-payments when empty).
@@ -533,6 +539,7 @@ func setup(t *testing.T, opts ...func(*harness)) *harness {
 		h.authorityURL = as.URL
 	}
 	conf := newFakeConfig(append([]*control.Connection{h.conn}, h.extra...)...)
+	conf.cfg.BrowserCompareSites = h.compareSites
 	if h.connectors != nil {
 		h.sup = h.connectors(conf)
 	}
@@ -592,6 +599,9 @@ func setup(t *testing.T, opts ...func(*harness)) *harness {
 	}, cmp.Or(h.log, pclog.Discard()))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if h.compare != nil {
+		h.gw.hook.WithBrowserCompare(h.compare)
 	}
 	gs := httptest.NewServer(h.gw.Handler())
 	t.Cleanup(gs.Close)

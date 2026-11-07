@@ -128,9 +128,9 @@ func (s *Schema) UnmarshalJSON(b []byte) error {
 		return err
 	}
 	*s = Schema(aux.schemaFields)
-	switch raw := strings.TrimSpace(string(aux.AdditionalProperties)); {
-	case raw == "":
-	case raw == "true" || raw == "false":
+	switch raw := strings.TrimSpace(string(aux.AdditionalProperties)); raw {
+	case "":
+	case "true", "false":
 		v := raw == "true"
 		s.AdditionalProperties = &v
 	default:

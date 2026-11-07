@@ -20,10 +20,11 @@ import (
 
 // `pclaw browser install-host` installs the native messaging host for the
 // managed extension (G0 M33 D979, HR-753): the host's configuration file
-// (0600), a wrapper that starts `pclaw browser host` with it, and the host
-// manifest, registered for Chrome and Chromium for the current user (or,
-// with --system, for the machine). The manifest lets only the named
-// extension ids start the host.
+// (0600; 0644 and root-owned with --system), a wrapper that starts
+// `pclaw browser host` with it, and the host manifest, registered for
+// Chrome and Chromium for the current user (or, with --system, for the
+// machine, under %ProgramFiles% on Windows). The manifest lets only the
+// named extension ids start the host.
 
 func init() {
 	commands["browser install-host"] = command{
@@ -52,11 +53,11 @@ func browserInstallDir(a *app, system bool) (string, error) {
 	}
 	switch runtime.GOOS {
 	case "windows":
-		pd, _ := a.env("ProgramData")
-		if pd == "" {
-			return "", errors.New("ProgramData is not set")
+		pf, _ := a.env("ProgramFiles")
+		if pf == "" {
+			return "", errors.New("ProgramFiles is not set")
 		}
-		return filepath.Join(pd, "PantherClaw", "browser"), nil
+		return filepath.Join(pf, "PantherClaw", "browser"), nil
 	case "darwin":
 		return "/Library/Application Support/PantherClaw/browser", nil
 	default:
@@ -123,7 +124,7 @@ func browserInstallHost(_ context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // G301: the manifest and wrapper must be readable by the browser
+	if err := prepareBrowserInstallDir(dir, *system); err != nil {
 		return err
 	}
 	cfgPath := filepath.Join(dir, "host-config.json")
@@ -138,7 +139,15 @@ func browserInstallHost(_ context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := writeFileMode(cfgPath, cfg, 0o600); err != nil {
+	// The configuration names the key file and holds no secret. For the
+	// user it is 0600; --system writes it 0644, owned by root, so every
+	// user's browser can start the host (the host refuses one group or
+	// others can write).
+	cfgMode := os.FileMode(0o600)
+	if *system {
+		cfgMode = 0o644
+	}
+	if err := writeFileMode(cfgPath, cfg, cfgMode); err != nil {
 		return err
 	}
 	var wrapper string
@@ -158,7 +167,7 @@ func browserInstallHost(_ context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	written, err := registerBrowserHost(dir, browsers, *system, manifest)
+	written, err := registerBrowserHostFn(dir, browsers, *system, manifest)
 	if err != nil {
 		return err
 	}
@@ -169,6 +178,10 @@ func browserInstallHost(_ context.Context, a *app, args []string) error {
 	}
 	return nil
 }
+
+// registerBrowserHostFn registers the manifest; a variable so tests do not
+// write the machine's registry or browser directories.
+var registerBrowserHostFn = registerBrowserHost
 
 // writeFileMode writes a file and sets its mode (WriteFile keeps the mode
 // of a file that already exists).

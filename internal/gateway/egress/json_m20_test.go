@@ -192,23 +192,25 @@ func TestHR526_JSONBooleansComeOnlyFromThePackage(t *testing.T) {
 }
 
 // TestHR526_NestingRefusesWhatIsNotOneDocument: the builder checks the keys
-// again and refuses a list, a value that is also a parent, or a key outside
-// the grammar, so nothing is sent (G0 M20 D260).
+// again and refuses a list, a value that is also a parent, an object that
+// is also an array, or a key outside the grammar, so nothing is sent (G0
+// M20 D260; the JSON body builder of G0 M31 D950 allows indices and eight
+// names).
 //
 // Covers: F756
 func TestHR526_NestingRefusesWhatIsNotOneDocument(t *testing.T) {
 	for name, obj := range map[string]map[string]any{
 		"list":             {"a[]": "x"},
 		"value and parent": {"a": "x", "a[b]": "y"},
-		"digits":           {"a[0]": "x"},
-		"too deep":         {"a[b][c][d]": "x"},
+		"index and name":   {"a[0]": "x", "a[b]": "y"},
+		"too deep":         {"a[b][c][d][e][f][g][h][i]": "x"},
 		"unpaired":         {"a[b": "x"},
 	} {
-		if _, err := nestJSON(obj); !errors.Is(err, ErrBuild) {
+		if _, err := nestJSONBody(obj); !errors.Is(err, ErrBuild) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	got, err := nestJSON(map[string]any{"a": "x", "b[c]": true, "b[d][e]": "y"})
+	got, err := nestJSONBody(map[string]any{"a": "x", "b[c]": true, "b[d][e]": "y"})
 	if err != nil || got["a"] != "x" || got["b"].(map[string]any)["c"] != true ||
 		got["b"].(map[string]any)["d"].(map[string]any)["e"] != "y" {
 		t.Fatalf("nested %v %v", got, err)
@@ -228,7 +230,7 @@ func TestHR526_AnAWSJSONListHoldsOneValue(t *testing.T) {
 	if list, ok := got["services"].([]any); !ok || len(list) != 1 || list[0] != "web" || got["cluster"] != "prod" {
 		t.Fatalf("%v", got)
 	}
-	if _, err := nestJSON(map[string]any{"services[]": "web"}); !errors.Is(err, ErrBuild) {
+	if _, err := nestJSONBody(map[string]any{"services[]": "web"}); !errors.Is(err, ErrBuild) {
 		t.Fatalf("a JSON list: %v", err)
 	}
 }

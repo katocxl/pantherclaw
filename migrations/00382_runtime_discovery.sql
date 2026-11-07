@@ -120,18 +120,33 @@ END $$;
 -- +goose Down
 DROP TABLE pc.saas_scan_schedules;
 -- Rows only this migration allows go first. Row security is lifted for these
--- deletes only, inside this migration's transaction.
+-- deletes only, inside this migration's transaction. One statement keeps the
+-- lease ids without a temporary table: the migrator cannot create those.
 ALTER TABLE pc.observations NO FORCE ROW LEVEL SECURITY;
 ALTER TABLE pc.verifications NO FORCE ROW LEVEL SECURITY;
 ALTER TABLE pc.saas_scan_runs NO FORCE ROW LEVEL SECURITY;
 ALTER TABLE pc.discoveries NO FORCE ROW LEVEL SECURITY;
-CREATE TEMPORARY TABLE m34_down_leases ON COMMIT DROP AS
+WITH leases AS (
     SELECT org_id, verification_id FROM pc.saas_scan_runs
-    WHERE (source IN ('aws_agentcore', 'vertex_agent_engine', 'azure_foundry') OR origin = 'schedule') AND verification_id IS NOT NULL;
-DELETE FROM pc.saas_scan_runs WHERE source IN ('aws_agentcore', 'vertex_agent_engine', 'azure_foundry') OR origin = 'schedule';
-DELETE FROM pc.observations o USING m34_down_leases l WHERE o.org_id = l.org_id AND o.verification_id = l.verification_id;
-DELETE FROM pc.verifications v USING m34_down_leases l WHERE v.org_id = l.org_id AND v.id = l.verification_id;
-DELETE FROM pc.discoveries WHERE source IN ('aws_agentcore', 'vertex_agent_engine', 'azure_foundry');
+    WHERE (source IN ('aws_agentcore', 'vertex_agent_engine', 'azure_foundry') OR origin = 'schedule')
+      AND verification_id IS NOT NULL
+),
+del_observations AS (
+    DELETE FROM pc.observations o
+    USING leases l
+    WHERE o.org_id = l.org_id AND o.verification_id = l.verification_id
+),
+del_verifications AS (
+    DELETE FROM pc.verifications v
+    USING leases l
+    WHERE v.org_id = l.org_id AND v.id = l.verification_id
+),
+del_runs AS (
+    DELETE FROM pc.saas_scan_runs
+    WHERE source IN ('aws_agentcore', 'vertex_agent_engine', 'azure_foundry') OR origin = 'schedule'
+)
+DELETE FROM pc.discoveries
+WHERE source IN ('aws_agentcore', 'vertex_agent_engine', 'azure_foundry');
 ALTER TABLE pc.discoveries FORCE ROW LEVEL SECURITY;
 ALTER TABLE pc.saas_scan_runs FORCE ROW LEVEL SECURITY;
 ALTER TABLE pc.verifications FORCE ROW LEVEL SECURITY;

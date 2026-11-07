@@ -30,7 +30,7 @@ const VectorstorePackage = "pc.vectorstore"
 
 // Vectorstore limits (D922, D924, D925).
 const (
-	MaxVectorstoreDimensions = 16000
+	MaxVectorstoreDimensions = 12288
 	maxVectorstoreWriters    = 64
 )
 
@@ -41,7 +41,7 @@ var VectorstoreDistances = []string{"cosine", "l2", "inner_product"}
 var (
 	ErrVectorstoreConfig = pcerr.New(pcerr.InvalidArgument, "VECTORSTORE_CONFIG_INVALID",
 		"a vectorstore connection needs a host, a database and user, sslmode verify-full (require only for an internal "+
-			"database with a pinned CA), a lower-case schema and table, 1 to 16000 dimensions, a distance of cosine, l2 "+
+			"database with a pinned CA), a lower-case schema and table, 1 to 12288 dimensions, a distance of cosine, l2 "+
 			"or inner_product, and at most 64 distinct writer agents")
 	// ErrVectorstoreEndpointImmutable: the endpoint is fixed once the
 	// connection exists; a store that moves is a new connection (D925a).

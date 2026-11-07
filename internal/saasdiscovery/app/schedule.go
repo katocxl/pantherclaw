@@ -21,6 +21,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	"github.com/katocxl/pantherclaw/internal/platform/tenantctx"
 	"github.com/katocxl/pantherclaw/internal/saasdiscovery/domain"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -176,7 +177,7 @@ func (s *Scheduler) entitled(ctx context.Context) bool {
 }
 
 func (s *Scheduler) skip(ctx context.Context, sch Schedule, reason string) {
-	skipped.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", reason), attribute.String("source", sch.Source)))
+	skipped.Add(ctx, 1, metric.WithAttributes(attribute.String(telemetry.KeyCode, reason), attribute.String(telemetry.KeyKind, sch.Source)))
 	if s.Log != nil {
 		s.Log.WarnContext(ctx, "saas.schedule_skipped", slog.String("org_id", sch.OrgID.String()), slog.String("source", sch.Source),
 			slog.String("connection_id", sch.ConnectionID.String()), slog.String("reason", reason))

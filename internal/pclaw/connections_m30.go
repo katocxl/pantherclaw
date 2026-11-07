@@ -47,7 +47,7 @@ func addVectorstoreFlags(fs *flag.FlagSet, update bool) *vectorstoreFlags {
 	}
 	fs.Var(&v.schema, "vector-schema", "vectorstore connections: the table's schema")
 	fs.Var(&v.table, "vector-table", "vectorstore connections: the table")
-	fs.Var(&v.dimensions, "dimensions", "vectorstore connections: the embedding's dimensions (1-16000)")
+	fs.Var(&v.dimensions, "dimensions", "vectorstore connections: the embedding's dimensions (1-12288)")
 	fs.Var(&v.distance, "distance", "vectorstore connections: cosine, l2 or inner_product")
 	fs.Var(&v.writers, "writer", "vectorstore connections: an agent id that may write without approval (repeatable; replaces the list)")
 	if update {

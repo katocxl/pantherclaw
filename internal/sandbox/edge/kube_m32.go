@@ -169,7 +169,7 @@ func (w *kubeWorkload) workloadClient() pantherclawv1connect.WorkloadServiceClie
 
 // attestation reads the projected token (the kubelet rotates it).
 func (w *kubeWorkload) attestation() (*pantherclawv1.Attestation, [sha256.Size]byte, error) {
-	b, err := os.ReadFile(w.tokenFile) //nolint:gosec // G304: the pod's own projected token
+	b, err := os.ReadFile(w.tokenFile)
 	if err != nil {
 		return nil, [sha256.Size]byte{}, fmt.Errorf("edge: projected token: %w", err)
 	}
@@ -517,7 +517,7 @@ func writeCA(dir string, pem []byte) error {
 		_ = tmp.Close()
 		return fmt.Errorf("edge: ca_dir: %w", err)
 	}
-	if err := tmp.Chmod(0o644); err != nil { //nolint:gosec // G302: a public certificate the agent container reads
+	if err := tmp.Chmod(0o644); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("edge: ca_dir: %w", err)
 	}

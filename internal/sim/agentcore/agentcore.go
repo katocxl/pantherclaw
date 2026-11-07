@@ -34,10 +34,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/hex"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -443,7 +443,7 @@ func (s *Server) listTargets(w http.ResponseWriter, r *http.Request, _ []byte) {
 	items := make([]map[string]any, 0, to-from)
 	for j, name := range g.Targets[from:to] {
 		items = append(items, map[string]any{
-			"targetId": strings.ToUpper(hex.EncodeToString([]byte{byte(from + j + 1)})) + "SIMTARGET", "name": name, "status": "READY",
+			"targetId": fmt.Sprintf("%02XSIMTARGET", from+j+1), "name": name, "status": "READY",
 			"createdAt": g.CreatedAt, "updatedAt": g.CreatedAt,
 		})
 	}
@@ -493,7 +493,7 @@ func (s *Server) invokeInterceptor(w http.ResponseWriter, r *http.Request) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(HeaderGateway, GatewayARN)
 	inv := Invocation{Tool: name}
-	resp, err := s.client.Do(req) //nolint:gosec // G704: a loopback interceptor only, checked by interceptorURL
+	resp, err := s.client.Do(req)
 	if err == nil {
 		defer func() { _ = resp.Body.Close() }()
 		var out []byte

@@ -44,8 +44,7 @@ func eventID(event []byte) jsontext.Value {
 	if json.Unmarshal(ev.MCP.GatewayRequest.Body, &body) != nil || len(body.ID) == 0 {
 		return jsontext.Value("null")
 	}
-	switch body.ID.Kind() {
-	case '"', '0':
+	if k := body.ID.Kind(); k == jsontext.KindString || k == jsontext.KindNumber {
 		return body.ID
 	}
 	return jsontext.Value("null")

@@ -3,7 +3,7 @@
 **The authoritative guide for building PantherClaw from an empty repository to a production-ready v1.0 backend.**
 Version 1.1 · 2026-10-09 · Owner: Joshua Kato · Approved at G0 (M0); delivery order and first market revised by ADR-0017, M3 identity scope by ADR-0018.
 
-> PantherClaw is the identity and runtime firewall for AI agents. It gives agents useful authority, makes every consequential action explainable, and stops that authority when it is no longer appropriate.
+> PantherClaw is agent identity protection and a runtime firewall for AI agents. It gives agents useful authority, makes every consequential action explainable, and stops that authority when it is no longer appropriate.
 
 ---
 
@@ -234,6 +234,8 @@ The body is the raw call: `{"tool": "mcp__{server}__{name}", "server", "input", 
 Every answer is labelled `PARTIAL` and carries the action's id, hash and canonical form (`action_ir`). On a `target_enforced` connection, an allowed call also carries `dispatch`: the request the gateway re-serialized, with the action token that binds its body. The SDK sends it unchanged. A tool the agent SDK has built in is answered `allow`, labelled `OBSERVE_ONLY` (G0 M8 decision 2).
 
 `GET /sdk/{connection}`, PAP/1-signed over the empty body, lists exactly the tools the connection's package maps, each with its operation: `{"v":1,"connection":…,"coverage":"PARTIAL","tools":[{"tool":…,"operation":…}]}`. An integration that cannot read it treats every tool it has not seen observed as mapped, so it fails closed.
+
+**Model connections (M29):** `go run ./cmd/pantherclaw-sim model --addr 127.0.0.1:9103` is the fake model: Anthropic and OpenAI shapes, streams, usage numbers and faults by model id, every answer SIMULATED; its default key is `sim-model-key`. `dev seed … --gateway-out … --model-url http://127.0.0.1:9103/v1` also activates `pc.anthropic` and `pc.openai` and creates the simulated model connections `anthropic` and `openai`, held by the gateway; it prints the `pclaw seal` command for the simulator's key. No test or local run calls a real model provider (HR-699). The [model connections runbook](runbooks/model-connections.md) has the details.
 
 Operator procedures are in the runbooks: [gateways](runbooks/gateway.md), [the kill switch](runbooks/kill-switch.md) and [broker keys and credentials](runbooks/key-rotation.md).
 
@@ -510,7 +512,7 @@ M21 is a post-1.0 milestone that lands after M20, in migration-number order ([G0
 M22, M23 and M24 are post-1.0 milestones built in parallel as one wave (founder, 2026-10-31: all coding comes before live testing and founder steps); they land in migration-number order.
 M25, M26 and M27 are the second such wave: they build in parallel after M24 has landed, and land in migration-number order.
 M28 is a post-1.0 milestone that lands after M27 ([G0 M28](g0/M28.md)); its streams build in parallel and land as one exit pull request.
-M30 is a post-1.0 milestone coded beside M29 and assembled on M29's exit branch ([G0 M30](g0/M30.md)); it is tested and lands after all coding (founder, 2026-11-04).
+M30 is a post-1.0 milestone coded beside M29 and assembled on M29's exit branch ([G0 M30](g0/M30.md)); it is tested after all coding (founder, 2026-11-04) and lands right after M29.
 
 M11 is split in two (founder, 2026-10-15: "finish up with policies!"): **M11.1**, the policy lifecycle, comes after the preview and before M10; **M11**, governed automations, keeps its place after M10.
 
@@ -828,36 +830,59 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Console** (private stream): Evidence › Threat map and technique chips.
 - Migrations `00320`–`00322` (`00323`–`00329` spare); new permission `threatmap.read` (Go only).
 
-### M30 — Firewall gaps from the threat map
-**HR:** HR-700..717 · **F:** F990–F1004 · **ADR:** 0057 · **G0:** [g0/M30.md](g0/M30.md).
-- **Code first** (founder, 2026-11-04): every stream codes on a pushed branch with no tests and no pull requests; `code/m30` assembles them on M29's exit branch; tests and landing come in the testing phase.
-- **Bound MCP tokens** (FD4): DPoP at the token endpoint and at use for clients with a registered key; standard clients keep the 5-minute bearer.
+### M29 — Model connections and token budgets
+**HR:** HR-690..699 · **F:** F980–F989 · **ADR:** 0056 · **G0:** [g0/M29.md](g0/M29.md).
+- **Model connections** (founder decision Q1, [ADR-0056](adr/0056-model-connections.md)): kind `model` with `pc.anthropic` and `pc.openai`. The gateway holds and places the key; the agent never holds one. The gateway parses the prompt strictly, decides on its metadata and the re-encoded body's hash, and sends exactly that body, a written exception to HR-075 (FQ-A). Provider-side tools are refused unless allowed (FQ-B); nothing is captured (Q4); a secret in a prompt is held (Q3).
+- **Limits:** 16 MiB each way, streaming and 10 minutes, on model connections only, on the edge and the gateway. Other connections and the M25 campaign route are unchanged.
+- **Token budgets** (Q2): `max_tokens` rules on grants and guardrail envelopes and a run cap (`--max-tokens`, shared by the run's child runs), reserved by estimate and settled by reported usage; `TOKEN_BUDGET_EXHAUSTED`. `pclaw sandbox run --env` with refused names and values. Estimates from the organization's own prices and the monthly token report (`pclaw tokens report`) on Team; no price list.
+- **Held calls from the sandbox** (FQ-C): stopped and shown; resuming through the edge is a follow-up.
+- **Fake model:** `pantherclaw-sim model` on 127.0.0.1:9103, RT-190..RT-197; no test calls a real provider (HR-699).
+- **Console** (private stream): token lines, model connection settings and the monthly report page.
+- Migrations `00330`–`00332` (`00333`–`00339` spare); `pc.model_usage` is append-only.
+
+### M30 — Gaps from the threat map
+**HR:** HR-700..717 · **T:** T-320..326 · **RT:** RT-200..203 · **F:** F990–F1004 · **ADR:** 0057 · **G0:** [g0/M30.md](g0/M30.md).
+- **Code first** (founder, 2026-11-04): every stream coded on a pushed branch with no tests and no pull requests; `code/m30` assembled them on M29's exit branch. The testing phase added the tests, RT-200..203 and the exit e2e (`TestE2E_M30_GapsFromTheThreatMapHoldWhatTheyShould`), and M30 lands as one pull request after M29.
+- **Two groups** (founder, 2026-11-05): agent identity protection is the bound MCP tokens; every other item below is runtime firewall.
+- **Bound MCP tokens** (FD4, agent identity protection): DPoP at the token endpoint and at use for clients with a registered key; standard clients keep the 5-minute bearer.
 - **Reads and shares** (FD6, answer S): read limits on count rules, off by default; enumeration and scheduled-send alerts; owned accounts and holds for shares to the public or unlisted accounts.
 - **Agent configuration** (FD5, answer C): digests and a drift alert from scans, a hook route and read-only sandbox binds; never contents or values.
 - **Content and retrieval** (FD7): decoding before content signals; `pc.vectorstore` on pgvector with a writer list and provenance.
 - **Threat map:** seven new Prevent controls, M29's token caps among them, `NARROWED_TRIGGER`, connector refusals counted.
 - Migrations `00340`–`00345` (`00343` reserved; `00346`–`00349` spare).
 
+### M31 — Connector breadth
+**HR:** HR-720..727 · **F:** F1005–F1019 · **ADR:** 0058 · **G0:** [g0/M31.md](g0/M31.md).
+- **Dispatch contracts** (D950): JSON body keys with indices and `[*]`, fixed GraphQL documents, `rfc5322-raw` mail with header line breaks refused twice, literal fixed headers (HR-723, HR-724).
+- **Credentials** (D951, D952, D962): `oauth_client` token endpoints from a closed list (Microsoft, Salesforce, loopback; HR-722); `google_service_account` and `snowflake_keypair` minted per dispatch, the key never placed (HR-721, HR-726); a call naming another mailbox than the sealed subject is refused before minting (D956a).
+- **OpenAPI importer** (D953, D954): `pclaw package draft openapi` drafts, the decoder refuses `review_required` with `DRAFT_NOT_REVIEWED` (HR-720); `pantherclaw-sim openapi` serves a spec's examples.
+- **Packages** (D956–D962): `pc.gmail`, `pc.google-workspace`, `pc.m365`, `pc.salesforce`, `pc.notion`, `pc.linear`, `pc.bedrock`, `pc.vertex`, `pc.snowflake`, each with a simulator; Drive and Microsoft 365 shares reach M30's share step (HR-725); mail send, Drive share and Microsoft 365 invite and link reconcile unknown outcomes (D1002).
+- **Tests** (Phase B): HR-720..727 and T-330..T-334 unit tests, RT-210..RT-214 on the harness, `TestE2E_M31_ConnectorBreadth`; runbook [connector-breadth.md](runbooks/connector-breadth.md).
+- Migrations `00350`, `00351` (`00352`–`00359` spare).
+
 ### M32 — Kubernetes and edge enforcement
 **HR:** HR-730..744 · **F:** F1020–F1029 · **ADR:** 0059 · **G0:** [g0/M32.md](g0/M32.md).
-- **Code first**, like M30 and M31: three streams on pushed branches, assembled on `code/m32` from `code/m31`; tests come in the testing phase.
-- **Admission** (FQ32-1): a fail-closed webhook on its own TLS listener; a pod in a protected namespace needs an issuer entry, one app container, pinned images, the `pantherclaw-edge` native sidecar and its token mounted only there.
-- **Edge and gateway** (FQ32-2, FQ32-3): the edge's `kubernetes` mode enrols from the pod's projected token and keeps its keys in memory; agent pods reach only the gateway and the api, with no DNS; a gateway enrols from its own projected token.
-- **Chart:** cluster config, an in-cluster gateway, the admission listener and per agent namespace a NetworkPolicy, webhook, reviewer role and probe CronJob; self-hosted clusters only (FQ32-4).
-- **Kube closures:** the probe's `kubernetes` profile, reports signed by the pod's attested key, the server's admission and NetworkPolicy checks, the `ContainmentKubernetes` profile, 24-hour expiry; pod runs under the issuer entry's run grant.
+- **Code first**, like M30 and M31: three streams on pushed branches, assembled on `code/m32` from `code/m31`; tests in Phase B (land/m32), with RT-215..RT-219 and the `TestE2E_M32` exit test. Runbook: [kubernetes.md](runbooks/kubernetes.md).
+- **Agent identity protection** (D1205): the edge's workload key, generated in memory and enrolled from the pod's projected token by Kubernetes attestation; a gateway bound to a service account enrols from its own projected token, each token once; a pod's run starts only under its issuer entry's run grant, launched by the instance through the entry.
+- **Runtime firewall** (D1205):
+  - Admission (FQ32-1): a fail-closed webhook on its own TLS listener, off by default; a pod in an enforced namespace needs an issuer entry, one app container, pinned images, the `pantherclaw-edge` native sidecar and its token mounted only there; ephemeral containers are always denied.
+  - Edge and NetworkPolicy (FQ32-2, FQ32-3): the edge listens on loopback only and keeps its keys in memory; agent pods reach only the gateway and the api by fixed addresses, with no DNS.
+  - Kube closures: the probe's `kubernetes` profile and a control twin, reports signed by the pod's attested key, the server's own admission and NetworkPolicy checks, the `ContainmentKubernetes` profile, 24-hour expiry.
+- **Chart:** cluster config, an in-cluster gateway, the admission listener and per agent namespace a NetworkPolicy, webhook, reviewer role and probe CronJob; the webhook secret generated and kept; self-hosted clusters only (FQ32-4). Rotating the admission certificate means rolling the API pods (the pair is staged at start).
 - **Threat map:** `prevent.kubernetes_closure` and `prevent.kubernetes_admission`; T1610 and T1613 leave Outside.
-- Migrations `00360`–`00363`.
+- Migrations `00360`–`00367`.
 
 ### M33 — Browser and computer-use agents
 **HR:** HR-745..759 · **F:** F1030–F1039 · **ADR:** 0060 · **G0:** [g0/M33.md](g0/M33.md).
-- **Code first**, like M30–M32: three streams on pushed branches, assembled on `code/m33` from `code/m32`; tests come in the testing phase.
-- **Packages:** `pc.browser` (navigate, form submit, download, marked click, takeover) and `pc.computer` (`computer.input`), with the `url` param type and `normurl`, `urlhost`, `urlquery`.
-- **Extension and host** (FQ33-1): a managed Manifest V3 extension that reaches PantherClaw only through `pclaw browser host` over native messaging; it fails closed and sends no page content. Cooperative (PARTIAL).
-- **Site list** (FQ33-2): an action on an unlisted site holds for a person, and an empty list holds every site; a takeover always holds.
-- **Secret fields** (FQ33-4): no agent input into password, one-time-code, payment or challenge fields, refused in the page and at the gateway; a person does it in a takeover.
-- **Computer use:** SDK wrappers ask before each action; the model route gates declaring computer use; capture keeps no images.
-- **Cloaking compare** (FQ33-3): on the customer's gateway for marked sites only, alert only, PARTIAL.
-- **Threat map:** `prevent.browser_sites` and `prevent.browser_secret_fields`.
+- **Code first**, like M30–M32: three streams on pushed branches, assembled on `code/m33` from `code/m32`; tests in Phase B (land/m33), with the `pc.browser` and `pc.computer` goldens, RT-220..RT-224 and the `TestE2E_M33` exit test. Runbook: [browser-agents.md](runbooks/browser-agents.md). The extension's own tests come with its package and CI.
+- **Runtime firewall** (D1205): every M33 control decides a browser or computer action per call. The desktop workload key that signs the host's questions is unchanged agent identity protection; M33 adds no identity control.
+  - Packages: `pc.browser` (navigate, form submit, download, marked click, takeover) and `pc.computer` (`computer.input`), with the `url` param type and `normurl`, `urlhost`, `urlquery`.
+  - Extension and host (FQ33-1): a managed Manifest V3 extension that reaches PantherClaw only through `pclaw browser host` over native messaging; it fails closed and sends no page content. `pclaw browser install-host` and `pclaw browser policy generate` (incognito and guest off; installs nothing). Cooperative (PARTIAL, R-78).
+  - Site list (FQ33-2): an action on an unlisted site holds for a person, and an empty list holds every site; adding a site needs a second person. A takeover always holds for an approver, at most 10 minutes (R-79).
+  - Secret fields (FQ33-4): no agent input into password, one-time-code, payment or challenge fields, refused in the page and at the gateway (`BROWSER_SECRET_FIELD`); a person does it in a takeover.
+  - Computer use: SDK wrappers ask before each action (R-81); the model route gates declaring computer use (`computer_use`); capture keeps no images.
+  - Cloaking compare (FQ33-3): on the customer's gateway for marked sites only, alert only, PARTIAL (R-80).
+- **Threat map:** `prevent.browser_sites` (AML.T0100, AML.T0131) and `prevent.browser_secret_fields` (T1696.001); the cloaking detection carries AML.T0134.
 - Migration `00370`.
 
 ### M34 — Cloud agent runtimes

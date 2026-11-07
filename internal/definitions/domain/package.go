@@ -257,7 +257,7 @@ func (d *Definition) validateMapping(i int) error {
 				return invalid("%s: path variable %s appears twice", at, v)
 			}
 		}
-		switch m.Encoding {
+		switch m.Encoding { //nolint:exhaustive // outbound-only encodings are refused by default
 		case EncodingDefault, EncodingJSON:
 		case EncodingForm:
 			if slices.Contains(bodiless, m.Method) {
@@ -267,8 +267,8 @@ func (d *Definition) validateMapping(i int) error {
 			if m.Method != methodPost || m.Path != RootPath {
 				return invalid("%s: aws-json is a POST to %s", at, RootPath)
 			}
-		case EncodingAWSQuery:
-			return invalid("%s: aws-query is outbound only", at)
+		case EncodingAWSQuery, EncodingAWSRest:
+			return invalid("%s: %s is outbound only", at, m.Encoding)
 		default:
 			return invalid("%s: encoding must be json, form or aws-json", at)
 		}

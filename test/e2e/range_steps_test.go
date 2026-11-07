@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -89,9 +90,16 @@ func (d *rangeDriver) callHook(w callWith) (domain.Observation, *callRec, error)
 		return domain.Observation{}, nil, err
 	}
 	m, _ := args.(map[string]any)
+	cwd := d.t.TempDir()
+	input := map[string]any{"command": m["command"], "description": "range"}
+	if p, ok := m["path"].(string); ok {
+		// A write tool (G0 M30 D943): the file is the step's path under the
+		// session's working directory.
+		input = map[string]any{"file_path": filepath.Join(cwd, filepath.FromSlash(p)), "content": m["content"]}
+	}
 	event, _ := json.Marshal(map[string]any{
-		"session_id": "range", "hook_event_name": "PreToolUse", "tool_name": w.Tool, "cwd": d.t.TempDir(),
-		"tool_use_id": "toolu_" + ids.NewV7().String()[:8], "tool_input": map[string]any{"command": m["command"], "description": "range"},
+		"session_id": "range", "hook_event_name": "PreToolUse", "tool_name": w.Tool, "cwd": cwd,
+		"tool_use_id": "toolu_" + ids.NewV7().String()[:8], "tool_input": input,
 	})
 	up := d.s.gateway
 	if w.Fault == "gateway_unreachable" {

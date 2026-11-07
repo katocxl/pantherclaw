@@ -1,22 +1,24 @@
 {
   "name": "read-limits",
-  "summary": "A task's agents read at most 500 times a day across every operation whose definition is a read; the 501st read that day is refused.",
+  "summary": "A task's agents read at most 500 times a day across every operation whose definition is a read; the 501st read that day is refused, and a database row read returns at most 500 rows.",
   "task_ref": "template:read-limits",
   "requires_agent": false,
   "protects": [
-    "the task's grant counts every read, by the definition's access, and refuses the 501st read in a day (COUNT_LIMIT_REACHED)"
+    "the task's grant counts every read, by the definition's access, and refuses the 501st read in a day (COUNT_LIMIT_REACHED)",
+    "a database row read asking for more than 500 rows is clamped to 500 (READ_ROWS_CLAMPED)"
   ],
   "excludes": [
     "writes: the count covers reads only",
-    "what a read returns: the count is of reads, not of rows or bytes",
+    "what a read returns beyond database rows: the count is of reads, not of bytes, and only a row read's limit is clamped",
+    "a row read that sends no limit: the connection's own row limit applies",
     "reads spread across several tasks or grants, each counted on its own",
-    "the limit is an example: change it in a new grant before relying on it"
+    "the limits are examples: change them in a new grant and policy version before relying on them"
   ],
   "placeholders": {},
-  "routes": [],
+  "routes": [{"package": "pc.postgres", "route": "postgres-rows-read"}],
   "grant": "a count of at most 500 reads a day, across every operation whose definition is a read",
   "requires": {
-    "packages": [],
-    "connections": []
+    "packages": ["pc.postgres"],
+    "connections": ["a pc.postgres connection in enforce mode"]
   }
 }

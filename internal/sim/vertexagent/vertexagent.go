@@ -68,8 +68,10 @@ const (
 var (
 	locationRe = regexp.MustCompile(`^[a-z]+-[a-z]+[0-9]{1,2}$`)
 	// updatable are the updateMask paths a patch applies.
-	updatable = []string{"displayName", "description", "spec", "spec.packageSpec", "spec.packageSpec.pickleObjectGcsUri",
-		"spec.packageSpec.requirementsGcsUri", "spec.packageSpec.dependencyFilesGcsUri", "spec.packageSpec.pythonVersion"}
+	updatable = []string{
+		"displayName", "description", "spec", "spec.packageSpec", "spec.packageSpec.pickleObjectGcsUri",
+		"spec.packageSpec.requirementsGcsUri", "spec.packageSpec.dependencyFilesGcsUri", "spec.packageSpec.pythonVersion",
+	}
 )
 
 // Faults configures fault injection.

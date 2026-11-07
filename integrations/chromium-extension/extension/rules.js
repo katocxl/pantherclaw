@@ -11,8 +11,8 @@
 const HOLD_RULE_ID = 1;
 const PRIORITY_NAVIGATION = 2;
 const PRIORITY_TAKEOVER = 3;
-/** A one-navigation rule that sees no navigation is removed after 60 s. */
-const NAVIGATION_RULE_TTL_MS = 60_000;
+/** A one-navigation rule that sees no navigation is removed after 10 s. */
+const NAVIGATION_RULE_TTL_MS = 10_000;
 
 /** Session rule ids are handed out one at a time. */
 let lock = Promise.resolve();
@@ -59,8 +59,8 @@ async function nextSessionId() {
 
 /**
  * Lets the next top-level navigation of tabId that matches regex through,
- * once: the rule goes when that tab commits or fails a navigation, or after
- * 60 s.
+ * once: the rule goes when that tab commits or fails a navigation, when a
+ * request it matches redirects, completes or fails, or after 10 s.
  * @param {number} tabId
  * @param {string} regex
  */
@@ -80,6 +80,21 @@ export function allowNavigationOnce(tabId, regex) {
   });
 }
 
+/**
+ * Removes every one-navigation rule, of any tab. The worker calls it when
+ * it starts: a rule a stopped worker left has lost its 10-second timer
+ * (D1221a R4); an allowed navigation still waiting is asked again.
+ */
+export function removeAllNavigationRules() {
+  return serial(async () => {
+    const rules = await chrome.declarativeNetRequest.getSessionRules();
+    const ids = rules.filter((r) => r.priority === PRIORITY_NAVIGATION).map((r) => r.id);
+    if (ids.length > 0) {
+      await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: ids });
+    }
+  });
+}
+
 /** Removes the one-navigation rules of a tab (not its takeover rule). @param {number} tabId */
 export function removeNavigationRules(tabId) {
   return serial(async () => {
@@ -91,6 +106,42 @@ export function removeNavigationRules(tabId) {
       await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: ids });
     }
   });
+}
+
+/**
+ * Removes the one-navigation rules of a tab that url matches: the request
+ * they let through has redirected, completed or failed.
+ * @param {number} tabId
+ * @param {string} url
+ */
+export function removeNavigationRulesFor(tabId, url) {
+  return serial(async () => {
+    const rules = await chrome.declarativeNetRequest.getSessionRules();
+    const ids = rules
+      .filter((r) => r.priority === PRIORITY_NAVIGATION && r.condition.tabIds?.includes(tabId) && matches(r.condition.regexFilter, url))
+      .map((r) => r.id);
+    if (ids.length > 0) {
+      await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: ids });
+    }
+  });
+}
+
+/**
+ * Whether url matches a rule's RE2 filter (re2Escape output reads the same
+ * as a JavaScript pattern); a filter that does not compile counts as a match,
+ * so its rule goes.
+ * @param {string | undefined} regex
+ * @param {string} url
+ */
+function matches(regex, url) {
+  if (!regex) {
+    return false;
+  }
+  try {
+    return new RegExp(regex).test(url);
+  } catch {
+    return true;
+  }
 }
 
 /** @param {number[]} ids */

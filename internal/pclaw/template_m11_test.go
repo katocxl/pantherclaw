@@ -51,7 +51,7 @@ import (
 // runs the same cases through the whole decision pipeline.
 
 // m11Templates are the templates that carry scenario tests.
-var m11Templates = slices.Concat([]string{"production-diagnostics", "refunds", "release-deployment"}, m14Templates)
+var m11Templates = slices.Concat([]string{"production-diagnostics", "read-limits", "refunds", "release-deployment"}, m14Templates)
 
 // Example values the placeholders are rendered with.
 const (

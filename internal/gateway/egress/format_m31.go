@@ -183,7 +183,7 @@ func mailBody(obj map[string]any) ([]byte, error) {
 		}
 		for _, a := range list {
 			if a == "" || strings.ContainsAny(a, "\r\n,;<>()\"\\ \t") || !utf8.ValidString(a) {
-				return nil, fmt.Errorf("%w: a mail address holds a line break or a separator (PARAM_INVALID)", ErrBuild)
+				return nil, fmt.Errorf("%w: a mail address holds a line break or a separator", ErrBuild)
 			}
 		}
 		b.WriteString(h.name + ": " + strings.Join(list, ",\r\n ") + "\r\n")
@@ -194,7 +194,7 @@ func mailBody(obj map[string]any) ([]byte, error) {
 	if v, ok := obj[defs.MailSubject]; ok {
 		s, isStr := v.(string)
 		if !isStr || strings.ContainsAny(s, "\r\n") || !utf8.ValidString(s) {
-			return nil, fmt.Errorf("%w: a line break in the subject (PARAM_INVALID)", ErrBuild)
+			return nil, fmt.Errorf("%w: a line break in the subject", ErrBuild)
 		}
 		b.WriteString("Subject: " + mime.BEncoding.Encode("utf-8", s) + "\r\n")
 	}

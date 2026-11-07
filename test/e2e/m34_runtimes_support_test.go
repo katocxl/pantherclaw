@@ -6,7 +6,6 @@
 package e2e
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/ed25519"
@@ -15,7 +14,6 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -81,7 +79,7 @@ import (
 //
 // The AgentCore gateway's agent (FQ34-2) is a service agent with an aws_iam
 // issuer entry for the interceptor Lambda's role, bound to a run grant over
-// the reference payments package. Its instance enrols with an aws_iam
+// the reference payments package. Its instance enrolls with an aws_iam
 // attestation the Lambda role signs: the same SigV4-signed GetCallerIdentity
 // the interceptor sends (workloadclient.AWSAttestation), checked as the
 // server checks it (issuers.CheckAWSRequest) and answered by the
@@ -114,6 +112,7 @@ const (
 var (
 	seededAgentCore = regexp.MustCompile(`seeded aws-agentcore connection ([0-9a-f-]{36}) `)
 	seededSSM       = regexp.MustCompile(`seeded aws-ssm connection ([0-9a-f-]{36}) `)
+	m34HTTP         = &http.Client{Timeout: 30 * time.Second}
 )
 
 // m34Fixture is the M34 part of a stack.
@@ -245,7 +244,7 @@ func (s *stack) setupM34(t *testing.T, f *m34Fixture, staleAgentCore bool) {
 	f.agentcoreConn, f.ssmConn = mustUUID(t, a[1]), mustUUID(t, m[1])
 	secret := awsSecret
 	if staleAgentCore {
-		secret = "simulated/rotated+secret98765432"
+		secret = awsSecret + "-stale"
 	}
 	s.sealAWSFor(t, f.agentcoreConn, f.coreURL, agentcore.Service, secret)
 	s.waitConfig(t, s.sealAWSFor(t, f.ssmConn, f.awsURL, "ssm", awsSecret))
@@ -347,7 +346,7 @@ func (f *m34Fixture) awsSession(t *testing.T, name, action string) workloadclien
 		sigv4.HashPayload(body), time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := m34HTTP.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -394,7 +393,7 @@ func (v simSTS) Verify(ctx context.Context, org ids.OrgID, token string) (issuer
 		}
 	}
 	req.Host = signed.URL.Host // what was signed
-	res, err := http.DefaultClient.Do(req)
+	res, err := m34HTTP.Do(req)
 	if err != nil {
 		return issuers.AWSCaller{}, signed, err
 	}
@@ -518,7 +517,7 @@ func (s *stack) setupRuntimeAgent(t *testing.T) *runtimeAgent {
 	}
 	en, err := svc.Enroll(ctx, iapp.EnrollInput{Proof: checked, Attestation: &iapp.Attestation{Kind: issuers.KindAWS, Token: att}, PublicJWK: jwk})
 	if err != nil {
-		t.Fatalf("enrol with the Lambda role's attestation: %v", err)
+		t.Fatalf("enroll with the Lambda role's attestation: %v", err)
 	}
 	if en.State != "ADMITTED" || en.Level < 2 {
 		t.Fatalf("enrolled %+v", en)
@@ -777,7 +776,12 @@ func (s *stack) invoke(t *testing.T, ic *interceptor, tool string, args map[stri
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := http.Post(s.m34.coreURL+"/sim/invoke-interceptor", "application/json", bytes.NewReader(body)) //nolint:noctx // a test
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, s.m34.coreURL+"/sim/invoke-interceptor", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := m34HTTP.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -805,7 +809,7 @@ func awsREST(t *testing.T, method, rawURL, service string, body []byte, creds wo
 	}, sigv4.HashPayload(body), time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := m34HTTP.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -904,18 +908,4 @@ func (f *m34Fixture) ssmPolicies() []string {
 		}
 	}
 	return out
-}
-
-// errNoAnswer is a face call that got no interceptor output.
-var errNoAnswer = errors.New("no interceptor output")
-
-// lineOf is the first line of logs containing s, for failure messages.
-func lineOf(logs, s string) string {
-	sc := bufio.NewScanner(strings.NewReader(logs))
-	for sc.Scan() {
-		if strings.Contains(sc.Text(), s) {
-			return sc.Text()
-		}
-	}
-	return ""
 }

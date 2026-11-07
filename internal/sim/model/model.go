@@ -112,10 +112,14 @@ type Server struct {
 	seq       int
 }
 
-// New returns a simulator that accepts key ("" means DefaultKey).
+// New returns a simulator that accepts key ("" means DefaultKey); a nil
+// log discards.
 func New(key string, f Faults, log *slog.Logger) *Server {
 	if key == "" {
 		key = DefaultKey
+	}
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
 	}
 	return &Server{key: key, limit: maxBody, log: log, faults: f, stats: Stats{Calls: map[string]int{}}, presented: map[[sha256.Size]byte]bool{}}
 }

@@ -22,7 +22,7 @@ import (
 // TestE2E_M34_CloudAgentRuntimes is M34's exit on the real stack (G0 M34):
 //
 //   - FQ34-2: the AgentCore gateway is proven by its interceptor Lambda's
-//     AWS role: an aws_iam attestation enrols its instance under an
+//     AWS role: an aws_iam attestation enrolls its instance under an
 //     auto-admitting issuer entry bound to a run grant, and
 //     RuntimeService.StartRuntimeRun starts its run under that grant;
 //   - FQ34-1: each tool call the customer's AgentCore gateway sends is
@@ -112,7 +112,7 @@ func TestE2E_M34_CloudAgentRuntimes(t *testing.T) {
 	ic := s.runInterceptor(t, f.awsSession(t, m34Function, "sts:GetCallerIdentity"))
 	a = s.invoke(t, ic, "get_refund", map[string]any{"refund": "re_m34exit"})
 	if a.Pass || !a.IsError || !strings.Contains(a.Text, "PantherClaw cannot decide this tool call") {
-		t.Fatalf("the interceptor that cannot enrol: %s\n%s", a.Raw, ic.logs.String())
+		t.Fatalf("the interceptor that cannot enroll: %s\n%s", a.Raw, ic.logs.String())
 	}
 
 	// FQ34-3, FQ34-5: the daily scan and the deployed-agent alert.

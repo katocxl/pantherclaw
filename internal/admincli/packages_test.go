@@ -180,7 +180,7 @@ func TestHR163_PackagesSignWithTheDevelopmentKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v, err := trust.Verify(string(doc), dev, time.Now()); err != nil || v.KID != kid {
+	if v, err := trust.Verify(string(doc), dev, time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)); err != nil || v.KID != kid {
 		t.Fatalf("verified %v, %v", v.KID, err)
 	}
 	if code, _, errs := run(t, "packages", "verify", "--roots", pubFile, "--targets", targets, mockPayments); code != exitError || !strings.Contains(errs, "does not match its key") {

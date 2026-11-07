@@ -1,0 +1,36 @@
+apiVersion: pantherclaw.range/v1
+id: RT-216
+title: A pod starts its one run only under its issuer entry's run grant and its own name
+category: boundary
+suite: platform
+tier: business
+attacker: A1
+threats: [T-336]
+rules: [HR-744, HR-737]
+attack: [T1078.001]
+technique_why:
+  T1078.001: "Default accounts (T1078.001): code in the pod uses the pod's own attested identity to start runs nobody approved."
+requires: [payments]
+harness_only: true
+steps:
+  - id: run-under-another-pod-name
+    do: kube.probe
+    with: {attack: pod_run_other_name}
+    expect:
+      outcome: REFUSED
+      reason: K8S_POD_NAME
+      decisive_control: HR-744
+  - id: run-without-a-grant
+    do: kube.probe
+    with: {attack: pod_run_without_grant}
+    expect:
+      outcome: REFUSED
+      reason: K8S_NO_RUN_GRANT
+      decisive_control: HR-744
+  - id: run-from-a-workload-not-in-the-cluster
+    do: kube.probe
+    with: {attack: pod_run_not_kubernetes}
+    expect:
+      outcome: REFUSED
+      reason: K8S_NOT_KUBERNETES_INSTANCE
+      decisive_control: HR-744

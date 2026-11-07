@@ -10,8 +10,11 @@
 // value that still arrives is cleared, and every pointer, key and input
 // event in a challenge frame is refused. There is no override; a person
 // does that step in a takeover (D982), the only time this is lifted.
-// Cooperative (PARTIAL, R-78): script that sets a value directly, or input
-// from outside the page's events, is not seen.
+// A text area or contenteditable is secret by its name, id, autocomplete or
+// aria-label, and a field once seen as secret stays secret (a show-password
+// button does not lift it). Cooperative (PARTIAL, R-78): script that sets a
+// value directly, input from outside the page's events, and inputs inside a
+// closed shadow root are not seen.
 
 (() => {
   /** autocomplete tokens that mark a secret field. */
@@ -59,14 +62,55 @@
   }
 
   /**
-   * Whether el is a secret input.
+   * Fields once seen as secret stay secret: a show-password button changes
+   * the type, not the field.
+   * @type {WeakSet<HTMLElement>}
+   */
+  const seenSecret = new WeakSet();
+
+  /**
+   * The field el edits: an input, a text area, or the outermost editable
+   * host of an element or text node inside contenteditable; otherwise null.
+   * @param {EventTarget | null} el
+   * @returns {HTMLElement | null}
+   */
+  function editable(el) {
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+      return el;
+    }
+    const node = el instanceof Text ? el.parentElement : el;
+    if (!(node instanceof HTMLElement) || !node.isContentEditable) {
+      return null;
+    }
+    let editHost = node;
+    while (editHost.parentElement && editHost.parentElement.isContentEditable) {
+      editHost = editHost.parentElement;
+    }
+    return editHost;
+  }
+
+  /**
+   * Whether el is a secret field: an input, a text area or a contenteditable.
    * @param {EventTarget | null} el
    */
   function isSecret(el) {
-    if (!(el instanceof HTMLInputElement)) {
+    const field = editable(el);
+    if (!field) {
       return false;
     }
-    if (secretFrame() || el.type === "password") {
+    if (seenSecret.has(field)) {
+      return true;
+    }
+    if (secretNow(field)) {
+      seenSecret.add(field);
+      return true;
+    }
+    return false;
+  }
+
+  /** @param {HTMLElement} el */
+  function secretNow(el) {
+    if (secretFrame() || (el instanceof HTMLInputElement && el.type === "password")) {
       return true;
     }
     const tokens = (el.getAttribute("autocomplete") || "").toLowerCase().split(/\s+/)
@@ -74,13 +118,102 @@
     if (tokens.some((t) => SECRET_AUTOCOMPLETE.has(t))) {
       return true;
     }
-    for (const text of [el.name, el.id, el.getAttribute("aria-label"), el.getAttribute("placeholder")]) {
+    const texts = el instanceof HTMLInputElement
+      ? [el.name, el.id, el.getAttribute("aria-label"), el.getAttribute("placeholder")]
+      : [el.getAttribute("name"), el.id, el.getAttribute("aria-label")];
+    for (const text of texts) {
       if (text && SECRET_TEXT.test(text)) {
         return true;
       }
     }
     return false;
   }
+
+  /**
+   * Secret inputs a script removed lately. A field that takes one's place
+   * (the same form and name, or the same parent and a same neighbor) is
+   * secret too, so swapping a password input for a text one does not make
+   * it plain (D1221a R3). At most MAX_REPLACED are kept, newest last.
+   * @type {{form: HTMLElement | null, name: string, parent: Node | null, prev: Node | null, next: Node | null}[]}
+   */
+  const replaced = [];
+  const MAX_REPLACED = 32;
+
+  /**
+   * The inputs and text areas node is or holds.
+   * @param {Node} node
+   * @returns {HTMLElement[]}
+   */
+  function fieldsIn(node) {
+    if (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement) {
+      return [node];
+    }
+    if (node instanceof HTMLElement && typeof node.querySelectorAll === "function") {
+      return [...node.querySelectorAll("input, textarea")];
+    }
+    return [];
+  }
+
+  /** @param {any} node @returns {HTMLElement | null} */
+  function formOf(node) {
+    return node && typeof node.closest === "function" ? node.closest("form") : null;
+  }
+
+  /**
+   * Whether field el takes the place of the removed secret input d.
+   * @param {any} el
+   * @param {{form: HTMLElement | null, name: string, parent: Node | null, prev: Node | null, next: Node | null}} d
+   */
+  function takesPlace(el, d) {
+    if (d.form && d.name && el.name === d.name && (el.form || formOf(el)) === d.form) {
+      return true;
+    }
+    if (!d.parent || el.parentNode !== d.parent) {
+      return false;
+    }
+    return (d.prev !== null && el.previousSibling === d.prev) || (d.next !== null && el.nextSibling === d.next) ||
+      (d.prev === null && d.next === null);
+  }
+
+  // An input whose type leaves "password" stays secret, seen or not; a
+  // field that replaces a removed secret input is secret.
+  new MutationObserver((records) => {
+    for (const r of records) {
+      if (r.type !== "childList") {
+        if (r.target instanceof HTMLInputElement && (r.oldValue || "").toLowerCase() === "password") {
+          seenSecret.add(r.target);
+        }
+        continue;
+      }
+      for (const node of r.removedNodes || []) {
+        for (const old of fieldsIn(node)) {
+          if (!(seenSecret.has(old) || secretNow(old))) {
+            continue;
+          }
+          const direct = old === node;
+          replaced.push({
+            form: /** @type {any} */ (old).form || formOf(r.target), name: /** @type {any} */ (old).name || "",
+            parent: direct ? r.target : null, prev: direct ? r.previousSibling : null, next: direct ? r.nextSibling : null,
+          });
+          if (replaced.length > MAX_REPLACED) {
+            replaced.shift();
+          }
+        }
+      }
+    }
+    for (const r of records) {
+      if (r.type !== "childList") {
+        continue;
+      }
+      for (const node of r.addedNodes || []) {
+        for (const el of fieldsIn(node)) {
+          if (replaced.some((d) => takesPlace(el, d))) {
+            seenSecret.add(el);
+          }
+        }
+      }
+    }
+  }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ["type"], attributeOldValue: true });
 
   /**
    * Whether a form holds a secret input with a value.
@@ -146,11 +279,19 @@
 
   /** A value that still arrived is cleared. @param {Event} e */
   function onValue(e) {
-    const el = targetOf(e);
+    const el = editable(targetOf(e));
     if (lifted || !isSecret(el)) {
       return;
     }
-    const input = /** @type {HTMLInputElement} */ (el);
+    if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) {
+      const editHost = /** @type {HTMLElement} */ (el);
+      if (editHost.textContent !== "") {
+        editHost.textContent = "";
+        showBanner(NOTICE);
+      }
+      return;
+    }
+    const input = el;
     if (input.value !== "") {
       input.value = "";
       showBanner(NOTICE);

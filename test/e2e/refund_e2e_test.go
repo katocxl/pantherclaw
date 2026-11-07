@@ -114,6 +114,11 @@ type stack struct {
 	// m20_connectors_e2e_test.go).
 	jira   *jiraSim
 	gitlab *gitlabSim
+	// google and linear are the Google and Linear simulators and the seeded
+	// connections to them (G0 M31, options.google and options.linear;
+	// m31_connectors_e2e_test.go).
+	google *googleSim
+	linear *linearSim
 	// aws is the AWS simulator and the seeded connection to it (options.awsECS).
 	aws *awsSim
 	// a2a is the A2A simulator acting as the peer agent, the seeded a2a
@@ -122,6 +127,9 @@ type stack struct {
 	// pg is the fixture database and the seeded connection "warehouse" to it
 	// (G0 M14, options.postgres).
 	pg *pgSeed
+	// model is the fake model and the seeded model connections "anthropic"
+	// and "openai" to it (G0 M29, options.model; m29_model_support_test.go).
+	model *modelSim
 	// seedOut is dev seed's output, for the connections an option's extra
 	// seed flags made (G0 M34, options.seedArgs).
 	seedOut string
@@ -149,6 +157,11 @@ type options struct {
 	// shell also seeds pc.shell and the hook connection "shell" (dev seed
 	// --shell).
 	shell bool
+	// browser also seeds pc.browser and pc.computer and the hook connections
+	// "browser" and "computer" (dev seed --browser, G0 M33); browserCompareUA
+	// is the gateway's browser_compare.plain_user_agent (D986).
+	browser          bool
+	browserCompareUA string
 	// people serves the API at http://localhost (security keys need a
 	// name) with this OIDC provider and, with relay, email (M5 part 2).
 	people *idp
@@ -190,6 +203,11 @@ type options struct {
 	// their credentials held by the gateway (dev seed --jira-url and
 	// --gitlab-url, G0 M20 D254).
 	jira, gitlab bool
+	// google and linear also start the Google and Linear simulators and seed
+	// pc.gmail, pc.google-workspace and pc.linear and the connections
+	// "gmail", "google-workspace" and "linear" to them, their credentials
+	// held by the gateway (dev seed --google-url and --linear-url, G0 M31).
+	google, linear bool
 	// awsECS also starts the AWS simulator and seeds pc.aws.ecs and the
 	// connection "aws-ecs" to it, its base key held by the gateway (dev seed
 	// --aws-ecs-url, G0 M20 D286).
@@ -211,6 +229,11 @@ type options struct {
 	externalChecks []string
 	// hubKey is dev.hub_key_file: the public JWKS of the development Hub key.
 	hubKey string
+	// model also starts the fake model (pantherclaw-sim model, in process)
+	// and seeds pc.anthropic, pc.openai and the model connections
+	// "anthropic" and "openai" to it, the simulator's key sealed for the
+	// gateway (dev seed --model-url, G0 M29 D811, D826).
+	model bool
 	// seedArgs are more dev seed flags, such as the M34 runtime targets'
 	// (m34_runtimes_support_test.go); the test that asks for them seals their
 	// connections' credentials, with brokerKey.
@@ -350,6 +373,9 @@ func start(t *testing.T, o options) *stack {
 	if o.shell {
 		args = append(args, "--shell")
 	}
+	if o.browser {
+		args = append(args, "--browser")
+	}
 	if o.a2a {
 		args = append(args, s.startA2APeer(t, dir)...)
 	}
@@ -386,8 +412,20 @@ func start(t *testing.T, o options) *stack {
 		s.aws = startAWSSim(t)
 		args = append(args, "--aws-ecs-url", s.aws.url)
 	}
+	if o.google {
+		s.google = startGoogleSim(t)
+		args = append(args, "--google-url", s.google.url)
+	}
+	if o.linear {
+		s.linear = startLinearSim(t)
+		args = append(args, "--linear-url", s.linear.url)
+	}
 	if o.postgres != nil {
 		args = append(args, "--postgres", s.postgresSeedFile(t, dir, o.postgres))
+	}
+	if o.model {
+		s.model = startModelSim(t)
+		args = append(args, "--model-url", s.model.url)
 	}
 	args = append(args, o.seedArgs...)
 	var out, errb bytes.Buffer
@@ -425,11 +463,20 @@ func start(t *testing.T, o options) *stack {
 	if o.awsECS {
 		s.aws.seeded(t, out.String())
 	}
+	if o.google {
+		s.google.seeded(t, out.String())
+	}
+	if o.linear {
+		s.linear.seeded(t, out.String())
+	}
 	if o.a2a {
 		s.a2aSeeded(t, out.String())
 	}
 	if o.postgres != nil {
 		s.postgresSeeded(t, out.String(), o.postgres)
+	}
+	if o.model {
+		s.model.seeded(t, out.String())
 	}
 	s.pool = s.db.AppPool(t)
 
@@ -491,7 +538,8 @@ func start(t *testing.T, o options) *stack {
 		// GitHub the stack calls (github.api_url).
 		gc.GitHub.APIURL = s.gh.url
 	}
-	if o.access == "pantherclaw_held" || o.github || o.stripe || o.slack || o.jira || o.gitlab || o.awsECS || o.postgres != nil || o.brokerKey {
+	if o.access == "pantherclaw_held" || o.github || o.stripe || o.slack || o.jira || o.gitlab || o.awsECS || o.google || o.linear ||
+		o.postgres != nil || o.brokerKey || o.model {
 		// The gateway's broker key, which only it can open credentials with
 		// (HR-061); it registers the public half when it starts.
 		gc.Broker.KEKFiles = []string{filepath.Join(dir, "gateway-kek")}
@@ -503,6 +551,8 @@ func start(t *testing.T, o options) *stack {
 			t.Fatal(err)
 		}
 	}
+	// The cloaking compare is on only with a plain user agent (G0 M33 D986).
+	gc.BrowserCompare.PlainUserAgent = o.browserCompareUA
 	s.gatewayCfg = gc
 	s.gatewayEnroll = enrollFile
 	s.gw = s.startGateway(t)
@@ -539,8 +589,17 @@ func start(t *testing.T, o options) *stack {
 	if o.awsECS {
 		s.waitConfig(t, s.sealAWSECS(t))
 	}
+	if o.google {
+		s.sealGoogleConnections(t)
+	}
+	if o.linear {
+		s.waitConfig(t, s.sealFor(t, s.linear.conn, linearKey))
+	}
 	if o.postgres != nil {
 		s.postgresReady(t)
+	}
+	if o.model {
+		s.sealModel(t)
 	}
 	return s
 }

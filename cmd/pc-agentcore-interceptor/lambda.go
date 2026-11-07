@@ -173,7 +173,7 @@ func (ic *interceptor) serveLocal(ctx context.Context, addr string) error {
 		out := ic.answer(r.Context(), r.Header.Get(headerGateway), event, time.Time{})
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		_, _ = w.Write(out)
+		_, _ = w.Write(out) //nolint:gosec // G705: JSON interceptor output with an application/json content type
 	})
 	ap, err := netip.ParseAddrPort(addr)
 	if err != nil || !ap.Addr().IsLoopback() {

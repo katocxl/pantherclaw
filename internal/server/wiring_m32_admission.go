@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"regexp"
 
 	"golang.org/x/sync/errgroup"
@@ -35,7 +36,7 @@ func serveAdmission(ctx context.Context, g *errgroup.Group, cfg *Config, pool *d
 	}
 	mux := http.NewServeMux()
 	kubeadmission.New(kubeadmission.Config{
-		Clusters: clusters, Pool: pool, EdgeDigests: a.EdgeImageDigests, Log: log,
+		Clusters: clusters, Pool: pool, EdgeDigests: a.EdgeImageDigests, ProbeDigests: a.ProbeImageDigests, Log: log,
 	}).Mount(mux)
 	srv, err := httpx.NewServer(httpx.ServerConfig{
 		Addr: a.Listen, Handler: mux, TLS: httpx.ReloadingServerTLSConfig(certs), BodyLimit: kubeadmission.MaxBody, Logger: log,
@@ -85,9 +86,26 @@ type AdmissionConfig struct {
 	// ProbeImageDigests are the probe images (sha256:…) whose closure
 	// reports the server accepts (D970).
 	ProbeImageDigests []string `json:"probe_image_digests"`
+	// ReleaseNamespace is the chart's release namespace: the one namespace
+	// the gateway and api pods run in, and the only one a control closure
+	// is accepted from (D1218 M1, M2). Empty: no NetworkPolicy check
+	// passes and no control closure is accepted.
+	ReleaseNamespace string `json:"release_namespace"`
+	// GatewayPort is the gateway pods' port, the only one an agent
+	// NetworkPolicy may name for them; APIPort the api pods'.
+	GatewayPort int `json:"gateway_port"`
+	APIPort     int `json:"api_port"`
+	// APIEgressCIDRs are the agent namespaces' apiEgressCIDRs, the only
+	// ipBlocks an agent NetworkPolicy may name, on APIEgressPort (the API
+	// Service port, D965a).
+	APIEgressCIDRs []string `json:"api_egress_cidrs"`
+	APIEgressPort  int      `json:"api_egress_port"`
 }
 
-var admissionDigest = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+var (
+	admissionDigest    = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+	admissionNamespace = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+)
 
 // maxAdmissionDigests bounds each digest list.
 const maxAdmissionDigests = 64
@@ -95,7 +113,8 @@ const maxAdmissionDigests = 64
 func (c *Config) validateAdmission() []error {
 	a := c.Admission
 	if a.Listen == "" {
-		if a.TLSCertFile != "" || a.TLSKeyFile != "" || len(a.EdgeImageDigests) > 0 || len(a.ProbeImageDigests) > 0 {
+		if a.TLSCertFile != "" || a.TLSKeyFile != "" || len(a.EdgeImageDigests) > 0 || len(a.ProbeImageDigests) > 0 ||
+			a.ReleaseNamespace != "" || a.GatewayPort != 0 || a.APIPort != 0 || len(a.APIEgressCIDRs) > 0 || a.APIEgressPort != 0 {
 			return []error{errors.New("admission: listen is required when any other admission setting is set")}
 		}
 		return nil
@@ -112,6 +131,28 @@ func (c *Config) validateAdmission() []error {
 	}
 	if len(a.EdgeImageDigests) == 0 {
 		errs = append(errs, errors.New("admission.edge_image_digests must list at least one edge image digest"))
+	}
+	if a.ReleaseNamespace != "" && !admissionNamespace.MatchString(a.ReleaseNamespace) {
+		errs = append(errs, fmt.Errorf("admission.release_namespace %q is not a namespace name", a.ReleaseNamespace))
+	}
+	for _, p := range []struct {
+		name string
+		port int
+	}{{"gateway_port", a.GatewayPort}, {"api_port", a.APIPort}, {"api_egress_port", a.APIEgressPort}} {
+		if p.port < 0 || p.port > 65535 {
+			errs = append(errs, fmt.Errorf("admission.%s %d is not a port", p.name, p.port))
+		}
+	}
+	if len(a.APIEgressCIDRs) > maxAdmissionDigests {
+		errs = append(errs, fmt.Errorf("admission.api_egress_cidrs lists more than %d CIDRs", maxAdmissionDigests))
+	}
+	for _, c := range a.APIEgressCIDRs {
+		if pr, err := netip.ParsePrefix(c); err != nil || pr != pr.Masked() {
+			errs = append(errs, fmt.Errorf("admission.api_egress_cidrs: %q is not a CIDR", c))
+		}
+	}
+	if len(a.APIEgressCIDRs) > 0 && a.APIEgressPort == 0 {
+		errs = append(errs, errors.New("admission.api_egress_port is required with admission.api_egress_cidrs"))
 	}
 	for _, l := range []struct {
 		name string

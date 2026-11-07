@@ -370,8 +370,7 @@ func byRuntimeTarget(cfg *control.Config, target string) *control.Connection {
 
 // rpcID is a JSON-RPC id (a string or a number), or null.
 func rpcID(v jsontext.Value) jsontext.Value {
-	switch v.Kind() {
-	case '"', '0':
+	if k := v.Kind(); k == jsontext.KindString || k == jsontext.KindNumber {
 		return v
 	}
 	return jsontext.Value("null")

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"slices"
 	"strconv"
@@ -58,7 +59,8 @@ var (
 // (G0 M31 D953, HR-720). Its first key is review_required, which the
 // manifest decoder refuses (DRAFT_NOT_REVIEWED): a person reviews each
 // definition, removes the key, signs the package with an org key and only
-// then imports it. Every write is irreversible, never retried, approved
+// then imports it. Every write is irreversible and never retried, its
+// unknown outcomes are reconciled (D1208), and it is approved
 // over every param and deduplicated over its material params; what could
 // not be mapped is a "# review:" comment, never a guess.
 func Draft(s *Spec, o DraftOptions) ([]byte, error) {
@@ -138,10 +140,10 @@ func Draft(s *Spec, o DraftOptions) ([]byte, error) {
 	enc := yaml.NewEncoder(&b)
 	enc.SetIndent(2)
 	if err := enc.Encode(doc); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrDraft, err)
+		return nil, fmt.Errorf("%w: %w", ErrDraft, err)
 	}
 	if err := enc.Close(); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrDraft, err)
+		return nil, fmt.Errorf("%w: %w", ErrDraft, err)
 	}
 	return b.Bytes(), nil
 }
@@ -154,6 +156,11 @@ func quoteOr(s, empty string) string {
 }
 
 func summaryOf(name string) string { return "Operations drafted from the OpenAPI spec of " + name }
+
+// titleText is the spec's summary (or its method and path) as approval
+// title text: braces would be placeholders, and only the draft names the
+// title's fields, so the spec's are dropped ({widgetId} reads widgetId).
+func titleText(s string) string { return strings.NewReplacer("{", "", "}", "").Replace(s) }
 
 type draftNotes struct{ text bool }
 
@@ -221,7 +228,7 @@ func definition(prefix, publisher string, op Operation, now time.Time) (*yaml.No
 			return nil, notes, fmt.Errorf("path parameter %q is not declared", targetVar)
 		}
 	}
-	write := op.Method != "GET"
+	write := op.Method != http.MethodGet
 	access := "read"
 	if write {
 		access = "write"
@@ -243,8 +250,8 @@ func definition(prefix, publisher string, op Operation, now time.Time) (*yaml.No
 			"effects", seq(mapping("kind", str("api.write"), "description", str("Calls "+op.Method+" "+op.Path+" on the API"))),
 			"reversibility", str("irreversible"),
 			"dedupe_key", dedupeNode(params),
-			"retry", mapping("safe", boolean(false), "on_unknown", str("fail")),
-			"approval", mapping("title", str(clip(summary, 120)+" on {target.id}"), "fields", approvalFields(params)),
+			"retry", mapping("safe", boolean(false), "on_unknown", str("reconcile")),
+			"approval", mapping("title", str(clip(titleText(summary), 120)+" on {target.id}"), "fields", approvalFields(params)),
 		)
 	} else {
 		pairs = append(pairs,

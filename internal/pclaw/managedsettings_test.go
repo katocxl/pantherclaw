@@ -366,10 +366,15 @@ func TestF852_ScanCarriesTheManagedState(t *testing.T) {
 		if code != 0 || !strings.Contains(out, "Managed settings: "+c.state) || !strings.Contains(out, "cannot be read here") {
 			t.Fatalf("scan = %d %q %q", code, out, errs)
 		}
-		if len(rec.req.GetFindings()) != 2 {
+		// .mcp.json is also an agent configuration file, reported by its
+		// digest alone, a closed kind with no managed state (G0 M30 D941).
+		if len(rec.req.GetFindings()) != 3 {
 			t.Fatalf("%d findings", len(rec.req.GetFindings()))
 		}
 		for _, f := range rec.req.GetFindings() {
+			if f.GetKind() == "agent_config" {
+				continue
+			}
 			if got := f.GetAttributes()[managedSettingsAttr]; got != c.state {
 				t.Errorf("%s finding: managed_settings %q, want %q", f.GetKind(), got, c.state)
 			}

@@ -115,6 +115,8 @@ var twoWorkerAudit = map[string]string{
 	"reflex.digest_org":                          "unique; InsertDigest once",
 	"response.sweep_dispatch":                    "fan-out",
 	"response.sweep_org":                         "unique",
+	"saas.daily_scans_dispatch":                  "fan-out",
+	"saas.daily_scans_org":                       "unique; each schedule is locked and checked for due time in its transaction",
 	"sandbox.expiry_dispatch":                    "fan-out",
 	"sandbox.expiry_org":                         "unique; FOR UPDATE SKIP LOCKED",
 	"siem.export_dispatch":                       "fan-out",

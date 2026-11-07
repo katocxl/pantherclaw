@@ -44,7 +44,7 @@ func (d *rangeDriver) runtimeProbe(st domain.Step) (domain.Observation, error) {
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set(runtimeface.HeaderGateway, agentcore.GatewayARN)
-		res, err := http.DefaultClient.Do(req)
+		res, err := m34HTTP.Do(req)
 		if err != nil {
 			return domain.Observation{}, err
 		}

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BUSL-1.1
 # Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 #
-# An agent pod in a protected namespace (G0 M32 D966, D967, D969). Not a
+# An agent pod in an enforced namespace (G0 M32 D966, D967, D969). Not a
 # template: copy it and replace the values marked REPLACE. The admission
 # webhook admits it only in this shape:
 #
@@ -11,7 +11,15 @@
 #   restartPolicy Always) named pantherclaw-edge, by an admitted digest;
 # - no service account token in the pod: the projected token (audience
 #   pantherclaw:<org>, at most 3600 s) is mounted into the edge alone;
-# - no hostNetwork, hostPID, hostIPC, privileged container or hostPath.
+# - no hostNetwork, hostPID, hostIPC, shareProcessNamespace, privileged
+#   container or hostPath;
+# - the edge runs as a fixed non-root user (here the pod's, 65532) that no
+#   other container runs as, and no other container may escalate
+#   privileges, add a capability other than NET_BIND_SERVICE or unmask
+#   /proc;
+# - when the issuer entry pins digests, every plain init container's image
+#   is one of them;
+# - after admission no container's image may change (K8S_IMAGE_CHANGED).
 #
 # The agent reaches nothing but the edge on 127.0.0.1:3128 and trusts the
 # edge's per-session CA from /pc-edge/ca.crt. The namespace's NetworkPolicy
@@ -80,6 +88,9 @@ spec:
         - name: SSL_CERT_FILE
           value: /pc-edge/ca.crt
       securityContext:
+        # Never the edge's user (65532, the pod's): a container that runs
+        # as the edge's user could read its token and key (D1218 H2).
+        runAsUser: 10001  # REPLACE: your agent's user, not 0 and not 65532
         runAsNonRoot: true
         readOnlyRootFilesystem: true
         allowPrivilegeEscalation: false

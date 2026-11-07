@@ -52,6 +52,32 @@ func (q *Queries) ConsumeKubeClosureNonce(ctx context.Context, arg ConsumeKubeCl
 	return i, err
 }
 
+const countOutstandingKubeClosureNonces = `-- name: CountOutstandingKubeClosureNonces :one
+SELECT count(*)::int FROM pc.kube_closure_nonces
+WHERE org_id = $1 AND instance_id = $2 AND used_at IS NULL AND expires_at > now()
+`
+
+// The instance's unused, unexpired nonces (D1218 L2: at most 8).
+func (q *Queries) CountOutstandingKubeClosureNonces(ctx context.Context, orgID ids.OrgID, instanceID ids.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countOutstandingKubeClosureNonces, orgID, instanceID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const deleteExpiredKubeClosureNonces = `-- name: DeleteExpiredKubeClosureNonces :execrows
+DELETE FROM pc.kube_closure_nonces WHERE org_id = $1 AND expires_at < now() - interval '1 minute'
+`
+
+// Janitor: nonces expired more than a minute ago, used or not (D1218 L2).
+func (q *Queries) DeleteExpiredKubeClosureNonces(ctx context.Context, orgID ids.OrgID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredKubeClosureNonces, orgID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getKubeClosure = `-- name: GetKubeClosure :one
 SELECT org_id, id, cluster, namespace, instance_id, kind, report_digest, result, evaluated_at, expires_at, results FROM pc.kube_closures WHERE org_id = $1 AND id = $2
 `
@@ -209,4 +235,16 @@ func (q *Queries) LatestKubeClosure(ctx context.Context, arg LatestKubeClosurePa
 		&i.Results,
 	)
 	return i, err
+}
+
+const lockKubeClosureNonces = `-- name: LockKubeClosureNonces :exec
+SELECT pg_advisory_xact_lock(hashtextextended(
+    ($1::uuid)::text || '/' || ($2::uuid)::text, 365))
+`
+
+// Serialises nonce issuance for one instance, so the outstanding-nonce cap
+// holds under concurrent requests (D1218 L2).
+func (q *Queries) LockKubeClosureNonces(ctx context.Context, orgID ids.UUID, instanceID ids.UUID) error {
+	_, err := q.db.Exec(ctx, lockKubeClosureNonces, orgID, instanceID)
+	return err
 }

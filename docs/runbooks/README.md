@@ -67,3 +67,10 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [runtime-discovery.md](runtime-discovery.md) | M34 | Discovery of AgentCore runtimes, Vertex reasoning engines and Foundry agents: daily scan schedules, skipped schedules, the `pc.runtime.agent_deployed` alert (Business) |
 | [aws-ssm.md](aws-ssm.md) | M34 | Commands on cloud machines: `pc.aws-ssm` with `aws_extra_resources` (one action on up to 3 more exact ARNs) and `pc.azure-compute` Run Command |
 | [threat-map.md](threat-map.md) | M28 | The threat map: MITRE ATLAS and ATT&CK Enterprise lanes, gaps and fixes, `pclaw threats`, the signed report, the Navigator layer and history |
+| [model-connections.md](model-connections.md) | M29 | Model connections: `pc.anthropic` and `pc.openai`, the sealed key, the checked prompt path, limits, refusals, provider-side tools, token caps, prices and the monthly token report (Team), the fake model |
+| [shares-and-read-limits.md](shares-and-read-limits.md) | M30 | Share checks on bucket policies, ACLs, repository visibility and transfers; owned accounts as a protected change; read limits; enumeration and scheduled-send alerts |
+| [agent-config.md](agent-config.md) | M30 | Agent configuration and memory files: digests and drift alerts from scans, the hook's `agent_config.write`, read-only files in the sandbox |
+| [vectorstore.md](vectorstore.md) | M30 | The pgvector connector: the table DDL, writers and holds, provenance from the permit, a fixed endpoint, bounds |
+| [connector-breadth.md](connector-breadth.md) | M31 | Google Workspace, Microsoft 365, Salesforce, Notion, Linear, Bedrock, Vertex and Snowflake: sealing, shares that hold, and drafting a package from an OpenAPI spec |
+| [kubernetes.md](kubernetes.md) | M32 | Kubernetes enforcement: the fail-closed admission webhook and its TLS and secret rotation, gateway enrolment from a projected token, kube closures and pod runs |
+| [browser-agents.md](browser-agents.md) | M33 | Browser and computer-use agents: the managed extension and its native host, Chrome policy, the site list and cloaking compare, takeover, and computer use through the SDK wrappers |

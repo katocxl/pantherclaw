@@ -42,6 +42,13 @@ func fakeAPIServer(t *testing.T) (*httptest.Server, *string) {
 		_, _ = w.Write([]byte(`{"metadata":{"namespace":"agents","name":"coder-1","uid":"pod-uid"},
 			"status":{"phase":"Running","containerStatuses":[{"imageID":"ghcr.io/acme/agent@sha256:` + strings.Repeat("a", 64) + `"}]}}`))
 	})
+	mux.HandleFunc("GET /api/v1/namespaces/agents/pods/edged-1", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"metadata":{"namespace":"agents","name":"edged-1","uid":"pod-uid"},
+			"spec":{"initContainers":[{"name":"setup"},{"name":"pantherclaw-edge","restartPolicy":"Always"}]},
+			"status":{"phase":"Running","hostIP":"10.0.0.5","containerStatuses":[{"name":"agent","imageID":"ghcr.io/acme/agent@sha256:` + strings.Repeat("a", 64) + `"}],
+			"initContainerStatuses":[{"name":"setup","imageID":"busybox@sha256:` + strings.Repeat("b", 64) + `"},
+			{"name":"pantherclaw-edge","imageID":"ghcr.io/katocxl/pantherclaw-edge@sha256:` + strings.Repeat("e", 64) + `"}]}}`))
+	})
 	mux.HandleFunc("GET /api/v1/namespaces/agents/pods/huge", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"x":"` + strings.Repeat("a", kube.MaxResponse) + `"}`))
 	})
@@ -89,8 +96,17 @@ func TestHR144_TokenReviewAndPodComeFromTheCluster(t *testing.T) {
 		t.Fatalf("request: %s", *seen)
 	}
 	p, err := c.Pod(ctx, "prod", "agents", "coder-1")
-	if err != nil || p.UID != "pod-uid" || len(p.ImageIDs) != 1 {
+	if err != nil || p.UID != "pod-uid" || len(p.ImageIDs) != 1 || p.Edge != nil {
 		t.Fatalf("pod: %+v, %v", p, err)
+	}
+	// The edge sidecar's running image, from initContainerStatuses (D1218
+	// H1), and the node IP (D1218 M2).
+	p, err = c.Pod(ctx, "prod", "agents", "edged-1")
+	if err != nil || p.Edge == nil || p.Edge.ImageID != "ghcr.io/katocxl/pantherclaw-edge@sha256:"+strings.Repeat("e", 64) {
+		t.Fatalf("a pod with the edge: %+v, %v", p, err)
+	}
+	if pi, err := c.PodImages(ctx, "prod", "agents", "edged-1"); err != nil || pi.HostIP != "10.0.0.5" {
+		t.Fatalf("pod images: %+v, %v", pi, err)
 	}
 	if p, err := c.Pod(ctx, "prod", "agents", "gone"); err != nil || p.UID != "" {
 		t.Fatalf("a deleted pod must read as empty: %+v, %v", p, err)

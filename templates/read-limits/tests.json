@@ -1,0 +1,16 @@
+{
+  "tests": [
+    {
+      "id": "rl-read-500", "per": "org",
+      "summary": "a row read of exactly 500 rows goes through unchanged",
+      "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "status"], "limit": "500"}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "rl-read-501", "per": "org",
+      "summary": "a row read asking for 501 rows gets at most 500 (the read is clamped)",
+      "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "status"], "limit": "501"}},
+      "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "READ_ROWS_CLAMPED", "rule": "rl-rows"}
+    }
+  ]
+}

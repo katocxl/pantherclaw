@@ -85,7 +85,7 @@ func CollectorOf(source string) (Collector, bool) {
 	case SourceAWSAgentCore:
 		return Collector{Package: "pc.aws-agentcore", CredentialKind: "aws_sigv4"}, true
 	case SourceVertexAgentEngine:
-		return Collector{Package: "pc.vertex-agent-engine", CredentialKind: "google_service_account"}, true //nolint:gosec // G101: a credential kind's name, not a credential
+		return Collector{Package: "pc.vertex-agent-engine", CredentialKind: "google_service_account"}, true
 	case SourceAzureFoundry:
 		return Collector{Package: "pc.azure-foundry", CredentialKind: "oauth_client"}, true //nolint:gosec // G101: a credential kind's name, not a credential
 	}

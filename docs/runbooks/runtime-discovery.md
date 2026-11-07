@@ -42,7 +42,7 @@ pclaw discover schedule clear --source <source> --connection <id> --tenant <tena
 
 An hourly dispatcher enqueues one job per active org (`saas.daily_scans_org`). For each schedule whose last start is 20 hours old or more, the job starts one scan with origin `schedule`, `started_by` the schedule's person, through the gateway as any scan. The audit actor is System (`saas_schedule`) with `schedule_person` in the details.
 
-Before each start it checks again. A schedule is skipped, with a warn log `saas.schedule_skipped`, the metric `pc_saas_schedule_skipped_total` (by `reason` and `source`), and its last start unchanged, when:
+Before each start it checks again. A schedule is skipped, with a warn log `saas.schedule_skipped`, the metric `pc_saas_schedule_skipped_total` (by `code` for the reason and `kind` for the source), and its last start unchanged, when:
 
 | Reason | Meaning | What to do |
 |---|---|---|

@@ -11,7 +11,6 @@ package agentconfig
 
 import (
 	"path"
-	"runtime"
 	"strings"
 )
 
@@ -144,13 +143,12 @@ func OfRoot(root Root) []Entry {
 	return out
 }
 
-// foldCase: file names compare without case where the file system does.
-var foldCase = runtime.GOOS == "windows"
-
 // Classify says whether a project-relative path names a protected file, and
 // its class. The path is slash-normalized first (a backslash is a separator,
 // "." and ".." are resolved); one that leaves the project names nothing.
-// Names compare case-sensitively, except on Windows.
+// Names compare without case on every host: Windows and macOS file systems
+// fold case by default, and a sandbox's files land on the host's (G0 M30
+// D940, D1215).
 func Classify(relPath string) (PathClass, bool) {
 	e, ok := Match(relPath)
 	return e.Class, ok
@@ -158,12 +156,19 @@ func Classify(relPath string) (PathClass, bool) {
 
 // Match is Classify returning the project entry that matched.
 func Match(relPath string) (Entry, bool) {
+	return MatchRoot(RootProject, relPath)
+}
+
+// MatchRoot is Match for a path relative to root: the home directory's
+// entries for RootHome, the configuration directory's for RootConfig
+// (HR-712: user scope is checked too, D1215).
+func MatchRoot(root Root, relPath string) (Entry, bool) {
 	p := Normalize(relPath)
 	if p == "" {
 		return Entry{}, false
 	}
 	for _, e := range Entries {
-		if e.Root == RootProject && matches(e.Glob, p) {
+		if e.Root == root && matches(e.Glob, p) {
 			return e, true
 		}
 	}
@@ -186,9 +191,7 @@ func Normalize(relPath string) string {
 
 // matches compares a cleaned relative path with a glob.
 func matches(glob, p string) bool {
-	if foldCase {
-		glob, p = strings.ToLower(glob), strings.ToLower(p)
-	}
+	glob, p = strings.ToLower(glob), strings.ToLower(p)
 	if dir, tree := strings.CutSuffix(glob, "/**"); tree {
 		return strings.HasPrefix(p, dir+"/")
 	}

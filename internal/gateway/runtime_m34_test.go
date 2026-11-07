@@ -104,7 +104,7 @@ func (r rtReply) passed(rpc string) bool {
 
 // toolError is the text of a tool error answer, or "".
 func (r rtReply) toolError() string {
-	if r.code != http.StatusOK || r.out.MCP.Request != nil || r.out.MCP.Response == nil || r.out.MCP.Response.StatusCode != 200 {
+	if r.code != http.StatusOK || r.out.MCP.Request != nil || r.out.MCP.Response == nil || r.out.MCP.Response.StatusCode != http.StatusOK {
 		return ""
 	}
 	res := r.out.MCP.Response.Body.Result

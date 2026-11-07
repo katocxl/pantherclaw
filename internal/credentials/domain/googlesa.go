@@ -32,7 +32,7 @@ const (
 
 // GoogleTokenURI is the one token endpoint a real Google service account
 // credential names; a simulated connection's is a loopback address.
-const GoogleTokenURI = "https://oauth2.googleapis.com/token"
+const GoogleTokenURI = "https://oauth2.googleapis.com/token" //nolint:gosec // G101: an endpoint, not a credential
 
 // MaxGoogleScopes bounds a service account credential's scopes.
 const MaxGoogleScopes = 8
