@@ -34,6 +34,9 @@ const (
 	// rows written without being throttled because the throttle was full
 	// (G0 M32 D1218 item 3), by kind (audit, seen).
 	MetricKubernetesAdmissionThrottleOverflow = "pc_kubernetes_admission_throttle_overflow_total"
+	// MetricFederationReceiptProblems counts peer answer receipts that were
+	// missing or did not verify, by state (G0 M35 D1025).
+	MetricFederationReceiptProblems = "pc_federation_receipt_problems_total"
 )
 
 // Rate-limit scopes, the fixed values of the scope attribute.
@@ -61,6 +64,7 @@ type instruments struct {
 	rateLimited metric.Int64Counter
 	admission   metric.Int64Counter
 	overflow    metric.Int64Counter
+	fedReceipts metric.Int64Counter
 }
 
 var (
@@ -84,6 +88,8 @@ func get() *instruments {
 			metric.WithDescription("Kubernetes admission webhook decisions, by outcome (allowed, denied) and code."))
 		inst.overflow, _ = m.Int64Counter(MetricKubernetesAdmissionThrottleOverflow,
 			metric.WithDescription("Admission deny audits and seen rows written past a full throttle, by kind (audit, seen)."))
+		inst.fedReceipts, _ = m.Int64Counter(MetricFederationReceiptProblems,
+			metric.WithDescription("Federation answer receipts that were missing or did not verify, by state."))
 	})
 	return &inst
 }
@@ -120,6 +126,12 @@ func KubernetesAdmission(ctx context.Context, outcome, code string) {
 // throttle was full (G0 M32 D1218 item 3).
 func KubernetesAdmissionThrottleOverflow(ctx context.Context, kind string) {
 	get().overflow.Add(ctx, 1, metric.WithAttributes(attribute.String(KeyKind, kind)))
+}
+
+// FederationReceiptProblem counts one peer answer receipt that was missing
+// or did not verify, by state (MISSING, INVALID; G0 M35 D1025).
+func FederationReceiptProblem(ctx context.Context, state string) {
+	get().fedReceipts.Add(ctx, 1, metric.WithAttributes(attribute.String(KeyState, state)))
 }
 
 // PoolStats are a connection pool's counters.

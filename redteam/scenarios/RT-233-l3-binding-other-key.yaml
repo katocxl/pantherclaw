@@ -1,0 +1,16 @@
+apiVersion: pantherclaw.range/v1
+id: RT-233
+title: An L3 attestation bound to another key does not attest this enrollment
+category: boundary
+suite: platform
+tier: business
+attacker: A4
+threats: [T-353]
+rules: [HR-777, HR-778]
+techniques_none: "Tests PantherClaw's L3 binding: a SPIFFE signature over another key's binding is refused."
+harness_only: true
+steps:
+  - id: other-key
+    do: federation.probe
+    with: {attack: other_key}
+    expect: {outcome: REFUSED, reason: L3_OTHER_KEY, decisive_control: HR-778}

@@ -316,6 +316,10 @@ type Call struct {
 	Action actionir.Parsed
 	// Workload is the request's PAP/1 credentials.
 	Workload *pb.WorkloadCredentials
+	// FederationCallID is the call StartFederatedCall admitted, sent
+	// instead of workload credentials on channel federation (G0 M35
+	// D1024c).
+	FederationCallID string
 }
 
 // Result is what happened to a call.
@@ -359,6 +363,9 @@ type Result struct {
 	// SafeDetail is the decisive reason's detail when the Authority writes
 	// it as an agent-safe sentence (agentSafeDetails); "" otherwise.
 	SafeDetail string
+	// FederationReceipt is our minimal signed receipt for a federated call
+	// (G0 M35 D1024d): the face sends it as PC-Fed-Receipt on every answer.
+	FederationReceipt string
 }
 
 // agentSafeDetails are the decisive reason codes whose detail the Authority
@@ -515,7 +522,10 @@ func (e *Engine) decide(ctx context.Context, c Call, findings []*pb.PayloadFindi
 	t *timer,
 ) (context.Context, decided, Result, bool) {
 	conn := c.Connection
-	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{ActionIr: c.Action.Canonical, Workload: c.Workload, PayloadFindings: findings, ContentFindings: content, ContentScan: scan})
+	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{
+		ActionIr: c.Action.Canonical, Workload: c.Workload, PayloadFindings: findings, ContentFindings: content, ContentScan: scan,
+		FederationCallId: c.FederationCallID,
+	})
 	t.lap("authz")
 	if err != nil {
 		e.log.ErrorContext(ctx, "gateway.authority_unavailable", slog.String("connection_id", conn.GetId()), pclog.Err(err))
@@ -525,7 +535,7 @@ func (e *Engine) decide(ctx context.Context, c Call, findings []*pb.PayloadFindi
 	r := Result{
 		Decision: ar.GetDecision(), TransactionID: ar.GetTransactionId(), Nonce: ar.GetNonce(),
 		Monitor: ar.GetMode() == pb.DispatchMode_DISPATCH_MODE_MONITOR, Wait: ar.GetWait(),
-		Explanation: ar.GetAgentExplanation(),
+		Explanation: ar.GetAgentExplanation(), FederationReceipt: ar.GetFederationReceipt(),
 	}
 	for _, rs := range ar.GetReasons() {
 		r.Reasons = append(r.Reasons, rs.GetCode())

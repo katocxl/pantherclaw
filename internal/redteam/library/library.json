@@ -1377,6 +1377,31 @@
     "tier": "business",
     "techniques_none": "Tests PantherClaw's scan reporting: stale collector credentials cannot yield successful discovery."
   },
+  "RT-230": {
+    "digest": "9a9d9e626e56d175f4e6b33c1f95871ded2a472a95b1a470054decb00bcd9789",
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's federation face: a token that is not a pap-fed+jwt is refused."
+  },
+  "RT-231": {
+    "digest": "0a013599b942c2572b5c1577852c085af169605c6b4b0a8327894b79b1fea166",
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's federation replay store: one jti from a peer is recorded once."
+  },
+  "RT-232": {
+    "digest": "54cc5123e62de085e92d0444c279b62c60c673621b5cfdb06f45e877d3046225",
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's federation face: a pap-fed+jwt signed by an unpinned key is refused."
+  },
+  "RT-233": {
+    "digest": "ac146ab599bbc667883479e015b4b1489ef47b4e8b28c2787e3379ed09a5ca89",
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's L3 binding: a SPIFFE signature over another key's binding is refused."
+  },
+  "RT-234": {
+    "digest": "dc71d8b6cb6f76de14558594029cc4fbd20ff81ca22d00e97aa48e9f5be14918",
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's TUF client: a repository URL that is not https is refused."
+  },
   "RT-260": {
     "digest": "c917e88f00ab7079bb682ed8910c4fc428f9679cdc487522fa9c7a1d2a957105",
     "tier": "community",

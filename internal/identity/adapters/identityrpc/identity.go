@@ -66,14 +66,14 @@ var enrollmentPath = map[string]pantherclawv1.EnrollmentPath{
 
 func instanceProto(in app.Instance) *pantherclawv1.Instance {
 	method := "fingerprint"
-	if in.Level == 2 {
+	if in.Level >= 2 {
 		method = "attestation"
 	}
 	return &pantherclawv1.Instance{
 		Id: in.ID.String(), AgentId: in.AgentID.String(), Identifier: in.Identifier.String(), Thumbprint: in.Thumbprint,
 		State: instanceState[in.State], EnrolledVia: enrollmentPath[in.EnrolledVia],
 		Verification: &pantherclawv1.Verification{
-			Level: int32(in.Level), Method: method, AttestedUntil: tsp(in.AttestedUntil), //nolint:gosec // G115: 1 or 2
+			Level: int32(in.Level), Method: method, AttestedUntil: tsp(in.AttestedUntil), //nolint:gosec // G115: 1 to 3
 			LastVerifyTime: tsp(in.LastSeenAt), Binding: in.Binding, ReleaseState: in.ReleaseState,
 			ReleaseDigest: in.ReleaseDigest, NeedsReview: in.NeedsReview,
 		},

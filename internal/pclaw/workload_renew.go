@@ -34,7 +34,7 @@ const exitRefused = 3
 
 func init() {
 	commands["workload renew"] = command{
-		usage: "workload renew --key-file FILE --out FILE [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp | --aws | --azure-app APP_ID [--azure-client-id ID] | --entra-token-env VAR] [--declared-release sha256:…]",
+		usage: "workload renew --key-file FILE --out FILE [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp | --aws | --azure-app APP_ID [--azure-client-id ID] | --entra-token-env VAR | --attest spiffe-x509 --svid-cert FILE --svid-key FILE | --attest gcp-instance] [--declared-release sha256:…]",
 		run:   workloadRenew,
 	}
 }
@@ -63,10 +63,12 @@ func workloadRenew(ctx context.Context, a *app, args []string) error {
 	if err != nil || kf.Server == "" {
 		return errors.New("the key file is not enrolled yet: run pclaw workload enroll")
 	}
-	wc, err := a.workloadClient(kf.Server, kf)
+	wc, t, err := a.workloadClientTransport(kf.Server, kf, nil)
 	if err != nil {
 		return err
 	}
+	// Each renewal challenges its own IssueToken for a fresh nonce (G0 M35 D1030a).
+	att.l3.bindTo(t, kf, issueTokenChallenge(kf.Server, &pantherclawv1.IssueTokenRequest{Identifier: kf.Identifier, DeclaredReleaseDigest: *declared}))
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	tr := &tokenRenewal{a: a, wc: wc, identifier: kf.Identifier, org: inst.Org, declared: *declared, att: &att, name: "pclaw workload renew"}
@@ -154,7 +156,9 @@ func (tr *tokenRenewal) issue(ctx context.Context) (workloadclient.Issued, error
 			tr.report(fmt.Sprintf("renewing without an attestation: %v", err))
 		case att != nil && att.GetKind() != pantherclawv1.AttestationKind_ATTESTATION_KIND_GITHUB_ACTIONS &&
 			att.GetKind() != pantherclawv1.AttestationKind_ATTESTATION_KIND_GCP_WORKLOAD &&
-			att.GetKind() != pantherclawv1.AttestationKind_ATTESTATION_KIND_AWS_IAM:
+			att.GetKind() != pantherclawv1.AttestationKind_ATTESTATION_KIND_AWS_IAM &&
+			att.GetKind() != pantherclawv1.AttestationKind_ATTESTATION_KIND_SPIFFE_X509 &&
+			att.GetKind() != pantherclawv1.AttestationKind_ATTESTATION_KIND_GCP_INSTANCE:
 			// A token read from a file or the environment is sent once:
 			// the server refuses it again (HR-143).
 			if sum = sha256.Sum256([]byte(att.GetToken())); sum != tr.seen {

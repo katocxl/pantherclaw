@@ -20,6 +20,7 @@ import (
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
+	"github.com/katocxl/pantherclaw/internal/evidence/receiptsig"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -111,9 +112,15 @@ func keepReceipt(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.Or
 	if err != nil {
 		return err
 	}
-	return q.InsertExecutionReceipt(ctx, dbq.InsertExecutionReceiptParams{
+	if err := q.InsertExecutionReceipt(ctx, dbq.InsertExecutionReceiptParams{
 		OrgID: org, AttemptID: attempt, TransactionID: txn, PermitID: permit, ReceiptJws: r.JWS, LedgerEntryID: e.ID,
-	})
+	}); err != nil {
+		return err
+	}
+	if r.Sigs == nil {
+		return nil
+	}
+	return q.InsertReceiptSignatures(ctx, org, receiptsig.Digest(r.JWS), r.Sigs) // G0 M35 D1042
 }
 
 // openReconciliation opens the transaction's unknown-outcome task, which

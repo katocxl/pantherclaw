@@ -96,7 +96,9 @@ func (s *Service) StartForAutomationTx(ctx context.Context, tx db.TenantTx, in A
 		p.PrincipalUserID = &principal
 	case gdomain.PrincipalServiceAccount:
 		p.PrincipalSaID = &principal
-	case gdomain.PrincipalInstance:
+	case gdomain.PrincipalInstance, gdomain.PrincipalFederated:
+		return Run{}, ErrLauncher
+	default:
 		return Run{}, ErrLauncher
 	}
 	chain := []Actor{{Kind: string(in.Principal.Kind), ID: principal.String()}}

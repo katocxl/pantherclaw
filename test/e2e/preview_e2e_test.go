@@ -112,10 +112,8 @@ func previewHas(list []string, want string) bool {
 // verify`, offline, with the trust file, once the server's workers have
 // chained and checkpointed what it holds, and requires every check to have
 // passed, with the Sigstore trusted root of the local fake log and timestamp
-// authority. Two checks are not available by construction on a first check:
-// the ML-DSA cosignature (the trust file pins no ML-DSA checkpoint key) and
-// the witness check against an earlier checkpoint (--previous, which a first
-// check has none of); they are the only ones allowed to be so.
+// authority. Optional checks are unavailable when this fixture has no
+// ML-DSA keys, previous checkpoint, or deployment-wide root log checkpoint.
 func previewVerified(t *testing.T, p *proof, ctx context.Context, name, sigstore string, sel evapp.Selection) *bundle.Report {
 	t.Helper()
 	for deadline := time.Now().Add(2 * time.Minute); ; time.Sleep(time.Second) {
@@ -123,7 +121,9 @@ func previewVerified(t *testing.T, p *proof, ctx context.Context, name, sigstore
 		code, r := p.verify(t, ctx, file, "--sigstore-trusted-root", sigstore)
 		var notPassed []string
 		for _, c := range r.Checks {
-			if c.Status != bundle.Passed && c.Name != "checkpoint.cosignature" && c.Name != "witness.previous" {
+			optional := c.Name == "checkpoint.cosignature" || c.Name == "witness.previous" ||
+				c.Name == "receipt.cosignature" || c.Name == "global.checkpoint"
+			if c.Status != bundle.Passed && (!optional || c.Status != bundle.NotAvailable) {
 				notPassed = append(notPassed, c.Name+" "+string(c.Status))
 			}
 		}

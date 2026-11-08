@@ -37,6 +37,49 @@ The number of leaves tells the log how many orgs with a checkpoint the deploymen
 4. **Network.** The worker reaches only those two hosts, over https, through the egress client (no redirects, no proxy, no private or loopback addresses: HR-070..072). Allow them in your firewall.
 5. **Restart the worker.** It refuses to start when a file is missing or malformed.
 
+### Keys from Sigstore's TUF repository (G0 M35 D1040)
+
+Instead of key and chain files, the worker can take the log's key and the authority's chain from Sigstore's `trusted_root.json`, fetched through TUF:
+
+```json
+"evidence": {
+  "anchoring": {
+    "enabled": true,
+    "trust": "tuf",
+    "tuf": { "cache_dir": "/var/lib/pantherclaw/tuf" },
+    "rekor": { "url": "https://log2025-1.rekor.sigstore.dev" },
+    "tsa": { "url": "https://timestamp.sigstore.dev/api/v1/timestamp" }
+  }
+}
+```
+
+- The TUF client starts from the Sigstore root that ships in the binary (`internal/evidence/sigstoretuf/root.json`, Sigstore's root v14 as published in `sigstore-go` v1.3.0), walks the root rotations the repository publishes, and accepts `trusted_root.json` only when the TUF metadata verifies. `tuf.repository` defaults to `https://tuf-repo-cdn.sigstore.dev`; `tuf.cache_dir` keeps the verified metadata between refreshes (empty: nothing is cached). Environment: `PC_EVIDENCE_ANCHORING_TRUST`, `PC_EVIDENCE_TUF_REPOSITORY`, `PC_EVIDENCE_TUF_CACHE_DIR`.
+- The worker picks, from the trusted root, the Rekor v2 log whose checkpoint origin is `rekor.origin` (or the URL without its scheme) and the timestamp authority whose URI is `tsa.url`. The URLs stay configuration: the log shard is not discovered from Sigstore's signing configuration.
+- A daily job (`evidence.tuf_refresh`) refreshes the material, and the anchoring tick refreshes it when it is older than a day. Until a refresh succeeds the worker creates anchors but submits none. A failed refresh writes `evidence.tuf_refresh_failed` to the platform audit ledger and keeps the last verified material; nothing falls back to unverified keys.
+- The worker reaches the TUF repository through the egress client, like the log and the authority: allow `tuf-repo-cdn.sigstore.dev` (or your repository's host) in the firewall.
+
+## Root log and witnesses (G0 M35 D1041)
+
+Every anchored global root is also appended to one append-only log for the whole deployment, the root log, with the origin `<evidence.log_origin>/global`. Its leaves are the anchors' global roots in the order they were anchored; its tiles and checkpoints are in `pc.global_log_*` and `pc.global_checkpoints`, signed with the deployment's `global_log` Ed25519 key (published in `evidence-keys.json`). Each append first re-checks the previous checkpoint and proves the new tree consistent with it; a mismatch writes `evidence.global_log_failed` and signs nothing.
+
+The newest checkpoint, with the witnesses' cosignatures appended, is public at `GET /.well-known/pantherclaw/evidence/global-checkpoint` (text, a C2SP signed note). `?consistency=<old size>` returns JSON with the checkpoint and the consistency proof from that size. It shows the root log's size and root only: no org, no per-org checkpoint.
+
+**Witnesses** (Business edition and above; needs anchoring) cosign root log checkpoints over the C2SP tlog-witness protocol:
+
+```json
+"evidence": {
+  "witnesses": [
+    { "name": "witness.example.org", "url": "https://witness.example.org", "vkey": "witness.example.org+1a2b3c4d+BASE64KEY" }
+  ],
+  "witness_threshold": 1
+}
+```
+
+- `url` is the witness's https prefix (the request goes to `<url>/add-checkpoint`); `vkey` is the witness's cosignature/v1 verifier key as it publishes it. At most 16 witnesses; `witness_threshold` 0 means every one.
+- Every 5 minutes the worker sends the newest root log checkpoint to each witness with the consistency proof from the size that witness last cosigned, keeps each verified cosignature in `pc.global_checkpoint_cosignatures`, and retries once at the size a witness answers with a conflict. Only the root log is ever sent to a witness, never an org's checkpoint.
+- Sending a checkpoint to a public witness publishes it there. Make the first live run only with the founder's agreement.
+- A witness that refuses, times out or returns a cosignature that does not verify writes `evidence.witness_failed` (witness name and code); fewer verified cosignatures than the threshold writes `evidence.witness_threshold_not_met`. The checkpoint stays published either way.
+
 ## How it runs
 
 The worker ticks every minute. A tick:

@@ -94,6 +94,7 @@ func TestHR194_ServerPublishesItsEvidenceKeys(t *testing.T) {
 	}
 	want := map[string]int{
 		bundle.PurposeReceipts: 1, bundle.PurposeCheckpoints: 1, bundle.PurposeAnchors: 1, bundle.PurposeEvidencePacks: 1,
+		bundle.PurposeGlobalLog: 1,
 	}
 	if len(count) != len(want) {
 		t.Fatalf("published purposes %v, want %v (no ML-DSA-65 key without co-signing)", count, want)

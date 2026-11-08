@@ -36,6 +36,8 @@ func (s *Store) PrincipalActiveInTx(ctx context.Context, tx db.TenantTx, org ids
 		active, err = q.SubjectUserActive(ctx, org, p.ID)
 	case domain.PrincipalServiceAccount:
 		active, err = q.SubjectServiceAccountActive(ctx, org, p.ID)
+	case domain.PrincipalFederated:
+		active, err = federatedActive(ctx, q, org, p)
 	case domain.PrincipalInstance:
 	}
 	if db.IsNoRows(err) {

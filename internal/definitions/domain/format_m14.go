@@ -112,6 +112,11 @@ func (d *Definition) validateVectorDispatch(at, op string) error {
 // A2AMethods are the A2A 1.0 methods the gateway mediates (D31).
 var A2AMethods = []string{"SendMessage", "SendStreamingMessage", "GetTask", "ListTasks", "CancelTask", "SubscribeToTask"}
 
+// FederationMethods are the A2A 1.0 JSON-RPC methods the gateway's
+// federation face decides (G0 M35 D1024, D1024b); any other is
+// FEDERATION_METHOD_NOT_DECIDED (-32601).
+var FederationMethods = []string{"SendMessage", "GetTask", "CancelTask"}
+
 const maxStaticHeaders = 8
 
 // staticHeaderRe is a static header's literal value (D8): printable ASCII

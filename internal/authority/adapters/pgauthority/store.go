@@ -29,6 +29,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
+	"github.com/katocxl/pantherclaw/internal/evidence/receiptsig"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	gpg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
@@ -541,6 +542,11 @@ func writeReceipt(ctx context.Context, tx db.TenantTx, org ids.OrgID, txn ids.UU
 		CoverageSnapshotID: r.CoverageSnapshot,
 	}); err != nil {
 		return err
+	}
+	if r.Sigs != nil { // G0 M35 D1042: the receipt's sigs[], beside it
+		if err := dbq.New(tx).InsertReceiptSignatures(ctx, org, receiptsig.Digest(r.JWS), r.Sigs); err != nil {
+			return err
+		}
 	}
 	return writeInputs(ctx, tx, org, txn, evaluation, r.Inputs)
 }

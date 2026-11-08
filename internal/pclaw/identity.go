@@ -111,6 +111,36 @@ func identityCommands() map[string]command {
 				})
 			}
 		}),
+		"issuer propose-spiffe-x509": rpc("issuer propose-spiffe-x509 --agent ID --trust-domain TD --spiffe-id spiffe://TD/PATH [--run-grant ID] [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
+			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
+			td := fs.String("trust-domain", "", "trust domain from the server configuration (identity.spiffe_trust_domains); its bundle's X.509 authorities verify the SVIDs")
+			id := fs.String("spiffe-id", "", "the workload's exact SPIFFE ID")
+			auto := fs.Bool("auto-admit", false, "admit matching workloads without an owner (needs activation by an Identity Publisher)")
+			runGrant := fs.String("run-grant", "", "grant each run the instance starts goes under (a change needs activation by an Identity Publisher)")
+			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
+				return c.identity.ProposeIssuerEntry(ctx, &pantherclawv1.ProposeIssuerEntryRequest{
+					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason, RunGrantId: *runGrant,
+					Binding: &pantherclawv1.ProposeIssuerEntryRequest_SpiffeX509{SpiffeX509: &pantherclawv1.SpiffeBinding{
+						TrustDomain: *td, SpiffeId: *id,
+					}},
+				})
+			}
+		}),
+		"issuer propose-gcp-instance": rpc("issuer propose-gcp-instance --agent ID --project P [--instance-id N] [--zone Z] [--run-grant ID] [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
+			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
+			project := fs.String("project", "", "the Compute Engine project id")
+			instance, zone := fs.String("instance-id", "", "pin a numeric Compute Engine instance id"), fs.String("zone", "", "pin a zone such as us-central1-a")
+			auto := fs.Bool("auto-admit", false, "admit matching workloads without an owner (needs activation by an Identity Publisher)")
+			runGrant := fs.String("run-grant", "", "grant each run the instance starts goes under (a change needs activation by an Identity Publisher)")
+			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
+				return c.identity.ProposeIssuerEntry(ctx, &pantherclawv1.ProposeIssuerEntryRequest{
+					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason, RunGrantId: *runGrant,
+					Binding: &pantherclawv1.ProposeIssuerEntryRequest_GcpInstance{GcpInstance: &pantherclawv1.GcpInstanceBinding{
+						ProjectId: *project, InstanceId: *instance, Zone: *zone,
+					}},
+				})
+			}
+		}),
 		"issuer propose-gcp": rpc("issuer propose-gcp --agent ID --service-account-id N [--project-id P] [--instance-id N] [--run-grant ID] [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
 			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
 			sa := fs.String("service-account-id", "", "the service account's numeric unique id (not its email)")

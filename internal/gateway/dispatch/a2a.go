@@ -48,7 +48,14 @@ const (
 	// CodeA2AStream: the stream broke off, ran over its cap or time, or
 	// carried an event that is not one.
 	CodeA2AStream = "a2a_stream_cut"
+	// CodeFederationToken: the server did not sign a federated token for
+	// a message to a peer org's agent; nothing was sent (G0 M35 D1023).
+	CodeFederationToken = "federation_token_refused"
 )
+
+// FederationAuthScheme is the Authorization scheme of a federated token
+// (G0 M35 D1023): "Authorization: PAP-Fed <token>".
+const FederationAuthScheme = "PAP-Fed"
 
 // Limits of A2A dispatch.
 const (
@@ -90,6 +97,32 @@ type A2ASink func(event []byte) error
 // its events to.
 func WithA2AStream(ctx context.Context, sink A2ASink) context.Context {
 	return context.WithValue(ctx, a2aStreamKey{}, sink)
+}
+
+// federationBodyKey carries the exact JSON-RPC body a peer org's agent sent
+// to the federation face.
+type federationBodyKey struct{}
+
+// WithFederationBody returns ctx carrying the exact body of a federated
+// call (G0 M35 D1024b): after an allow it is forwarded unchanged to the
+// listed agent through the listing's a2a connection.
+func WithFederationBody(ctx context.Context, body []byte) context.Context {
+	return context.WithValue(ctx, federationBodyKey{}, body)
+}
+
+// buildFederated is a federated call's request: the peer's exact body,
+// over the JSON-RPC binding only (the body is a JSON-RPC request).
+func buildFederated(def *defs.Definition, body []byte, p A2APeer) (a2aRequest, error) {
+	if def.Dispatch == nil || def.Dispatch.A2A == nil {
+		return a2aRequest{}, fmt.Errorf("%w: %s has no A2A dispatch", egress.ErrBuild, def.Operation)
+	}
+	if len(body) == 0 {
+		return a2aRequest{}, fmt.Errorf("%w: a federated call without its body", egress.ErrBuild)
+	}
+	if p.Binding != wire.BindingJSONRPC {
+		return a2aRequest{}, fmt.Errorf("%w: a federated call forwards a JSON-RPC body, and the listing's connection pins %q", egress.ErrBuild, p.Binding)
+	}
+	return a2aRequest{method: def.Dispatch.A2A.Method, httpMethod: http.MethodPost, url: p.URL, body: body}, nil
 }
 
 // a2aRequest is an outbound A2A call, built from the ActionIR.
@@ -328,7 +361,16 @@ func (e *Engine) sendA2A(ctx context.Context, r Result, conn *control.Connection
 		r.Decision = pb.Decision_DECISION_CANNOT_AUTHORIZE
 		return r.fail(CannotAuthorize, CodeA2ACardDrift)
 	}
-	out, buildErr := buildA2A(def, a.Action, want.Txn, peer)
+	var (
+		out      a2aRequest
+		buildErr error
+	)
+	if a.Action.Channel == string(defs.ChannelFederation) {
+		body, _ := ctx.Value(federationBodyKey{}).([]byte)
+		out, buildErr = buildFederated(def, body, peer)
+	} else {
+		out, buildErr = buildA2A(def, a.Action, want.Txn, peer)
+	}
 	begin := &pb.BeginDispatchRequest{PermitId: want.PermitID, Epoch: want.Epoch}
 	if buildErr == nil {
 		sum := sha256.Sum256(out.body)
@@ -377,6 +419,26 @@ func (e *Engine) sendA2A(ctx context.Context, r Result, conn *control.Connection
 	if tok := bd.GetActionToken(); tok != "" {
 		req.Header.Set(HeaderAction, tok)
 	}
+	fed := conn.GetA2A().GetFederation() != nil
+	bodySum := sha256.Sum256(out.body) // the token's bh and the receipt's req_digest
+	if fed {
+		// A peer org's listed agent (G0 M35 D1023): the server signs a
+		// pap-fed+jwt bound to this exact request and our ALLOWED action;
+		// without it nothing is sent. The face takes no stream.
+		if out.stream {
+			e.log.WarnContext(ctx, "gateway.request_not_built", slog.String("transaction_id", want.Txn), slog.String("why", "federation takes no stream"))
+			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeRequest, t)
+		}
+		ft, err := e.authority.IssueFederationToken(ctx, &pb.IssueFederationTokenRequest{
+			ActionId: a.Action.ActionID, BodySha256: bodySum[:], Htu: out.url,
+		})
+		t.lap("federation_token")
+		if err != nil || ft.GetToken() == "" {
+			e.log.WarnContext(ctx, "gateway.federation_token_refused", slog.String("transaction_id", want.Txn), pclog.Err(err))
+			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeFederationToken, t)
+		}
+		req.Header.Set("Authorization", FederationAuthScheme+" "+ft.GetToken())
+	}
 	if out.stream {
 		return e.streamA2A(ctx, r, conn, peer, client, req, sink, secret, want, t)
 	}
@@ -393,6 +455,22 @@ func (e *Engine) sendA2A(ctx context.Context, r Result, conn *control.Connection
 	}
 	sum := sha256.Sum256(res.Body)
 	result, peerCode, ok := a2aAnswer(peer.Binding, res.Status, res.Body)
+	if fed {
+		// The peer's minimal receipt, checked by the server with the
+		// pinned keys (D1023). Missing or invalid: the outcome stays as
+		// sent. A peer DENY or HELD fails it with PEER_DENIED or PEER_HELD
+		// and the agent-safe text.
+		rec, err := e.authority.RecordFederationReceipt(ctx, &pb.RecordFederationReceiptRequest{
+			ActionId: a.Action.ActionID, Receipt: res.FedReceipt, BodySha256: bodySum[:],
+		})
+		t.lap("federation_receipt")
+		if err != nil {
+			e.log.WarnContext(ctx, "gateway.federation_receipt_not_recorded", slog.String("transaction_id", want.Txn), pclog.Err(err))
+		} else if reason := rec.GetReason(); reason != "" {
+			r.SafeDetail = rec.GetAgentText()
+			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, res.Status, sum[:], elapsed, ToolFailed, reason, t)
+		}
+	}
 	switch {
 	case res.Truncated || (!ok && outcome == pb.Outcome_OUTCOME_ACCEPTED):
 		// The peer took the call, but its answer is not one: the call

@@ -11,7 +11,7 @@ Every technique of both matrices has exactly one place:
 - **Outside PantherClaw:** the technique needs something PantherClaw does not see; the kind of tool that covers it is named.
 - **No PantherClaw control yet:** the technique is within an agent platform's reach and PantherClaw ships no control for it; why is given.
 
-Mapping digest: `3c7a646923e8e4e3bfb591856fab65aaa575842e9e465600f2835250618d79b4`.
+Mapping digest: `4031d58efbaa82581e86aff5187cc94ff2e1949f99fae3f95755e61809c7d2e0`.
 
 | Framework | Catalogue version | Catalogue digest |
 |---|---|---|
@@ -142,7 +142,7 @@ Mapping digest: `3c7a646923e8e4e3bfb591856fab65aaa575842e9e465600f2835250618d79b
 | [AML.T0015](https://atlas.mitre.org/techniques/AML.T0015) | Evade AI Model | Outside PantherClaw: covered by model security | It happens in model development. |
 | [AML.T0107](https://atlas.mitre.org/techniques/AML.T0107) | Exploitation for Defense Evasion | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [AML.T0071](https://atlas.mitre.org/techniques/AML.T0071) | False RAG Entry Injection | Mapped | prevent `prevent.vector_writers` |
-| [AML.T0073](https://atlas.mitre.org/techniques/AML.T0073) | Impersonation | Mapped | prevent `prevent.approval_independence`, `prevent.workload_proof`; scenarios `RT-045`, `RT-047`, `RT-050` |
+| [AML.T0073](https://atlas.mitre.org/techniques/AML.T0073) | Impersonation | Mapped | prevent `prevent.approval_independence`, `prevent.federation_token`, `prevent.workload_proof`; scenarios `RT-045`, `RT-047`, `RT-050` |
 | [AML.T0138](https://atlas.mitre.org/techniques/AML.T0138) | Indicator Removal | Mapped | rules `pc.integrity.evidence_integrity_failed` |
 | [AML.T0054](https://atlas.mitre.org/techniques/AML.T0054) | LLM Jailbreak | No PantherClaw control yet | LLM jailbreak (AML.T0054): it happens inside the model's conversation; PantherClaw decides on the actions that follow, not on the prompt. |
 | [AML.T0068](https://atlas.mitre.org/techniques/AML.T0068) | LLM Prompt Obfuscation | Mapped | prevent `prevent.content_hold`; scenarios `RT-200` |
@@ -496,7 +496,7 @@ Mapping digest: `3c7a646923e8e4e3bfb591856fab65aaa575842e9e465600f2835250618d79b
 | [T1091](https://attack.mitre.org/techniques/T1091) | Replication Through Removable Media | Outside PantherClaw: covered by physical security | It needs physical access. |
 | [T1072](https://attack.mitre.org/techniques/T1072) | Software Deployment Tools | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1080](https://attack.mitre.org/techniques/T1080) | Taint Shared Content | No PantherClaw control yet | Taint shared content (T1080): granted writes to a shared repository are allowed; PantherClaw does not judge their content. |
-| [T1550](https://attack.mitre.org/techniques/T1550) | Use Alternate Authentication Material | Mapped (partly) | T1550.001: prevent `prevent.mcp_token_binding`, `prevent.workload_proof`; rules `pc.identity.key_new_network`, `pc.identity.workload_proof_refused`, `pc.integrity.effect_without_receipt`; Hub playbooks `pc.playbook.leaked-key`; scenarios `RT-012`, `RT-013`, `RT-032`, `RT-036`, `RT-048`, `RT-151`, `RT-152`, `RT-153`, `RT-202`, `RT-260`<br>T1550.002 not covered<br>T1550.003 not covered<br>T1550.004 not covered |
+| [T1550](https://attack.mitre.org/techniques/T1550) | Use Alternate Authentication Material | Mapped (partly) | T1550.001: prevent `prevent.federation_token`, `prevent.mcp_token_binding`, `prevent.workload_proof`; rules `pc.identity.key_new_network`, `pc.identity.workload_proof_refused`, `pc.integrity.effect_without_receipt`; Hub playbooks `pc.playbook.leaked-key`; scenarios `RT-012`, `RT-013`, `RT-032`, `RT-036`, `RT-048`, `RT-151`, `RT-152`, `RT-153`, `RT-202`, `RT-260`<br>T1550.002 not covered<br>T1550.003 not covered<br>T1550.004 not covered |
 
 ### Collection (TA0009)
 

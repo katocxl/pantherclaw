@@ -58,16 +58,28 @@ const (
 	PrincipalUser           PrincipalKind = "user"
 	PrincipalServiceAccount PrincipalKind = "service_account"
 	PrincipalInstance       PrincipalKind = "instance"
+	// PrincipalFederated is a peer organization's agent (G0 M35 D1024a,
+	// D1024c): ID is the peer org, Peer the peer agent's
+	// pc:org/<id>/agent/<id>[/inst/<id>] name. Only a cross-org grant
+	// represents it.
+	PrincipalFederated PrincipalKind = "federated"
 )
 
-// Principal identifies a user, a service account or (as a grantor of a
-// delegation) a workload instance.
+// Principal identifies a user, a service account, a federated peer agent
+// or (as a grantor of a delegation) a workload instance.
 type Principal struct {
 	Kind PrincipalKind
 	ID   ids.UUID
+	// Peer is the peer agent of a federated principal; empty otherwise.
+	Peer string
 }
 
-func (p Principal) String() string { return string(p.Kind) + ":" + p.ID.String() }
+func (p Principal) String() string {
+	if p.Kind == PrincipalFederated {
+		return string(p.Kind) + ":" + p.ID.String() + ":" + p.Peer
+	}
+	return string(p.Kind) + ":" + p.ID.String()
+}
 
 // State is a grant's state. Expiry is a time check at use time, not a state.
 type State string
@@ -245,8 +257,10 @@ func (g Grant) validate(lookup func(op string) *defs.Definition) error {
 	switch {
 	case g.ID.IsZero() || g.Org.IsZero() || g.AgentID.IsZero() || g.EnvironmentID.IsZero() || g.Principal.ID.IsZero():
 		return invalid("grant: id, org, agent, environment and principal are required")
-	case g.Principal.Kind != PrincipalUser && g.Principal.Kind != PrincipalServiceAccount:
-		return invalid("grant: the represented principal is a user or a service account")
+	case g.Principal.Kind != PrincipalUser && g.Principal.Kind != PrincipalServiceAccount && g.Principal.Kind != PrincipalFederated:
+		return invalid("grant: the represented principal is a user, a service account or a federated peer agent")
+	case (g.Principal.Kind == PrincipalFederated) != (g.Principal.Peer != ""):
+		return invalid("grant: a federated principal names its peer agent, and only it does")
 	case g.Revision < 1:
 		return invalid("grant: revisions start at 1")
 	case !g.NotBefore.Before(g.ExpiresAt):
@@ -255,8 +269,8 @@ func (g Grant) validate(lookup func(op string) *defs.Definition) error {
 		return invalid("grant: delegation settings cannot be negative")
 	case g.Delegation.Depth > 0 && g.Delegation.MaxChildren < 1:
 		return invalid("grant: a grant that may delegate needs max_children of at least 1")
-	case g.MinAttestation < 0 || g.MinAttestation > 2:
-		return invalid("grant: min_attestation is 0, 1 or 2")
+	case g.MinAttestation < 0 || g.MinAttestation > 3: // L3: G0 M35 D1030
+		return invalid("grant: min_attestation is 0 to 3")
 	case len(g.Requirements) > maxRequirements:
 		return invalid("grant: at most %d requirements", maxRequirements)
 	case g.Grantor.ID.IsZero() || g.Basis == "":
@@ -274,6 +288,11 @@ func (g Grant) validate(lookup func(op string) *defs.Definition) error {
 	for i, r := range g.Requirements {
 		if err := r.validate(fmt.Sprintf("requirements[%d]", i)); err != nil {
 			return err
+		}
+		// A federated principal is not a person, so a step-up requirement
+		// cannot be held (D1024e). Refuse it when the grant is issued.
+		if g.Principal.Kind == PrincipalFederated && r.StepUp != nil {
+			return invalid("requirements[%d]: a cross-org grant cannot require a step-up", i)
 		}
 	}
 	if err := validateFlows(g.Flows); err != nil {

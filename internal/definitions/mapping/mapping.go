@@ -55,6 +55,8 @@ type Mapper struct {
 	hook map[string]*compiled
 	// a2a maps A2A methods (G0 M14 D9).
 	a2a map[string]*compiled
+	// federation maps the federation face's JSON-RPC methods (G0 M35 D1024).
+	federation map[string]*compiled
 	// resources are the mcp_resource mappings, matched by URI (G0 M15 D30).
 	resources []*compiled
 	http      []*compiled
@@ -96,7 +98,10 @@ func New(pkg *domain.Package, limits celenv.Limits) (*Mapper, error) {
 	if err != nil {
 		return nil, err
 	}
-	m := &Mapper{pkg: pkg, mcp: map[string]*compiled{}, hook: map[string]*compiled{}, a2a: map[string]*compiled{}}
+	m := &Mapper{
+		pkg: pkg, mcp: map[string]*compiled{}, hook: map[string]*compiled{}, a2a: map[string]*compiled{},
+		federation: map[string]*compiled{},
+	}
 	for i := range pkg.Definitions {
 		d := &pkg.Definitions[i]
 		if d.IsModel() {
@@ -118,6 +123,8 @@ func New(pkg *domain.Package, limits celenv.Limits) (*Mapper, error) {
 				m.http = append(m.http, c)
 			case domain.ChannelA2A:
 				m.a2a[mp.Method] = c
+			case domain.ChannelFederation:
+				m.federation[mp.Method] = c
 			case domain.ChannelMCPResource:
 				m.resources = append(m.resources, c)
 			case domain.ChannelSDK, domain.ChannelAuthZEN, domain.ChannelRuntime:
@@ -250,6 +257,10 @@ func (c *compiled) hasPathVar(v string) bool {
 	if slices.Contains(c.resource.Vars, v) {
 		return true
 	}
+	if c.m.Channel == domain.ChannelFederation && v == FederationListingVar {
+		// The listing the face URL names (/fed/a2a/{listing}; G0 M35 D1024).
+		return true
+	}
 	return slices.ContainsFunc(c.tmpl, func(s segment) bool { return s.param == v })
 }
 
@@ -284,6 +295,27 @@ func (m *Mapper) Runtime(ctx context.Context, tc Context, tool string, args []by
 // D9), as an MCP tool call is mapped by name.
 func (m *Mapper) A2A(ctx context.Context, tc Context, method string, params []byte) (actionir.Parsed, error) {
 	return m.byName(ctx, tc, m.a2a, method, params, domain.ChannelA2A)
+}
+
+// FederationListingVar is the path variable a federation mapping reads the
+// listing from (path.listing).
+const FederationListingVar = "listing"
+
+// Federation maps a trusted peer org's agent's call to the gateway's
+// federation face (G0 M35 D1024) by JSON-RPC method name and JSON params,
+// as an A2A call is mapped by method; the listing the face URL names is
+// path.listing.
+func (m *Mapper) Federation(ctx context.Context, tc Context, listing, method string, params []byte) (actionir.Parsed, error) {
+	c, ok := m.federation[method]
+	if !ok {
+		return actionir.Parsed{}, fmt.Errorf("%w: method %q", ErrUnmapped, method)
+	}
+	input, err := DecodeInput(params)
+	if err != nil {
+		return actionir.Parsed{}, err
+	}
+	return m.run(ctx, tc, c, domain.ChannelFederation,
+		map[string]any{"input": input, "path": map[string]any{FederationListingVar: listing}, "query": map[string]any{}}, nil)
 }
 
 // Tool is an MCP tool the package maps, with the operation it maps to.

@@ -48,6 +48,111 @@ service AuthorityService {
   // nothing is recorded.
   // permission: gateway.observe
   rpc RecordToolObservation(RecordToolObservationRequest) returns (RecordToolObservationResponse);
+  // IssueFederationToken signs the pap-fed+jwt the gateway sends with a
+  // message to a trusted peer org's agent (G0 M35 D1023): bound to the exact
+  // request (method POST, htu, body digest) and to this org's ALLOWED
+  // action on a federation connection, signed with the org's federation
+  // key, valid for 60 seconds. Anything else is refused.
+  // permission: gateway.dispatch
+  rpc IssueFederationToken(IssueFederationTokenRequest) returns (IssueFederationTokenResponse);
+  // RecordFederationReceipt records the minimal receipt a peer org returned
+  // for a federated message (D1023, FQ35-2), checked with the pinned peer
+  // keys: VALID, or INVALID; an empty receipt is MISSING. A peer DENY or
+  // HELD fails the dispatch's outcome with PEER_DENIED or PEER_HELD.
+  // permission: gateway.dispatch
+  rpc RecordFederationReceipt(RecordFederationReceiptRequest) returns (RecordFederationReceiptResponse);
+  // StartFederatedCall admits a trusted peer org's agent's request to the
+  // gateway's federation face (G0 M35 D1024c): it verifies the pap-fed+jwt
+  // against an ACTIVE trust's pinned keys and the exact request (POST, htu,
+  // body digest), consumes its jti once, needs the peer agent's federated
+  // agent (issued by a cross-org grant), ensures the day's federation run,
+  // stores the token as the IN receipt and returns a call valid for 60
+  // seconds that Authorize uses once. Anything else is
+  // FEDERATION_NOT_TRUSTED, FEDERATION_TOKEN_INVALID or FEDERATION_REPLAY.
+  // permission: gateway.authorize
+  rpc StartFederatedCall(StartFederatedCallRequest) returns (StartFederatedCallResponse);
+}
+
+// StartFederatedCallRequest is the peer's request as the gateway received it.
+message StartFederatedCallRequest {
+  // The token from "Authorization: PAP-Fed <token>".
+  string credential = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 8192
+  }];
+  // SHA-256 of the raw request body, computed before any parsing.
+  bytes body_sha256 = 2 [(buf.validate.field).bytes.len = 32];
+  // The request URL from the gateway's configured federation face URL plus
+  // /fed/a2a/{listing}, never from the Host header.
+  string htu = 3 [(buf.validate.field).string = {
+    min_len: 9
+    max_len: 2048
+    pattern: "^https://"
+  }];
+  // The listing the URL names.
+  string listing = 4 [(buf.validate.field).string.pattern = "^[a-z0-9-]{1,63}$"];
+}
+
+// StartFederatedCallResponse is the admitted call; the gateway maps the
+// request with these ids.
+message StartFederatedCallResponse {
+  string call_id = 1;
+  string run_id = 2;
+  // The peer agent's federated agent and its instance in this org.
+  string agent_id = 3;
+  string instance_id = 4;
+  // Its environment.
+  string env = 5;
+  // The listing's a2a connection (the action's connection).
+  string connection_id = 6;
+  // The peer's own action id (pap.action), for the receipt.
+  string peer_action_id = 7;
+  google.protobuf.Timestamp expire_time = 8;
+}
+
+// IssueFederationTokenRequest names the action and the exact request.
+message IssueFederationTokenRequest {
+  // Our action, ALLOWED for dispatch on a federation connection.
+  string action_id = 1 [(buf.validate.field).string.uuid = true];
+  // SHA-256 of the exact request body.
+  bytes body_sha256 = 2 [(buf.validate.field).bytes.len = 32];
+  // The exact URL the gateway POSTs to: the peer's federation face plus
+  // /fed/a2a/{listing}.
+  string htu = 3 [(buf.validate.field).string = {
+    min_len: 9
+    max_len: 2048
+    pattern: "^https://"
+  }];
+}
+
+// IssueFederationTokenResponse is the token.
+message IssueFederationTokenResponse {
+  // Compact JWS, typ pap-fed+jwt; sent as "Authorization: PAP-Fed <token>".
+  string token = 1;
+  google.protobuf.Timestamp expire_time = 2;
+}
+
+// RecordFederationReceiptRequest is the peer's answer receipt.
+message RecordFederationReceiptRequest {
+  // Our action.
+  string action_id = 1 [(buf.validate.field).string.uuid = true];
+  // The PC-Fed-Receipt header value; empty when the peer sent none.
+  string receipt = 2 [(buf.validate.field).string.max_len = 16384];
+  // SHA-256 of the exact request body sent (the token's bh), which the
+  // receipt's req_digest must equal.
+  bytes body_sha256 = 3 [(buf.validate.field).bytes.len = 32];
+}
+
+// RecordFederationReceiptResponse says what was recorded.
+message RecordFederationReceiptResponse {
+  // "VALID", "MISSING" or "INVALID".
+  string state = 1;
+  // The peer's decision in a VALID receipt: "ALLOW", "DENY" or "HELD".
+  string decision = 2;
+  // PEER_DENIED or PEER_HELD when the dispatch outcome failed for it.
+  string reason = 3;
+  // The agent-safe text for a peer refusal or hold; empty otherwise.
+  string agent_text = 4;
 }
 
 // Decision is an authorization decision (PAP-1 §7.1).
@@ -137,6 +242,14 @@ message AuthorizeRequest {
   // call on a gateway-carried channel without CONTENT_SCAN_SCANNED is a
   // scan_incomplete (not_scanned) and holds.
   ContentScan content_scan = 5;
+  // Channel federation only (G0 M35 D1024c): the call StartFederatedCall
+  // admitted, instead of workload credentials. Single use; the action must
+  // name its run, agent instance and listing, and the call's body digest
+  // and URL must be the request's.
+  string federation_call_id = 6 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
 }
 
 // ContentFinding is one content flag: a kind and a location, never a value
@@ -242,6 +355,11 @@ message AuthorizeResponse {
   // The agent-safe explanation (F330, HR-400). Without a transaction it
   // has no transaction id and no recovery action.
   AgentExplanation agent_explanation = 20;
+  // For channel federation, on every decision: the compact JWS (typ
+  // pap-fed-receipt+jwt) signed by this org's federation key at decision
+  // time, which the gateway returns to the peer in PC-Fed-Receipt (G0 M35
+  // D1024d). Empty for any other channel.
+  string federation_receipt = 21;
 }
 
 // ConsequenceState is what a consequence rule said about an action

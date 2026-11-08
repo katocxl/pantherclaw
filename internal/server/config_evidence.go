@@ -37,6 +37,12 @@ type EvidenceConfig struct {
 	// checkpoint in a transparency log, with a timestamp (design decision
 	// 12, HR-195; Team edition). Off by default.
 	Anchoring AnchoringConfig `json:"anchoring"`
+	// Witnesses cosign the deployment-wide root log, and only it (G0 M35
+	// D1041, FQ35-3; Business edition; needs anchoring). WitnessThreshold
+	// is how many must cosign each checkpoint before a shortfall is
+	// reported (0: every one).
+	Witnesses        []WitnessConfig `json:"witnesses"`
+	WitnessThreshold int             `json:"witness_threshold" env:"PC_EVIDENCE_WITNESS_THRESHOLD"`
 }
 
 // AnchoringConfig configures the anchored global root (G0 M7 design
@@ -58,6 +64,13 @@ type AnchoringConfig struct {
 	Rekor RekorConfig `json:"rekor"`
 	// TSA is the RFC 3161 timestamp authority.
 	TSA TSAConfig `json:"tsa"`
+	// Trust is where the log's key and the authority's chain come from:
+	// "file" (the default: rekor.public_key_file and tsa.cert_chain_file) or
+	// "tuf" (Sigstore's trusted_root.json through TUF, refreshed daily;
+	// G0 M35 D1040).
+	Trust string `json:"trust" env:"PC_EVIDENCE_ANCHORING_TRUST"`
+	// TUF configures the TUF client when Trust is "tuf".
+	TUF TUFConfig `json:"tuf"`
 }
 
 // RekorConfig names a Rekor v2 log.
@@ -116,7 +129,8 @@ func (c *Config) validateEvidence() []error {
 	if d := c.Evidence.CheckpointInterval.D(); d != 0 && (d < time.Minute || d > time.Hour) {
 		errs = append(errs, errors.New("evidence.checkpoint_interval must be 1m..60m"))
 	}
-	return append(errs, c.Evidence.Anchoring.validate()...)
+	errs = append(errs, c.Evidence.Anchoring.validate()...)
+	return append(errs, c.validateTrail()...) // G0 M35 D1040, D1041
 }
 
 // Anchoring interval bounds.
@@ -144,7 +158,7 @@ func (a AnchoringConfig) validate() []error {
 	if !httpsBase(a.Rekor.URL) {
 		errs = append(errs, errors.New("evidence.anchoring.rekor.url must be an https URL (for example https://log2025-1.rekor.sigstore.dev)"))
 	}
-	if a.Rekor.PublicKeyFile == "" {
+	if a.Rekor.PublicKeyFile == "" && !a.tufTrust() {
 		errs = append(errs, errors.New("evidence.anchoring.rekor.public_key_file is required: the log's key from Sigstore's trusted_root.json"))
 	}
 	if o := a.rekorOrigin(); !validLogOrigin(o) {
@@ -153,8 +167,12 @@ func (a AnchoringConfig) validate() []error {
 	if !httpsBase(a.TSA.URL) {
 		errs = append(errs, errors.New("evidence.anchoring.tsa.url must be an https URL (for example https://timestamp.sigstore.dev/api/v1/timestamp)"))
 	}
-	if a.TSA.CertChainFile == "" {
+	if a.TSA.CertChainFile == "" && !a.tufTrust() {
 		errs = append(errs, errors.New("evidence.anchoring.tsa.cert_chain_file is required: the authority's PEM chain, signing certificate first"))
+	}
+	// HR-781: trust comes from the files or from TUF, not both.
+	if a.tufTrust() && (a.Rekor.PublicKeyFile != "" || a.TSA.CertChainFile != "") {
+		errs = append(errs, errors.New("evidence.anchoring.trust \"tuf\" replaces public_key_file and cert_chain_file; configure exactly one"))
 	}
 	return errs
 }
@@ -189,10 +207,11 @@ func (c *Config) checkpointInterval() time.Duration {
 }
 
 // evidenceKeyPurposes are the signing keys the configuration needs beyond
-// those every deployment has: the checkpoints_pq key for co-signing.
+// those every deployment has: the checkpoint and receipt co-signing keys.
 func (c *Config) evidenceKeyPurposes() []keys.Purpose {
 	if c.Evidence.MLDSACosign {
-		return []keys.Purpose{keys.PurposeCheckpointsPQ}
+		// The receipts_pq key co-signs receipts (G0 M35 D1042).
+		return []keys.Purpose{keys.PurposeCheckpointsPQ, keys.PurposeReceiptsPQ}
 	}
 	return nil
 }
@@ -211,6 +230,9 @@ func (c *Config) checkEvidenceEdition(e domain.Entitlements) error {
 	}
 	if c.Evidence.Anchoring.Enabled && !e.Edition.Paid() {
 		return errAnchoringEdition
+	}
+	if len(c.Evidence.Witnesses) > 0 && !e.Witnesses() { // G0 M35 D1041
+		return errWitnessesEdition
 	}
 	return nil
 }

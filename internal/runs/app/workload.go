@@ -105,9 +105,9 @@ func (s *Service) StartForWorkloadTx(ctx context.Context, tx db.TenantTx, in Wor
 		p.PrincipalUserID = &principal
 	case gdomain.PrincipalServiceAccount:
 		p.PrincipalSaID = &principal
-	case gdomain.PrincipalInstance:
+	case gdomain.PrincipalInstance, gdomain.PrincipalFederated:
 		// A cloud runtime names its own refusal (D992). A pod run keeps
-		// K8S_RUN_GRANT_PRINCIPAL.
+		// K8S_RUN_GRANT_PRINCIPAL. A federated principal is not a workload.
 		if in.Runtime {
 			return Run{}, ErrRuntimeRunGrantPrincipal
 		}

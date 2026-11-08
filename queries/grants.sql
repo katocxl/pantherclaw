@@ -10,7 +10,8 @@
 SELECT g.id, g.agent_id, g.instance_id, g.principal_user_id, g.principal_sa_id, g.environment_id, g.parent_id,
        g.depth, g.state, g.current_revision, g.grantor_kind, g.grantor_id, g.basis,
        r.task_ref, r.not_before, r.expires_at, r.bounds, r.requirements, r.limits,
-       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id, r.flows
+       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id, r.flows,
+       g.peer_org_id, g.peer_agent
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
 WHERE g.org_id = sqlc.arg(org_id) AND g.id = sqlc.arg(id);
@@ -20,7 +21,8 @@ WHERE g.org_id = sqlc.arg(org_id) AND g.id = sqlc.arg(id);
 SELECT g.id, g.agent_id, g.instance_id, g.principal_user_id, g.principal_sa_id, g.environment_id, g.parent_id,
        g.depth, g.state, g.current_revision, g.grantor_kind, g.grantor_id, g.basis,
        r.task_ref, r.not_before, r.expires_at, r.bounds, r.requirements, r.limits,
-       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id, r.flows
+       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id, r.flows,
+       g.peer_org_id, g.peer_agent
 FROM pc.grant_lineage l
 JOIN pc.grants g ON g.org_id = l.org_id AND g.id = l.ancestor_id
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
@@ -30,11 +32,11 @@ ORDER BY l.distance DESC;
 -- name: InsertGrant :exec
 INSERT INTO pc.grants (org_id, id, agent_id, instance_id, principal_user_id, principal_sa_id, environment_id,
                        parent_id, depth, current_revision, grantor_kind, grantor_id, basis, ceiling_id,
-                       automation_execution_id)
+                       automation_execution_id, peer_org_id, peer_agent)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.narg(instance_id), sqlc.narg(principal_user_id),
         sqlc.narg(principal_sa_id), sqlc.arg(environment_id), sqlc.narg(parent_id), sqlc.arg(depth),
         sqlc.arg(current_revision), sqlc.arg(grantor_kind), sqlc.arg(grantor_id), sqlc.arg(basis), sqlc.narg(ceiling_id),
-        sqlc.narg(automation_execution_id));
+        sqlc.narg(automation_execution_id), sqlc.narg(peer_org_id), sqlc.narg(peer_agent));
 
 -- name: InsertGrantRevision :exec
 INSERT INTO pc.grant_revisions (org_id, id, grant_id, revision, task_ref, not_before, expires_at, bounds,
@@ -135,11 +137,13 @@ LEFT JOIN pc.teams t ON t.org_id = a.org_id AND t.id = a.team_id
 WHERE a.org_id = sqlc.arg(org_id) AND a.id = sqlc.arg(id);
 
 -- name: SubjectRun :one
-SELECT agent_id, instance_id, environment_id, launcher_user_id, launcher_sa_id, launcher_instance_id,
-       principal_user_id, principal_sa_id, parent_run_id, grant_id, state, expires_at, task_ref, simulated, scope_operations, max_tokens, token_cap_run_id,
-       (state = 'ACTIVE' AND expires_at > now())::boolean AS live
-FROM pc.runs
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+SELECT r.agent_id, r.instance_id, r.environment_id, r.launcher_user_id, r.launcher_sa_id, r.launcher_instance_id,
+       r.principal_user_id, r.principal_sa_id, r.parent_run_id, r.grant_id, r.state, r.expires_at, r.task_ref, r.simulated, r.scope_operations, r.max_tokens, r.token_cap_run_id,
+       (r.state = 'ACTIVE' AND r.expires_at > now())::boolean AS live,
+       r.peer_org_id, r.peer_agent,
+       COALESCE((SELECT t.peer_name FROM pc.federation_trusts t WHERE t.org_id = r.org_id AND t.id = r.federation_trust_id), '')::text AS peer_org_name
+FROM pc.runs r
+WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(id);
 
 -- name: SubjectUserActive :one
 SELECT state = 'ACTIVE' AS active FROM pc.users WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
@@ -152,7 +156,7 @@ SELECT state = 'ACTIVE' AS active FROM pc.service_accounts WHERE org_id = sqlc.a
 SELECT g.id, g.agent_id, g.instance_id, g.principal_user_id, g.principal_sa_id, g.environment_id, g.parent_id,
        g.depth, g.state, g.current_revision, g.grantor_kind, g.grantor_id, g.basis,
        r.task_ref, r.not_before, r.expires_at, r.bounds, r.requirements, r.limits,
-       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, r.flows
+       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, r.flows, g.peer_org_id, g.peer_agent
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
 WHERE g.org_id = sqlc.arg(org_id)

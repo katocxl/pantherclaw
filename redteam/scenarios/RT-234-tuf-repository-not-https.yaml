@@ -1,0 +1,16 @@
+apiVersion: pantherclaw.range/v1
+id: RT-234
+title: Sigstore trust is not fetched from a repository that is not https
+category: boundary
+suite: platform
+tier: business
+attacker: A7
+threats: [T-354]
+rules: [HR-780, HR-782]
+techniques_none: "Tests PantherClaw's TUF client: a repository URL that is not https is refused."
+harness_only: true
+steps:
+  - id: http-tuf
+    do: federation.probe
+    with: {attack: http_tuf}
+    expect: {outcome: REFUSED, reason: TUF_NOT_HTTPS, decisive_control: HR-780}

@@ -147,10 +147,10 @@ message CreateEnvelopeRequest {
   bytes limits = 5 [(buf.validate.field).bytes.max_len = 65536];
   // Settings.
   GuardrailSettings settings = 6;
-  // Lowest attestation level (0-2).
+  // Lowest attestation level (0-3; L3 since G0 M35 D1030).
   int32 min_attestation_level = 7 [(buf.validate.field).int32 = {
     gte: 0
-    lte: 2
+    lte: 3
   }];
 }
 
@@ -182,10 +182,10 @@ message ReviseEnvelopeRequest {
   bytes limits = 6 [(buf.validate.field).bytes.max_len = 65536];
   // Settings.
   GuardrailSettings settings = 7;
-  // Lowest attestation level (0-2).
+  // Lowest attestation level (0-3; L3 since G0 M35 D1030).
   int32 min_attestation_level = 8 [(buf.validate.field).int32 = {
     gte: 0
-    lte: 2
+    lte: 3
   }];
 }
 

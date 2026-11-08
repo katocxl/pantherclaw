@@ -32,6 +32,10 @@ const (
 	PurposeCheckpointsPQ = "checkpoints_pq"
 	PurposeAnchors       = "anchors"
 	PurposeEvidencePacks = "evidence_packs"
+	// PurposeGlobalLog signs the deployment-wide root log's checkpoints and
+	// PurposeReceiptsPQ co-signs receipts (G0 M35 D1041, D1042).
+	PurposeGlobalLog  = "global_log"
+	PurposeReceiptsPQ = "receipts_pq"
 
 	AlgEdDSA   = "EdDSA"
 	AlgES256   = "ES256"
@@ -41,7 +45,7 @@ const (
 // purposeAlg pins each purpose to its one algorithm (HR-095).
 var purposeAlg = map[string]string{
 	PurposeReceipts: AlgEdDSA, PurposeCheckpoints: AlgEdDSA, PurposeEvidencePacks: AlgEdDSA,
-	PurposeCheckpointsPQ: AlgMLDSA65, PurposeAnchors: AlgES256,
+	PurposeCheckpointsPQ: AlgMLDSA65, PurposeAnchors: AlgES256, PurposeGlobalLog: AlgEdDSA, PurposeReceiptsPQ: AlgMLDSA65,
 }
 
 // Key states, as the deployment's key registry names them.

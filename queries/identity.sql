@@ -132,16 +132,16 @@ INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, en
     issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, last_network, last_seen_at,
     decided_by, decided_at, expires_at)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(jkt), sqlc.arg(public_jwk), sqlc.arg(state),
-    sqlc.arg(enrolled_via), sqlc.narg(enrollment_token_id), sqlc.arg(issuer_revision_id), sqlc.arg(binding), 2,
+    sqlc.arg(enrolled_via), sqlc.narg(enrollment_token_id), sqlc.arg(issuer_revision_id), sqlc.arg(binding), sqlc.arg(att_level),
     sqlc.arg(attested_until), sqlc.narg(release_state), sqlc.narg(release_digest), sqlc.narg(last_network), now(),
     sqlc.narg(decided_by), CASE WHEN sqlc.arg(state)::text = 'ADMITTED' THEN now() END,
     CASE WHEN sqlc.arg(state)::text = 'ADMITTED' THEN NULL ELSE now() + interval '7 days' END)
 RETURNING *;
 
--- Renews L2 until a fresh attestation expires (HR-143).
+-- Renews L2 or L3 until a fresh attestation expires (HR-143, G0 M35 D1030).
 -- name: AttestInstance :one
 UPDATE pc.agent_instances SET attested_until = sqlc.arg(attested_until), updated_at = now()
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'ADMITTED' AND att_level = 2
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'ADMITTED' AND att_level >= 2
 RETURNING *;
 
 -- Discovery (HR-148): unknown keys a gateway reports. One advisory lock per

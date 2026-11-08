@@ -439,4 +439,16 @@ var Prevent = []PreventControl{
 			"T1651": "Cloud administration command (T1651): SSM SendCommand and Azure VM Run Command are irreversible code.execute operations, decided on their one instance or VM and their commands.",
 		},
 	},
+	{
+		// G0 M35 D1024, D1206 M35-2: a peer agent's pap-fed+jwt is refused
+		// unless it verifies once for this request.
+		ID: "prevent.federation_token", Title: "A peer agent's federation token is refused unless it verifies once for this request", Surface: SurfaceCredential,
+		ReasonCodes: []string{"FEDERATION_TOKEN_INVALID", "FEDERATION_NOT_TRUSTED", "FEDERATION_REPLAY"},
+		HR:          []string{"HR-774", "HR-775"}, Requires: RequiresAlways,
+		Techniques: []string{"AML.T0073", "T1550.001"},
+		Why: map[string]string{
+			"AML.T0073": "Impersonation (AML.T0073): a federation token that does not verify under the pinned keys, or that names an org with no active trust, is refused.",
+			"T1550.001": "Application access token (T1550.001): a federation token is bound to one request and is refused when it is replayed.",
+		},
+	},
 }
