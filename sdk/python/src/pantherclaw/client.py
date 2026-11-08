@@ -18,7 +18,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -350,6 +350,22 @@ def _read_timeout(res: Any, seconds: float) -> None:
         sock.settimeout(max(0.05, seconds))
 
 
+_TRACEPARENT_LEN = 55
+_MAX_TRACESTATE = 512
+
+
+def _otel_context() -> dict[str, str]:
+    """The current OpenTelemetry context as W3C headers when opentelemetry
+    is importable; empty otherwise. No dependency is added (G0 M36 D1060)."""
+    try:
+        from opentelemetry import propagate  # type: ignore[import-not-found]
+    except ImportError:
+        return {}
+    carrier: dict[str, str] = {}
+    propagate.inject(carrier)
+    return {str(k).lower(): str(v) for k, v in carrier.items()}
+
+
 @dataclass
 class _Sent:
     status: int
@@ -363,10 +379,16 @@ class Client:
 
     ``builtins`` are the names of the tools the agent SDK has built in: only
     these are sent without a server, and only for them does an observe
-    answer let the call run."""
+    answer let the call run.
+
+    ``trace_context`` returns the caller's W3C trace context to forward with
+    each call (a mapping with ``traceparent`` and optionally ``tracestate``),
+    so PantherClaw's spans join the agent's trace (G0 M36 D1060). Without
+    it, the active OpenTelemetry context is forwarded when ``opentelemetry``
+    is importable; otherwise none is."""
 
     def __init__(self, key_file: pap.KeyFile, gateway: str = "", server: str = "", run_id: str = "", timeout: float = 15.0,
-                 builtins: Iterable[str] = ()) -> None:
+                 builtins: Iterable[str] = (), trace_context: Callable[[], Mapping[str, str]] | None = None) -> None:
         if not key_file.identifier:
             raise ValueError("the key file has no identifier: enroll the workload first")
         self._server = (server or key_file.server).rstrip("/")
@@ -382,6 +404,7 @@ class Client:
         self._nonces: dict[str, str] = {}
         self._lock = threading.Lock()
         self._opener = urllib.request.build_opener(_NoRedirect)
+        self._trace_context = trace_context
 
     @property
     def gateway(self) -> str:
@@ -410,6 +433,28 @@ class Client:
         with self._lock:
             self._token, self._expiry = token, int(claims["exp"])
         return token
+
+    def _trace_headers(self) -> dict[str, str]:
+        """The caller's traceparent and tracestate to forward, if any (G0 M36 D1060).
+
+        The gateway reads them for correlation only and ignores anything it
+        cannot parse; a failure here never stops a call."""
+        carrier: dict[str, str] = {}
+        try:
+            if self._trace_context is not None:
+                carrier = {str(k).lower(): str(v) for k, v in self._trace_context().items()}
+            else:
+                carrier = _otel_context()
+        except Exception:  # noqa: BLE001 - correlation only: a failing hook forwards nothing
+            return {}
+        out: dict[str, str] = {}
+        tp = carrier.get("traceparent", "")
+        if len(tp) == _TRACEPARENT_LEN and tp.startswith("00-"):
+            out["traceparent"] = tp
+            ts = carrier.get("tracestate", "")
+            if ts and len(ts) <= _MAX_TRACESTATE:
+                out["tracestate"] = ts
+        return out
 
     def _do(self, method: str, url: str, body: bytes, headers: dict[str, str], extra: float = 0) -> _Sent:
         res = self._send(method, url, body, headers, False, extra)
@@ -475,7 +520,7 @@ class Client:
         if server:
             call["server"] = server
         call |= {"input": tool_input, "tool_use_id": tool_use_id}
-        headers = {"Content-Type": "application/json", "PAP-Run-Id": self._run, "PC-Action-Id": action_id}
+        headers = {"Content-Type": "application/json", "PAP-Run-Id": self._run, "PC-Action-Id": action_id, **self._trace_headers()}
         try:
             body = json.dumps(call, separators=(",", ":"), ensure_ascii=False).encode()
             if len(body) > MAX_CALL_BODY:
@@ -500,7 +545,7 @@ class Client:
             return HookResult("cannot_decide", why="the command is larger than the /hook face takes")
         try:
             res = self._do("POST", f"{self._gateway}/hook/{urllib.parse.quote(connection, safe='')}", body,
-                           {"Content-Type": "application/json", "PAP-Run-Id": self._run})
+                           {"Content-Type": "application/json", "PAP-Run-Id": self._run, **self._trace_headers()})
         except Exception as e:  # noqa: BLE001 - every failure is "cannot decide" (HR-200)
             return HookResult("cannot_decide", why=f"PantherClaw cannot decide: {e}")
         if res.status != 200:
@@ -533,7 +578,7 @@ class Client:
             return HookResult("cannot_decide", why="the call is larger than the /hook face takes")
         try:
             res = self._do("POST", f"{self._gateway}/hook/{urllib.parse.quote(connection, safe='')}", body,
-                           {"Content-Type": "application/json", "PAP-Run-Id": self._run})
+                           {"Content-Type": "application/json", "PAP-Run-Id": self._run, **self._trace_headers()})
         except Exception as e:  # noqa: BLE001 - every failure is "cannot decide" (HR-200)
             return HookResult("cannot_decide", why=f"PantherClaw cannot decide: {e}")
         if res.status != 200:

@@ -168,7 +168,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	built := time.Since(start)
-	res := h.engine.Dispatch(ctx, dispatch.Call{Connection: conn, Action: p, Workload: in.Creds})
+	res := h.engine.Dispatch(ctx, dispatch.Call{Connection: conn, Action: p, Workload: in.Creds, Trace: in.Trace})
 	timing(w, built, res.Timings, time.Since(start))
 	h.write(w, r, res)
 }

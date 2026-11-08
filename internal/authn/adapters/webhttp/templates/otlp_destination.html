@@ -1,0 +1,22 @@
+{{template "head" .}}
+<h1>OpenTelemetry destination: {{.Name}}</h1>
+<p>State: <strong>{{.State}}</strong>. Created by <code>{{.CreatedBy}}</code> at {{.CreatedAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{with .ActivatedAt}}; activated {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}{{with .DisabledAt}}; disabled {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}.</p>
+<dl>
+<dt>Destination</dt><dd><code>{{.ID}}</code></dd>
+<dt>OTLP/HTTP traces endpoint</dt><dd class="untrusted"><code>{{.URL}}</code></dd>
+<dt>Headers sent</dt><dd>{{range $i, $n := .HeaderNames}}{{if $i}}, {{end}}<code>{{$n}}</code>{{else}}none{{end}} (values are sealed and never shown)</dd>
+<dt>Data sent</dt><dd>Spans of your agents' decisions, tool calls and model calls: operation, decision and reason code, coverage, outcome, model and token counts, timings, ids and console links. Never prompts, arguments or answers.</dd>
+<dt>Network</dt><dd>Public addresses only.</dd>
+{{with .LastSuccessAt}}<dt>Last export</dt><dd>{{.UTC.Format "2006-01-02 15:04:05 UTC"}}</dd>{{end}}
+{{with .FailingSince}}<dt>Failing since</dt><dd>{{.UTC.Format "2006-01-02 15:04:05 UTC"}} ({{$.LastFailureCode}}); after 24 hours of failures the destination is disabled.</dd>{{end}}
+</dl>
+{{if .CanActivate}}
+<h2>Activate</h2>
+<p class="note">Once activated, PantherClaw sends the spans of every new decision, tool call and model call to this endpoint, with the headers above. Check the URL before you go on. Activating needs your security key.</p>
+<p><button type="button" class="danger" id="activate" data-path="/integrations/otlp-destinations/{{.ID}}/confirm">Activate with your security key</button></p>
+{{else}}{{if eq .State "PENDING"}}
+<p class="note">You cannot activate this destination: that needs otlp.manage and a security key.</p>
+{{end}}{{end}}
+<p id="status" role="status"></p>
+<script src="/static/integrations.js"></script>
+{{template "foot" .}}

@@ -59,6 +59,7 @@ func (h *Handler) legacy(w http.ResponseWriter, r *http.Request, conn *control.C
 	if !ok {
 		return
 	}
+	in = metaTrace(in, p.Meta)
 	if !sess.binds(conn.GetId(), in) {
 		noSession(w, req.ID)
 		return

@@ -1,0 +1,19 @@
+apiVersion: pantherclaw.range/v1
+id: RT-239
+title: A Web Push payload is a title and an approval link
+category: boundary
+suite: platform
+tier: business
+attacker: A8
+threats: [T-359]
+rules: [HR-793]
+techniques_none: "Tests PantherClaw's own Web Push: the payload is a title and a link, on an allowed host."
+harness_only: true
+steps:
+  - id: push-leak
+    do: reach.probe
+    with: {attack: push_leak}
+    expect:
+      outcome: REFUSED
+      reason: PUSH_LINK_ONLY
+      decisive_control: HR-793

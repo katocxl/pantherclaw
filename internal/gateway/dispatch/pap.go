@@ -111,6 +111,10 @@ type Inbound struct {
 	// Run and Action are the PAP-Run-Id and PC-Action-Id headers; empty
 	// when absent or not UUIDs.
 	Run, Action string
+	// Trace is the agent's W3C trace context from the traceparent and
+	// tracestate headers (G0 M36 D1060, HR-785); nil when absent or
+	// invalid. Correlation only: it never enters the ActionIR.
+	Trace *pb.TraceContext
 }
 
 // ReadInbound reads the PAP/1 credentials of r, whose raw body is body
@@ -137,6 +141,9 @@ func ReadInbound(r *http.Request, body []byte, htu string) Inbound {
 	if act, err := ids.ParseUUID(r.Header.Get(HeaderActionID)); err == nil && !act.IsZero() {
 		in.Action = act.String()
 	}
+	// The trace context is read here, before any face removes headers on
+	// its way upstream (D1060).
+	in.Trace = ParseTraceContext(r.Header.Values(HeaderTraceparent), r.Header.Values(HeaderTracestate))
 	return in
 }
 

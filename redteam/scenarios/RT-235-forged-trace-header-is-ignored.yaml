@@ -1,0 +1,19 @@
+apiVersion: pantherclaw.range/v1
+id: RT-235
+title: A forged trace header is ignored and does not change the action
+category: boundary
+suite: platform
+tier: business
+attacker: A8
+threats: [T-355]
+rules: [HR-785]
+techniques_none: "Tests PantherClaw's own trace parsing: an all-zero or non-strict traceparent is ignored."
+harness_only: true
+steps:
+  - id: forged-trace
+    do: reach.probe
+    with: {attack: forged_trace}
+    expect:
+      outcome: REFUSED
+      reason: TRACE_IGNORED
+      decisive_control: HR-785

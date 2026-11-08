@@ -292,7 +292,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		output(w, denyOutput(id, "PantherClaw cannot decide this call: "+why+"."))
 		return
 	}
-	res := h.engine.Dispatch(r.Context(), dispatch.Call{Connection: conn, Action: parsed, Workload: in.Creds})
+	res := h.engine.Dispatch(r.Context(), dispatch.Call{Connection: conn, Action: parsed, Workload: in.Creds, Trace: in.Trace})
 	if res.Class == dispatch.AuthenticationFailed {
 		h.refusePAP(w, r, res.PAPError, res.Nonce)
 		return

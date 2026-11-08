@@ -1,0 +1,19 @@
+apiVersion: pantherclaw.range/v1
+id: RT-237
+title: Approval fatigue flags a decider and never approves the hold
+category: boundary
+suite: platform
+tier: business
+attacker: A8
+threats: [T-357]
+rules: [HR-789, HR-791]
+techniques_none: "Tests PantherClaw's own approval fatigue: a flag changes routing and does not approve."
+harness_only: true
+steps:
+  - id: fatigue-stamp
+    do: reach.probe
+    with: {attack: fatigue_stamp}
+    expect:
+      outcome: REFUSED
+      reason: FATIGUE_DOES_NOT_APPROVE
+      decisive_control: HR-789

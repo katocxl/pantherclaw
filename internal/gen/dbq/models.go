@@ -356,6 +356,20 @@ type PcApprovalBatch struct {
 	CompletedAt  *time.Time
 }
 
+type PcApprovalDeputy struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	PersonID    ids.UUID
+	DeputyID    ids.UUID
+	StartsAt    time.Time
+	EndsAt      time.Time
+	CreatedBy   string
+	State       string
+	CancelledBy *string
+	CancelledAt *time.Time
+	CreatedAt   time.Time
+}
+
 type PcApprovalEvidence struct {
 	OrgID            ids.OrgID
 	ID               ids.UUID
@@ -367,6 +381,23 @@ type PcApprovalEvidence struct {
 	CreatedAt        time.Time
 	BodyRemovedAt    *time.Time
 	RemovedByPolicy  *ids.UUID
+}
+
+type PcApprovalFatigueFlag struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	UserID    ids.UUID
+	Reason    string
+	Approvals int32
+	FlaggedAt time.Time
+	ClearsAt  time.Time
+}
+
+type PcApprovalFatigueSetting struct {
+	OrgID     ids.OrgID
+	Routing   string
+	UpdatedBy string
+	UpdatedAt time.Time
 }
 
 type PcApprovalRequest struct {
@@ -3209,6 +3240,17 @@ type PcNotificationChannel struct {
 	SignatureScheme     string
 }
 
+type PcNotificationPreference struct {
+	OrgID            ids.OrgID
+	UserID           ids.UUID
+	ApprovalDelivery string
+	DigestMinutes    int16
+	QuietStart       *string
+	QuietEnd         *string
+	TimeZone         *string
+	UpdatedAt        time.Time
+}
+
 type PcObservation struct {
 	OrgID           ids.OrgID
 	ID              ids.UUID
@@ -3375,6 +3417,29 @@ type PcOrgTermsAcceptance struct {
 	DpaVersion   string
 	ClientIp     string
 	AcceptedAt   time.Time
+}
+
+type PcOtlpDestination struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Name                string
+	Url                 string
+	HeaderSecretRef     []byte
+	HeaderNames         []string
+	State               string
+	CreatedBy           string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	DisabledAt          *time.Time
+	UpdatedAt           time.Time
+	CursorSeq           int64
+	LastSuccessAt       *time.Time
+	FailureCount        int32
+	FailingSince        *time.Time
+	LastFailureCode     *string
+	NextAttemptAt       time.Time
 }
 
 type PcOutcomeCollection struct {
@@ -3895,6 +3960,21 @@ type PcProtectedChangeSetting struct {
 	Mode      string
 	UpdatedBy ids.UUID
 	UpdatedAt time.Time
+}
+
+type PcPushSubscription struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	UserID        ids.UUID
+	Endpoint      string
+	P256dh        []byte
+	Auth          []byte
+	Label         string
+	State         string
+	CreatedAt     time.Time
+	LastSuccessAt *time.Time
+	FailureCount  int32
+	RemovedAt     *time.Time
 }
 
 type PcRateCounter struct {
@@ -4796,6 +4876,9 @@ type PcTransaction struct {
 	DownstreamNotVerifiable bool
 	ConsequenceRoot         *ids.UUID
 	ConsequencePosition     *int32
+	TraceID                 []byte
+	ParentSpanID            []byte
+	TraceFlags              pgtype.Int2
 }
 
 type PcTransactionLink struct {

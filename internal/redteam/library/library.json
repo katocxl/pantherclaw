@@ -1402,6 +1402,31 @@
     "tier": "business",
     "techniques_none": "Tests PantherClaw's TUF client: a repository URL that is not https is refused."
   },
+  "RT-235": {
+    "digest": "988713645d92228e9d6cd13e98d4cf75876ac295f86fba7bcf7e48aec5de07e8",
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's own trace parsing: an all-zero or non-strict traceparent is ignored."
+  },
+  "RT-236": {
+    "digest": "cb1e6c5d7fa2f066c0cadb05828212c28c86231ddd0e158ec1427423fc9b40f1",
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's own OTLP destinations: a private URL is refused and Team cannot export."
+  },
+  "RT-237": {
+    "digest": "5b4309ac92025f2698d607ddcef006c80d4dc741ad1eeb6092d2d7034da78f41",
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's own approval fatigue: a flag changes routing and does not approve."
+  },
+  "RT-238": {
+    "digest": "ae348372d5785051b3950dbf93bbdd1f542b07e53a88acea271bdbb4d946b3d3",
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's own deputies: an ineligible or self deputy is refused."
+  },
+  "RT-239": {
+    "digest": "1754c6a83d8e0582de89535842b174ca31f2e74928caaf767d95d58bbf001da7",
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's own Web Push: the payload is a title and a link, on an allowed host."
+  },
   "RT-260": {
     "digest": "c917e88f00ab7079bb682ed8910c4fc428f9679cdc487522fa9c7a1d2a957105",
     "tier": "community",

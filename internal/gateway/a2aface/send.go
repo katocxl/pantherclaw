@@ -39,7 +39,7 @@ func (h *Handler) dispatch(ctx context.Context, c call, sink dispatch.A2ASink) d
 	if sink != nil {
 		ctx = dispatch.WithA2AStream(ctx, sink)
 	}
-	return h.engine.Dispatch(ctx, dispatch.Call{Connection: c.conn, Action: parsed, Workload: c.in.Creds})
+	return h.engine.Dispatch(ctx, dispatch.Call{Connection: c.conn, Action: parsed, Workload: c.in.Creds, Trace: c.in.Trace})
 }
 
 // stream serves SendStreamingMessage and SubscribeToTask: the events are

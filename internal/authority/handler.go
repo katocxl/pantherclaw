@@ -99,6 +99,8 @@ func (h *Handler) Authorize(ctx context.Context, req *pantherclawv1.AuthorizeReq
 		}}}, "")
 		return out, nil
 	}
+	// Correlation only: carried to the new transaction's row (G0 M36 D1060).
+	ctx = withTrace(ctx, req.GetTraceContext())
 	creds := credentials(req.GetWorkload())
 	var findings []pipeline.PayloadFinding
 	for _, f := range req.GetPayloadFindings() {

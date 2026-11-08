@@ -15,12 +15,15 @@ WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id) AND t.action_i
 -- name: InsertDecision :exec
 INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code, gateway_id,
                              state, evaluations, grant_id, grant_revision, basis_digest, effective_hash, dedupe_key, mode,
-                             connection_id, channel, target_type, target_id, read_class, simulated)
+                             connection_id, channel, target_type, target_id, read_class, trace_id, parent_span_id,
+                             trace_flags, simulated)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(run_id), sqlc.arg(action_id), sqlc.arg(action_hash), sqlc.arg(operation),
         sqlc.arg(decision), sqlc.arg(reason_code), sqlc.arg(gateway_id), sqlc.arg(state), 1, sqlc.narg(grant_id),
         sqlc.narg(grant_revision), sqlc.narg(basis_digest), sqlc.narg(effective_hash), sqlc.narg(dedupe_key), sqlc.arg(mode),
         sqlc.narg(connection_id), sqlc.narg(channel), sqlc.narg(target_type), sqlc.narg(target_id),
         sqlc.narg(read_class),
+        -- The agent's trace context: correlation only (G0 M36 D1060, HR-785).
+        sqlc.narg(trace_id), sqlc.narg(parent_span_id), sqlc.narg(trace_flags),
         -- HR-220: a transaction is simulated exactly when its run is.
         coalesce((SELECT r.simulated FROM pc.runs r WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(run_id)), false));
 

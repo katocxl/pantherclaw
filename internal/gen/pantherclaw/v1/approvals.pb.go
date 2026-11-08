@@ -390,6 +390,219 @@ func (EvidenceQuestion) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{5}
 }
 
+// FatigueWindow is the span GetApprovalFatigue measures.
+type FatigueWindow int32
+
+const (
+	FatigueWindow_FATIGUE_WINDOW_UNSPECIFIED FatigueWindow = 0
+	FatigueWindow_FATIGUE_WINDOW_HOUR        FatigueWindow = 1
+	FatigueWindow_FATIGUE_WINDOW_DAY         FatigueWindow = 2
+	FatigueWindow_FATIGUE_WINDOW_WEEK        FatigueWindow = 3
+)
+
+// Enum value maps for FatigueWindow.
+var (
+	FatigueWindow_name = map[int32]string{
+		0: "FATIGUE_WINDOW_UNSPECIFIED",
+		1: "FATIGUE_WINDOW_HOUR",
+		2: "FATIGUE_WINDOW_DAY",
+		3: "FATIGUE_WINDOW_WEEK",
+	}
+	FatigueWindow_value = map[string]int32{
+		"FATIGUE_WINDOW_UNSPECIFIED": 0,
+		"FATIGUE_WINDOW_HOUR":        1,
+		"FATIGUE_WINDOW_DAY":         2,
+		"FATIGUE_WINDOW_WEEK":        3,
+	}
+)
+
+func (x FatigueWindow) Enum() *FatigueWindow {
+	p := new(FatigueWindow)
+	*p = x
+	return p
+}
+
+func (x FatigueWindow) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FatigueWindow) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_approvals_proto_enumTypes[6].Descriptor()
+}
+
+func (FatigueWindow) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_approvals_proto_enumTypes[6]
+}
+
+func (x FatigueWindow) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FatigueWindow.Descriptor instead.
+func (FatigueWindow) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{6}
+}
+
+// FatigueRouting is the org's fatigue routing (G0 M36 D1063).
+type FatigueRouting int32
+
+const (
+	FatigueRouting_FATIGUE_ROUTING_UNSPECIFIED FatigueRouting = 0
+	// A flagged decider is routed and notified last: the other eligible
+	// deciders first, the flagged one only at the final escalation step.
+	FatigueRouting_FATIGUE_ROUTING_ROUTE FatigueRouting = 1
+	// Flags are shown but routing ignores them.
+	FatigueRouting_FATIGUE_ROUTING_OFF FatigueRouting = 2
+)
+
+// Enum value maps for FatigueRouting.
+var (
+	FatigueRouting_name = map[int32]string{
+		0: "FATIGUE_ROUTING_UNSPECIFIED",
+		1: "FATIGUE_ROUTING_ROUTE",
+		2: "FATIGUE_ROUTING_OFF",
+	}
+	FatigueRouting_value = map[string]int32{
+		"FATIGUE_ROUTING_UNSPECIFIED": 0,
+		"FATIGUE_ROUTING_ROUTE":       1,
+		"FATIGUE_ROUTING_OFF":         2,
+	}
+)
+
+func (x FatigueRouting) Enum() *FatigueRouting {
+	p := new(FatigueRouting)
+	*p = x
+	return p
+}
+
+func (x FatigueRouting) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FatigueRouting) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_approvals_proto_enumTypes[7].Descriptor()
+}
+
+func (FatigueRouting) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_approvals_proto_enumTypes[7]
+}
+
+func (x FatigueRouting) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FatigueRouting.Descriptor instead.
+func (FatigueRouting) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{7}
+}
+
+// ApprovalDeputyState is a deputy window's state.
+type ApprovalDeputyState int32
+
+const (
+	ApprovalDeputyState_APPROVAL_DEPUTY_STATE_UNSPECIFIED ApprovalDeputyState = 0
+	ApprovalDeputyState_APPROVAL_DEPUTY_STATE_ACTIVE      ApprovalDeputyState = 1
+	ApprovalDeputyState_APPROVAL_DEPUTY_STATE_CANCELLED   ApprovalDeputyState = 2
+)
+
+// Enum value maps for ApprovalDeputyState.
+var (
+	ApprovalDeputyState_name = map[int32]string{
+		0: "APPROVAL_DEPUTY_STATE_UNSPECIFIED",
+		1: "APPROVAL_DEPUTY_STATE_ACTIVE",
+		2: "APPROVAL_DEPUTY_STATE_CANCELLED",
+	}
+	ApprovalDeputyState_value = map[string]int32{
+		"APPROVAL_DEPUTY_STATE_UNSPECIFIED": 0,
+		"APPROVAL_DEPUTY_STATE_ACTIVE":      1,
+		"APPROVAL_DEPUTY_STATE_CANCELLED":   2,
+	}
+)
+
+func (x ApprovalDeputyState) Enum() *ApprovalDeputyState {
+	p := new(ApprovalDeputyState)
+	*p = x
+	return p
+}
+
+func (x ApprovalDeputyState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ApprovalDeputyState) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_approvals_proto_enumTypes[8].Descriptor()
+}
+
+func (ApprovalDeputyState) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_approvals_proto_enumTypes[8]
+}
+
+func (x ApprovalDeputyState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ApprovalDeputyState.Descriptor instead.
+func (ApprovalDeputyState) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{8}
+}
+
+// ApprovalGroupBy is what ListApprovalGroups groups by.
+type ApprovalGroupBy int32
+
+const (
+	ApprovalGroupBy_APPROVAL_GROUP_BY_UNSPECIFIED ApprovalGroupBy = 0
+	// Requests for the same grant, operation and target (HR-037).
+	ApprovalGroupBy_APPROVAL_GROUP_BY_VARIANT   ApprovalGroupBy = 1
+	ApprovalGroupBy_APPROVAL_GROUP_BY_AGENT     ApprovalGroupBy = 2
+	ApprovalGroupBy_APPROVAL_GROUP_BY_RUN       ApprovalGroupBy = 3
+	ApprovalGroupBy_APPROVAL_GROUP_BY_OPERATION ApprovalGroupBy = 4
+)
+
+// Enum value maps for ApprovalGroupBy.
+var (
+	ApprovalGroupBy_name = map[int32]string{
+		0: "APPROVAL_GROUP_BY_UNSPECIFIED",
+		1: "APPROVAL_GROUP_BY_VARIANT",
+		2: "APPROVAL_GROUP_BY_AGENT",
+		3: "APPROVAL_GROUP_BY_RUN",
+		4: "APPROVAL_GROUP_BY_OPERATION",
+	}
+	ApprovalGroupBy_value = map[string]int32{
+		"APPROVAL_GROUP_BY_UNSPECIFIED": 0,
+		"APPROVAL_GROUP_BY_VARIANT":     1,
+		"APPROVAL_GROUP_BY_AGENT":       2,
+		"APPROVAL_GROUP_BY_RUN":         3,
+		"APPROVAL_GROUP_BY_OPERATION":   4,
+	}
+)
+
+func (x ApprovalGroupBy) Enum() *ApprovalGroupBy {
+	p := new(ApprovalGroupBy)
+	*p = x
+	return p
+}
+
+func (x ApprovalGroupBy) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ApprovalGroupBy) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_approvals_proto_enumTypes[9].Descriptor()
+}
+
+func (ApprovalGroupBy) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_approvals_proto_enumTypes[9]
+}
+
+func (x ApprovalGroupBy) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ApprovalGroupBy.Descriptor instead.
+func (ApprovalGroupBy) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{9}
+}
+
 // ApprovalRequirement is one merged requirement of a request with its
 // sources (design decisions 1 and 14).
 type ApprovalRequirement struct {
@@ -2069,6 +2282,1012 @@ func (x *DeclineApprovalBatchResponse) GetRequests() []*ApprovalRequest {
 	return nil
 }
 
+// FatigueFlag is a flag that has not cleared.
+type FatigueFlag struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// APPROVAL_RATE (30 or more approvals in an hour), FAST_APPROVALS (a
+	// median under 5 seconds over 10 or more in an hour) or NO_DECLINES (50
+	// or more in a day with no decline).
+	Reason string `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`
+	// The approvals measured when it was raised.
+	Approvals int32                  `protobuf:"varint,2,opt,name=approvals,proto3" json:"approvals,omitempty"`
+	FlagTime  *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=flag_time,json=flagTime,proto3" json:"flag_time,omitempty"`
+	// 4 hours after it was raised.
+	ClearTime     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=clear_time,json=clearTime,proto3" json:"clear_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FatigueFlag) Reset() {
+	*x = FatigueFlag{}
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FatigueFlag) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FatigueFlag) ProtoMessage() {}
+
+func (x *FatigueFlag) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FatigueFlag.ProtoReflect.Descriptor instead.
+func (*FatigueFlag) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *FatigueFlag) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *FatigueFlag) GetApprovals() int32 {
+	if x != nil {
+		return x.Approvals
+	}
+	return 0
+}
+
+func (x *FatigueFlag) GetFlagTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FlagTime
+	}
+	return nil
+}
+
+func (x *FatigueFlag) GetClearTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ClearTime
+	}
+	return nil
+}
+
+// DeciderFatigue is one decider's measures over the window.
+type DeciderFatigue struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	DeciderId string                 `protobuf:"bytes,1,opt,name=decider_id,json=deciderId,proto3" json:"decider_id,omitempty"`
+	Approvals int64                  `protobuf:"varint,2,opt,name=approvals,proto3" json:"approvals,omitempty"`
+	Declines  int64                  `protobuf:"varint,3,opt,name=declines,proto3" json:"declines,omitempty"`
+	// The most approvals in one clock hour.
+	PeakApprovalsPerHour int64 `protobuf:"varint,4,opt,name=peak_approvals_per_hour,json=peakApprovalsPerHour,proto3" json:"peak_approvals_per_hour,omitempty"`
+	// Median seconds from the decider's first notice of a request to their
+	// approval (0 when no approval had a notice).
+	MedianSecondsToApprove float64 `protobuf:"fixed64,5,opt,name=median_seconds_to_approve,json=medianSecondsToApprove,proto3" json:"median_seconds_to_approve,omitempty"`
+	// approvals / (approvals + declines); 0 without either.
+	ApproveShare float64 `protobuf:"fixed64,6,opt,name=approve_share,json=approveShare,proto3" json:"approve_share,omitempty"`
+	// Approvals between 22:00 and 06:00 in the decider's time zone (UTC
+	// without one).
+	NightApprovals int64 `protobuf:"varint,7,opt,name=night_approvals,json=nightApprovals,proto3" json:"night_approvals,omitempty"`
+	// The longest run of approvals with no decline.
+	LongestApprovalStreak int64 `protobuf:"varint,8,opt,name=longest_approval_streak,json=longestApprovalStreak,proto3" json:"longest_approval_streak,omitempty"`
+	// Flags that have not cleared.
+	Flags         []*FatigueFlag `protobuf:"bytes,9,rep,name=flags,proto3" json:"flags,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeciderFatigue) Reset() {
+	*x = DeciderFatigue{}
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeciderFatigue) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeciderFatigue) ProtoMessage() {}
+
+func (x *DeciderFatigue) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeciderFatigue.ProtoReflect.Descriptor instead.
+func (*DeciderFatigue) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *DeciderFatigue) GetDeciderId() string {
+	if x != nil {
+		return x.DeciderId
+	}
+	return ""
+}
+
+func (x *DeciderFatigue) GetApprovals() int64 {
+	if x != nil {
+		return x.Approvals
+	}
+	return 0
+}
+
+func (x *DeciderFatigue) GetDeclines() int64 {
+	if x != nil {
+		return x.Declines
+	}
+	return 0
+}
+
+func (x *DeciderFatigue) GetPeakApprovalsPerHour() int64 {
+	if x != nil {
+		return x.PeakApprovalsPerHour
+	}
+	return 0
+}
+
+func (x *DeciderFatigue) GetMedianSecondsToApprove() float64 {
+	if x != nil {
+		return x.MedianSecondsToApprove
+	}
+	return 0
+}
+
+func (x *DeciderFatigue) GetApproveShare() float64 {
+	if x != nil {
+		return x.ApproveShare
+	}
+	return 0
+}
+
+func (x *DeciderFatigue) GetNightApprovals() int64 {
+	if x != nil {
+		return x.NightApprovals
+	}
+	return 0
+}
+
+func (x *DeciderFatigue) GetLongestApprovalStreak() int64 {
+	if x != nil {
+		return x.LongestApprovalStreak
+	}
+	return 0
+}
+
+func (x *DeciderFatigue) GetFlags() []*FatigueFlag {
+	if x != nil {
+		return x.Flags
+	}
+	return nil
+}
+
+// GetApprovalFatigueRequest names the window and, optionally, one decider.
+type GetApprovalFatigueRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Window        FatigueWindow          `protobuf:"varint,1,opt,name=window,proto3,enum=pantherclaw.v1.FatigueWindow" json:"window,omitempty"`
+	DeciderId     *string                `protobuf:"bytes,2,opt,name=decider_id,json=deciderId,proto3,oneof" json:"decider_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetApprovalFatigueRequest) Reset() {
+	*x = GetApprovalFatigueRequest{}
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetApprovalFatigueRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetApprovalFatigueRequest) ProtoMessage() {}
+
+func (x *GetApprovalFatigueRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetApprovalFatigueRequest.ProtoReflect.Descriptor instead.
+func (*GetApprovalFatigueRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *GetApprovalFatigueRequest) GetWindow() FatigueWindow {
+	if x != nil {
+		return x.Window
+	}
+	return FatigueWindow_FATIGUE_WINDOW_UNSPECIFIED
+}
+
+func (x *GetApprovalFatigueRequest) GetDeciderId() string {
+	if x != nil && x.DeciderId != nil {
+		return *x.DeciderId
+	}
+	return ""
+}
+
+// GetApprovalFatigueResponse lists the deciders with responses in the
+// window, most approvals first (at most 200).
+type GetApprovalFatigueResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Deciders      []*DeciderFatigue      `protobuf:"bytes,1,rep,name=deciders,proto3" json:"deciders,omitempty"`
+	Routing       FatigueRouting         `protobuf:"varint,2,opt,name=routing,proto3,enum=pantherclaw.v1.FatigueRouting" json:"routing,omitempty"`
+	StartTime     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetApprovalFatigueResponse) Reset() {
+	*x = GetApprovalFatigueResponse{}
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetApprovalFatigueResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetApprovalFatigueResponse) ProtoMessage() {}
+
+func (x *GetApprovalFatigueResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetApprovalFatigueResponse.ProtoReflect.Descriptor instead.
+func (*GetApprovalFatigueResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *GetApprovalFatigueResponse) GetDeciders() []*DeciderFatigue {
+	if x != nil {
+		return x.Deciders
+	}
+	return nil
+}
+
+func (x *GetApprovalFatigueResponse) GetRouting() FatigueRouting {
+	if x != nil {
+		return x.Routing
+	}
+	return FatigueRouting_FATIGUE_ROUTING_UNSPECIFIED
+}
+
+func (x *GetApprovalFatigueResponse) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
+	}
+	return nil
+}
+
+// SetApprovalFatigueRoutingRequest sets the routing.
+type SetApprovalFatigueRoutingRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Routing       FatigueRouting         `protobuf:"varint,1,opt,name=routing,proto3,enum=pantherclaw.v1.FatigueRouting" json:"routing,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetApprovalFatigueRoutingRequest) Reset() {
+	*x = SetApprovalFatigueRoutingRequest{}
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetApprovalFatigueRoutingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetApprovalFatigueRoutingRequest) ProtoMessage() {}
+
+func (x *SetApprovalFatigueRoutingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetApprovalFatigueRoutingRequest.ProtoReflect.Descriptor instead.
+func (*SetApprovalFatigueRoutingRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *SetApprovalFatigueRoutingRequest) GetRouting() FatigueRouting {
+	if x != nil {
+		return x.Routing
+	}
+	return FatigueRouting_FATIGUE_ROUTING_UNSPECIFIED
+}
+
+// SetApprovalFatigueRoutingResponse returns the routing now in effect.
+type SetApprovalFatigueRoutingResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Routing       FatigueRouting         `protobuf:"varint,1,opt,name=routing,proto3,enum=pantherclaw.v1.FatigueRouting" json:"routing,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetApprovalFatigueRoutingResponse) Reset() {
+	*x = SetApprovalFatigueRoutingResponse{}
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetApprovalFatigueRoutingResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetApprovalFatigueRoutingResponse) ProtoMessage() {}
+
+func (x *SetApprovalFatigueRoutingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetApprovalFatigueRoutingResponse.ProtoReflect.Descriptor instead.
+func (*SetApprovalFatigueRoutingResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *SetApprovalFatigueRoutingResponse) GetRouting() FatigueRouting {
+	if x != nil {
+		return x.Routing
+	}
+	return FatigueRouting_FATIGUE_ROUTING_UNSPECIFIED
+}
+
+// ApprovalDeputy is a deputy window: routing and notices only (HR-173).
+type ApprovalDeputy struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// The person who is away.
+	PersonId string `protobuf:"bytes,2,opt,name=person_id,json=personId,proto3" json:"person_id,omitempty"`
+	// Who also gets that person's holds while the window is open.
+	DeputyId      string                 `protobuf:"bytes,3,opt,name=deputy_id,json=deputyId,proto3" json:"deputy_id,omitempty"`
+	StartTime     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime       *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	State         ApprovalDeputyState    `protobuf:"varint,6,opt,name=state,proto3,enum=pantherclaw.v1.ApprovalDeputyState" json:"state,omitempty"`
+	CreatedBy     string                 `protobuf:"bytes,7,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	CancelledBy   string                 `protobuf:"bytes,9,opt,name=cancelled_by,json=cancelledBy,proto3" json:"cancelled_by,omitempty"`
+	CancelTime    *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=cancel_time,json=cancelTime,proto3" json:"cancel_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApprovalDeputy) Reset() {
+	*x = ApprovalDeputy{}
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApprovalDeputy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApprovalDeputy) ProtoMessage() {}
+
+func (x *ApprovalDeputy) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApprovalDeputy.ProtoReflect.Descriptor instead.
+func (*ApprovalDeputy) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *ApprovalDeputy) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ApprovalDeputy) GetPersonId() string {
+	if x != nil {
+		return x.PersonId
+	}
+	return ""
+}
+
+func (x *ApprovalDeputy) GetDeputyId() string {
+	if x != nil {
+		return x.DeputyId
+	}
+	return ""
+}
+
+func (x *ApprovalDeputy) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
+	}
+	return nil
+}
+
+func (x *ApprovalDeputy) GetEndTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EndTime
+	}
+	return nil
+}
+
+func (x *ApprovalDeputy) GetState() ApprovalDeputyState {
+	if x != nil {
+		return x.State
+	}
+	return ApprovalDeputyState_APPROVAL_DEPUTY_STATE_UNSPECIFIED
+}
+
+func (x *ApprovalDeputy) GetCreatedBy() string {
+	if x != nil {
+		return x.CreatedBy
+	}
+	return ""
+}
+
+func (x *ApprovalDeputy) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *ApprovalDeputy) GetCancelledBy() string {
+	if x != nil {
+		return x.CancelledBy
+	}
+	return ""
+}
+
+func (x *ApprovalDeputy) GetCancelTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CancelTime
+	}
+	return nil
+}
+
+// SetApprovalDeputyRequest names the deputy and the window.
+type SetApprovalDeputyRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The person who will be away; the caller when unset.
+	PersonId *string `protobuf:"bytes,1,opt,name=person_id,json=personId,proto3,oneof" json:"person_id,omitempty"`
+	DeputyId string  `protobuf:"bytes,2,opt,name=deputy_id,json=deputyId,proto3" json:"deputy_id,omitempty"`
+	// When the window opens; now when unset.
+	StartTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	// When it closes: after the start and at most 30 days later.
+	EndTime       *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetApprovalDeputyRequest) Reset() {
+	*x = SetApprovalDeputyRequest{}
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetApprovalDeputyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetApprovalDeputyRequest) ProtoMessage() {}
+
+func (x *SetApprovalDeputyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetApprovalDeputyRequest.ProtoReflect.Descriptor instead.
+func (*SetApprovalDeputyRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *SetApprovalDeputyRequest) GetPersonId() string {
+	if x != nil && x.PersonId != nil {
+		return *x.PersonId
+	}
+	return ""
+}
+
+func (x *SetApprovalDeputyRequest) GetDeputyId() string {
+	if x != nil {
+		return x.DeputyId
+	}
+	return ""
+}
+
+func (x *SetApprovalDeputyRequest) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
+	}
+	return nil
+}
+
+func (x *SetApprovalDeputyRequest) GetEndTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EndTime
+	}
+	return nil
+}
+
+// SetApprovalDeputyResponse returns the window.
+type SetApprovalDeputyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Deputy        *ApprovalDeputy        `protobuf:"bytes,1,opt,name=deputy,proto3" json:"deputy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetApprovalDeputyResponse) Reset() {
+	*x = SetApprovalDeputyResponse{}
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetApprovalDeputyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetApprovalDeputyResponse) ProtoMessage() {}
+
+func (x *SetApprovalDeputyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetApprovalDeputyResponse.ProtoReflect.Descriptor instead.
+func (*SetApprovalDeputyResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *SetApprovalDeputyResponse) GetDeputy() *ApprovalDeputy {
+	if x != nil {
+		return x.Deputy
+	}
+	return nil
+}
+
+// CancelApprovalDeputyRequest names a window.
+type CancelApprovalDeputyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelApprovalDeputyRequest) Reset() {
+	*x = CancelApprovalDeputyRequest{}
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelApprovalDeputyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelApprovalDeputyRequest) ProtoMessage() {}
+
+func (x *CancelApprovalDeputyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelApprovalDeputyRequest.ProtoReflect.Descriptor instead.
+func (*CancelApprovalDeputyRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *CancelApprovalDeputyRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// CancelApprovalDeputyResponse returns the cancelled window.
+type CancelApprovalDeputyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Deputy        *ApprovalDeputy        `protobuf:"bytes,1,opt,name=deputy,proto3" json:"deputy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelApprovalDeputyResponse) Reset() {
+	*x = CancelApprovalDeputyResponse{}
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelApprovalDeputyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelApprovalDeputyResponse) ProtoMessage() {}
+
+func (x *CancelApprovalDeputyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelApprovalDeputyResponse.ProtoReflect.Descriptor instead.
+func (*CancelApprovalDeputyResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *CancelApprovalDeputyResponse) GetDeputy() *ApprovalDeputy {
+	if x != nil {
+		return x.Deputy
+	}
+	return nil
+}
+
+// ListApprovalDeputiesRequest filters windows.
+type ListApprovalDeputiesRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Only this person's windows; the caller's when unset, unless all is set.
+	PersonId *string `protobuf:"bytes,1,opt,name=person_id,json=personId,proto3,oneof" json:"person_id,omitempty"`
+	// Everyone's windows (needs waitlist.manage).
+	All bool `protobuf:"varint,2,opt,name=all,proto3" json:"all,omitempty"`
+	// Also cancelled and ended windows.
+	IncludeEnded  bool `protobuf:"varint,3,opt,name=include_ended,json=includeEnded,proto3" json:"include_ended,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListApprovalDeputiesRequest) Reset() {
+	*x = ListApprovalDeputiesRequest{}
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListApprovalDeputiesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListApprovalDeputiesRequest) ProtoMessage() {}
+
+func (x *ListApprovalDeputiesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListApprovalDeputiesRequest.ProtoReflect.Descriptor instead.
+func (*ListApprovalDeputiesRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *ListApprovalDeputiesRequest) GetPersonId() string {
+	if x != nil && x.PersonId != nil {
+		return *x.PersonId
+	}
+	return ""
+}
+
+func (x *ListApprovalDeputiesRequest) GetAll() bool {
+	if x != nil {
+		return x.All
+	}
+	return false
+}
+
+func (x *ListApprovalDeputiesRequest) GetIncludeEnded() bool {
+	if x != nil {
+		return x.IncludeEnded
+	}
+	return false
+}
+
+// ListApprovalDeputiesResponse lists windows, newest first (at most 200).
+type ListApprovalDeputiesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Deputies      []*ApprovalDeputy      `protobuf:"bytes,1,rep,name=deputies,proto3" json:"deputies,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListApprovalDeputiesResponse) Reset() {
+	*x = ListApprovalDeputiesResponse{}
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListApprovalDeputiesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListApprovalDeputiesResponse) ProtoMessage() {}
+
+func (x *ListApprovalDeputiesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListApprovalDeputiesResponse.ProtoReflect.Descriptor instead.
+func (*ListApprovalDeputiesResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *ListApprovalDeputiesResponse) GetDeputies() []*ApprovalDeputy {
+	if x != nil {
+		return x.Deputies
+	}
+	return nil
+}
+
+// ApprovalGroup is one group of requests the caller may see.
+type ApprovalGroup struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The agent, run or variant id, or the operation; empty for requests
+	// without one.
+	Key   string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Count int32  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
+	// Up to 25 request ids, newest first.
+	RequestIds []string `protobuf:"bytes,3,rep,name=request_ids,json=requestIds,proto3" json:"request_ids,omitempty"`
+	// Whether those requests could be reviewed as one batch on the approval
+	// page: Team edition, held actions of one operation and definition, each
+	// batchable (HR-175, HR-176). It approves nothing.
+	BatchEligible bool `protobuf:"varint,4,opt,name=batch_eligible,json=batchEligible,proto3" json:"batch_eligible,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApprovalGroup) Reset() {
+	*x = ApprovalGroup{}
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApprovalGroup) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApprovalGroup) ProtoMessage() {}
+
+func (x *ApprovalGroup) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApprovalGroup.ProtoReflect.Descriptor instead.
+func (*ApprovalGroup) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *ApprovalGroup) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *ApprovalGroup) GetCount() int32 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+func (x *ApprovalGroup) GetRequestIds() []string {
+	if x != nil {
+		return x.RequestIds
+	}
+	return nil
+}
+
+func (x *ApprovalGroup) GetBatchEligible() bool {
+	if x != nil {
+		return x.BatchEligible
+	}
+	return false
+}
+
+// ListApprovalGroupsRequest names the grouping.
+type ListApprovalGroupsRequest struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	GroupBy ApprovalGroupBy        `protobuf:"varint,1,opt,name=group_by,json=groupBy,proto3,enum=pantherclaw.v1.ApprovalGroupBy" json:"group_by,omitempty"`
+	// Only requests in these states (PENDING and EVIDENCE_REQUESTED when
+	// empty).
+	States        []ApprovalState `protobuf:"varint,2,rep,packed,name=states,proto3,enum=pantherclaw.v1.ApprovalState" json:"states,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListApprovalGroupsRequest) Reset() {
+	*x = ListApprovalGroupsRequest{}
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListApprovalGroupsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListApprovalGroupsRequest) ProtoMessage() {}
+
+func (x *ListApprovalGroupsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListApprovalGroupsRequest.ProtoReflect.Descriptor instead.
+func (*ListApprovalGroupsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *ListApprovalGroupsRequest) GetGroupBy() ApprovalGroupBy {
+	if x != nil {
+		return x.GroupBy
+	}
+	return ApprovalGroupBy_APPROVAL_GROUP_BY_UNSPECIFIED
+}
+
+func (x *ListApprovalGroupsRequest) GetStates() []ApprovalState {
+	if x != nil {
+		return x.States
+	}
+	return nil
+}
+
+// ListApprovalGroupsResponse lists groups, largest first.
+type ListApprovalGroupsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Groups        []*ApprovalGroup       `protobuf:"bytes,1,rep,name=groups,proto3" json:"groups,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListApprovalGroupsResponse) Reset() {
+	*x = ListApprovalGroupsResponse{}
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListApprovalGroupsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListApprovalGroupsResponse) ProtoMessage() {}
+
+func (x *ListApprovalGroupsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_approvals_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListApprovalGroupsResponse.ProtoReflect.Descriptor instead.
+func (*ListApprovalGroupsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_approvals_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *ListApprovalGroupsResponse) GetGroups() []*ApprovalGroup {
+	if x != nil {
+		return x.Groups
+	}
+	return nil
+}
+
 var File_pantherclaw_v1_approvals_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_approvals_proto_rawDesc = "" +
@@ -2216,7 +3435,90 @@ const file_pantherclaw_v1_approvals_proto_rawDesc = "" +
 	"\x04note\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\xf4\x03R\x04note\"v\n" +
 	"\x1cDeclineApprovalBatchResponse\x12\x19\n" +
 	"\bbatch_id\x18\x01 \x01(\tR\abatchId\x12;\n" +
-	"\brequests\x18\x02 \x03(\v2\x1f.pantherclaw.v1.ApprovalRequestR\brequests*\xa4\x02\n" +
+	"\brequests\x18\x02 \x03(\v2\x1f.pantherclaw.v1.ApprovalRequestR\brequests\"\xb7\x01\n" +
+	"\vFatigueFlag\x12\x16\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x1c\n" +
+	"\tapprovals\x18\x02 \x01(\x05R\tapprovals\x127\n" +
+	"\tflag_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\bflagTime\x129\n" +
+	"\n" +
+	"clear_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tclearTime\"\x94\x03\n" +
+	"\x0eDeciderFatigue\x12\x1d\n" +
+	"\n" +
+	"decider_id\x18\x01 \x01(\tR\tdeciderId\x12\x1c\n" +
+	"\tapprovals\x18\x02 \x01(\x03R\tapprovals\x12\x1a\n" +
+	"\bdeclines\x18\x03 \x01(\x03R\bdeclines\x125\n" +
+	"\x17peak_approvals_per_hour\x18\x04 \x01(\x03R\x14peakApprovalsPerHour\x129\n" +
+	"\x19median_seconds_to_approve\x18\x05 \x01(\x01R\x16medianSecondsToApprove\x12#\n" +
+	"\rapprove_share\x18\x06 \x01(\x01R\fapproveShare\x12'\n" +
+	"\x0fnight_approvals\x18\a \x01(\x03R\x0enightApprovals\x126\n" +
+	"\x17longest_approval_streak\x18\b \x01(\x03R\x15longestApprovalStreak\x121\n" +
+	"\x05flags\x18\t \x03(\v2\x1b.pantherclaw.v1.FatigueFlagR\x05flags\"\x9b\x01\n" +
+	"\x19GetApprovalFatigueRequest\x12A\n" +
+	"\x06window\x18\x01 \x01(\x0e2\x1d.pantherclaw.v1.FatigueWindowB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x06window\x12,\n" +
+	"\n" +
+	"decider_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\tdeciderId\x88\x01\x01B\r\n" +
+	"\v_decider_id\"\xcd\x01\n" +
+	"\x1aGetApprovalFatigueResponse\x12:\n" +
+	"\bdeciders\x18\x01 \x03(\v2\x1e.pantherclaw.v1.DeciderFatigueR\bdeciders\x128\n" +
+	"\arouting\x18\x02 \x01(\x0e2\x1e.pantherclaw.v1.FatigueRoutingR\arouting\x129\n" +
+	"\n" +
+	"start_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\"h\n" +
+	" SetApprovalFatigueRoutingRequest\x12D\n" +
+	"\arouting\x18\x01 \x01(\x0e2\x1e.pantherclaw.v1.FatigueRoutingB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\arouting\"]\n" +
+	"!SetApprovalFatigueRoutingResponse\x128\n" +
+	"\arouting\x18\x01 \x01(\x0e2\x1e.pantherclaw.v1.FatigueRoutingR\arouting\"\xc3\x03\n" +
+	"\x0eApprovalDeputy\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
+	"\tperson_id\x18\x02 \x01(\tR\bpersonId\x12\x1b\n" +
+	"\tdeputy_id\x18\x03 \x01(\tR\bdeputyId\x129\n" +
+	"\n" +
+	"start_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
+	"\bend_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x129\n" +
+	"\x05state\x18\x06 \x01(\x0e2#.pantherclaw.v1.ApprovalDeputyStateR\x05state\x12\x1d\n" +
+	"\n" +
+	"created_by\x18\a \x01(\tR\tcreatedBy\x12;\n" +
+	"\vcreate_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12!\n" +
+	"\fcancelled_by\x18\t \x01(\tR\vcancelledBy\x12;\n" +
+	"\vcancel_time\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"cancelTime\"\xf5\x01\n" +
+	"\x18SetApprovalDeputyRequest\x12*\n" +
+	"\tperson_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\bpersonId\x88\x01\x01\x12%\n" +
+	"\tdeputy_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bdeputyId\x129\n" +
+	"\n" +
+	"start_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12=\n" +
+	"\bend_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\aendTimeB\f\n" +
+	"\n" +
+	"_person_id\"S\n" +
+	"\x19SetApprovalDeputyResponse\x126\n" +
+	"\x06deputy\x18\x01 \x01(\v2\x1e.pantherclaw.v1.ApprovalDeputyR\x06deputy\"7\n" +
+	"\x1bCancelApprovalDeputyRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"V\n" +
+	"\x1cCancelApprovalDeputyResponse\x126\n" +
+	"\x06deputy\x18\x01 \x01(\v2\x1e.pantherclaw.v1.ApprovalDeputyR\x06deputy\"\x8e\x01\n" +
+	"\x1bListApprovalDeputiesRequest\x12*\n" +
+	"\tperson_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\bpersonId\x88\x01\x01\x12\x10\n" +
+	"\x03all\x18\x02 \x01(\bR\x03all\x12#\n" +
+	"\rinclude_ended\x18\x03 \x01(\bR\fincludeEndedB\f\n" +
+	"\n" +
+	"_person_id\"Z\n" +
+	"\x1cListApprovalDeputiesResponse\x12:\n" +
+	"\bdeputies\x18\x01 \x03(\v2\x1e.pantherclaw.v1.ApprovalDeputyR\bdeputies\"\x7f\n" +
+	"\rApprovalGroup\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05count\x18\x02 \x01(\x05R\x05count\x12\x1f\n" +
+	"\vrequest_ids\x18\x03 \x03(\tR\n" +
+	"requestIds\x12%\n" +
+	"\x0ebatch_eligible\x18\x04 \x01(\bR\rbatchEligible\"\xaf\x01\n" +
+	"\x19ListApprovalGroupsRequest\x12F\n" +
+	"\bgroup_by\x18\x01 \x01(\x0e2\x1f.pantherclaw.v1.ApprovalGroupByB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\agroupBy\x12J\n" +
+	"\x06states\x18\x02 \x03(\x0e2\x1d.pantherclaw.v1.ApprovalStateB\x13\xbaH\x10\x92\x01\r\x10\b\x18\x01\"\a\x82\x01\x04\x10\x01 \x00R\x06states\"S\n" +
+	"\x1aListApprovalGroupsResponse\x125\n" +
+	"\x06groups\x18\x01 \x03(\v2\x1d.pantherclaw.v1.ApprovalGroupR\x06groups*\xa4\x02\n" +
 	"\rApprovalState\x12\x1e\n" +
 	"\x1aAPPROVAL_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16APPROVAL_STATE_PENDING\x10\x01\x12%\n" +
@@ -2256,7 +3558,26 @@ const file_pantherclaw_v1_approvals_proto_rawDesc = "" +
 	"\x1cEVIDENCE_QUESTION_WHY_NEEDED\x10\x01\x12\x1d\n" +
 	"\x19EVIDENCE_QUESTION_CONTEXT\x10\x02\x12%\n" +
 	"!EVIDENCE_QUESTION_PARAMETER_BASIS\x10\x03\x12\x1b\n" +
-	"\x17EVIDENCE_QUESTION_OTHER\x10\x042\xd2\x06\n" +
+	"\x17EVIDENCE_QUESTION_OTHER\x10\x04*y\n" +
+	"\rFatigueWindow\x12\x1e\n" +
+	"\x1aFATIGUE_WINDOW_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13FATIGUE_WINDOW_HOUR\x10\x01\x12\x16\n" +
+	"\x12FATIGUE_WINDOW_DAY\x10\x02\x12\x17\n" +
+	"\x13FATIGUE_WINDOW_WEEK\x10\x03*e\n" +
+	"\x0eFatigueRouting\x12\x1f\n" +
+	"\x1bFATIGUE_ROUTING_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15FATIGUE_ROUTING_ROUTE\x10\x01\x12\x17\n" +
+	"\x13FATIGUE_ROUTING_OFF\x10\x02*\x83\x01\n" +
+	"\x13ApprovalDeputyState\x12%\n" +
+	"!APPROVAL_DEPUTY_STATE_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cAPPROVAL_DEPUTY_STATE_ACTIVE\x10\x01\x12#\n" +
+	"\x1fAPPROVAL_DEPUTY_STATE_CANCELLED\x10\x02*\xac\x01\n" +
+	"\x0fApprovalGroupBy\x12!\n" +
+	"\x1dAPPROVAL_GROUP_BY_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19APPROVAL_GROUP_BY_VARIANT\x10\x01\x12\x1b\n" +
+	"\x17APPROVAL_GROUP_BY_AGENT\x10\x02\x12\x19\n" +
+	"\x15APPROVAL_GROUP_BY_RUN\x10\x03\x12\x1f\n" +
+	"\x1bAPPROVAL_GROUP_BY_OPERATION\x10\x042\x8e\f\n" +
 	"\x0fApprovalService\x12v\n" +
 	"\x14ListApprovalRequests\x12+.pantherclaw.v1.ListApprovalRequestsRequest\x1a,.pantherclaw.v1.ListApprovalRequestsResponse\"\x03\x90\x02\x01\x12p\n" +
 	"\x12GetApprovalRequest\x12).pantherclaw.v1.GetApprovalRequestRequest\x1a*.pantherclaw.v1.GetApprovalRequestResponse\"\x03\x90\x02\x01\x12w\n" +
@@ -2264,7 +3585,13 @@ const file_pantherclaw_v1_approvals_proto_rawDesc = "" +
 	"\x17RequestApprovalEvidence\x12..pantherclaw.v1.RequestApprovalEvidenceRequest\x1a/.pantherclaw.v1.RequestApprovalEvidenceResponse\x12t\n" +
 	"\x15ProposeNarrowerAction\x12,.pantherclaw.v1.ProposeNarrowerActionRequest\x1a-.pantherclaw.v1.ProposeNarrowerActionResponse\x12w\n" +
 	"\x16SubmitApprovalEvidence\x12-.pantherclaw.v1.SubmitApprovalEvidenceRequest\x1a..pantherclaw.v1.SubmitApprovalEvidenceResponse\x12q\n" +
-	"\x14DeclineApprovalBatch\x12+.pantherclaw.v1.DeclineApprovalBatchRequest\x1a,.pantherclaw.v1.DeclineApprovalBatchResponseB\xc7\x01\n" +
+	"\x14DeclineApprovalBatch\x12+.pantherclaw.v1.DeclineApprovalBatchRequest\x1a,.pantherclaw.v1.DeclineApprovalBatchResponse\x12p\n" +
+	"\x12GetApprovalFatigue\x12).pantherclaw.v1.GetApprovalFatigueRequest\x1a*.pantherclaw.v1.GetApprovalFatigueResponse\"\x03\x90\x02\x01\x12\x80\x01\n" +
+	"\x19SetApprovalFatigueRouting\x120.pantherclaw.v1.SetApprovalFatigueRoutingRequest\x1a1.pantherclaw.v1.SetApprovalFatigueRoutingResponse\x12h\n" +
+	"\x11SetApprovalDeputy\x12(.pantherclaw.v1.SetApprovalDeputyRequest\x1a).pantherclaw.v1.SetApprovalDeputyResponse\x12q\n" +
+	"\x14CancelApprovalDeputy\x12+.pantherclaw.v1.CancelApprovalDeputyRequest\x1a,.pantherclaw.v1.CancelApprovalDeputyResponse\x12v\n" +
+	"\x14ListApprovalDeputies\x12+.pantherclaw.v1.ListApprovalDeputiesRequest\x1a,.pantherclaw.v1.ListApprovalDeputiesResponse\"\x03\x90\x02\x01\x12p\n" +
+	"\x12ListApprovalGroups\x12).pantherclaw.v1.ListApprovalGroupsRequest\x1a*.pantherclaw.v1.ListApprovalGroupsResponse\"\x03\x90\x02\x01B\xc7\x01\n" +
 	"\x12com.pantherclaw.v1B\x0eApprovalsProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -2279,98 +3606,152 @@ func file_pantherclaw_v1_approvals_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_approvals_proto_rawDescData
 }
 
-var file_pantherclaw_v1_approvals_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_pantherclaw_v1_approvals_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_pantherclaw_v1_approvals_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
+var file_pantherclaw_v1_approvals_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_pantherclaw_v1_approvals_proto_goTypes = []any{
-	(ApprovalState)(0),                      // 0: pantherclaw.v1.ApprovalState
-	(ApprovalSubjectKind)(0),                // 1: pantherclaw.v1.ApprovalSubjectKind
-	(DeciderResponseKind)(0),                // 2: pantherclaw.v1.DeciderResponseKind
-	(DeclineReason)(0),                      // 3: pantherclaw.v1.DeclineReason
-	(SaferAlternative)(0),                   // 4: pantherclaw.v1.SaferAlternative
-	(EvidenceQuestion)(0),                   // 5: pantherclaw.v1.EvidenceQuestion
-	(*ApprovalRequirement)(nil),             // 6: pantherclaw.v1.ApprovalRequirement
-	(*ApprovalRequest)(nil),                 // 7: pantherclaw.v1.ApprovalRequest
-	(*DeciderResponse)(nil),                 // 8: pantherclaw.v1.DeciderResponse
-	(*ApprovalEvidence)(nil),                // 9: pantherclaw.v1.ApprovalEvidence
-	(*ApprovalVariant)(nil),                 // 10: pantherclaw.v1.ApprovalVariant
-	(*ApprovalEligibility)(nil),             // 11: pantherclaw.v1.ApprovalEligibility
-	(*ListApprovalRequestsRequest)(nil),     // 12: pantherclaw.v1.ListApprovalRequestsRequest
-	(*ListApprovalRequestsResponse)(nil),    // 13: pantherclaw.v1.ListApprovalRequestsResponse
-	(*GetApprovalRequestRequest)(nil),       // 14: pantherclaw.v1.GetApprovalRequestRequest
-	(*GetApprovalRequestResponse)(nil),      // 15: pantherclaw.v1.GetApprovalRequestResponse
-	(*DeclineApprovalRequestRequest)(nil),   // 16: pantherclaw.v1.DeclineApprovalRequestRequest
-	(*DeclineApprovalRequestResponse)(nil),  // 17: pantherclaw.v1.DeclineApprovalRequestResponse
-	(*RequestApprovalEvidenceRequest)(nil),  // 18: pantherclaw.v1.RequestApprovalEvidenceRequest
-	(*RequestApprovalEvidenceResponse)(nil), // 19: pantherclaw.v1.RequestApprovalEvidenceResponse
-	(*ProposeNarrowerActionRequest)(nil),    // 20: pantherclaw.v1.ProposeNarrowerActionRequest
-	(*ProposeNarrowerActionResponse)(nil),   // 21: pantherclaw.v1.ProposeNarrowerActionResponse
-	(*SubmitApprovalEvidenceRequest)(nil),   // 22: pantherclaw.v1.SubmitApprovalEvidenceRequest
-	(*SubmitApprovalEvidenceResponse)(nil),  // 23: pantherclaw.v1.SubmitApprovalEvidenceResponse
-	(*DeclineApprovalBatchRequest)(nil),     // 24: pantherclaw.v1.DeclineApprovalBatchRequest
-	(*DeclineApprovalBatchResponse)(nil),    // 25: pantherclaw.v1.DeclineApprovalBatchResponse
-	(*timestamppb.Timestamp)(nil),           // 26: google.protobuf.Timestamp
-	(Decision)(0),                           // 27: pantherclaw.v1.Decision
-	(*Reason)(nil),                          // 28: pantherclaw.v1.Reason
+	(ApprovalState)(0),                        // 0: pantherclaw.v1.ApprovalState
+	(ApprovalSubjectKind)(0),                  // 1: pantherclaw.v1.ApprovalSubjectKind
+	(DeciderResponseKind)(0),                  // 2: pantherclaw.v1.DeciderResponseKind
+	(DeclineReason)(0),                        // 3: pantherclaw.v1.DeclineReason
+	(SaferAlternative)(0),                     // 4: pantherclaw.v1.SaferAlternative
+	(EvidenceQuestion)(0),                     // 5: pantherclaw.v1.EvidenceQuestion
+	(FatigueWindow)(0),                        // 6: pantherclaw.v1.FatigueWindow
+	(FatigueRouting)(0),                       // 7: pantherclaw.v1.FatigueRouting
+	(ApprovalDeputyState)(0),                  // 8: pantherclaw.v1.ApprovalDeputyState
+	(ApprovalGroupBy)(0),                      // 9: pantherclaw.v1.ApprovalGroupBy
+	(*ApprovalRequirement)(nil),               // 10: pantherclaw.v1.ApprovalRequirement
+	(*ApprovalRequest)(nil),                   // 11: pantherclaw.v1.ApprovalRequest
+	(*DeciderResponse)(nil),                   // 12: pantherclaw.v1.DeciderResponse
+	(*ApprovalEvidence)(nil),                  // 13: pantherclaw.v1.ApprovalEvidence
+	(*ApprovalVariant)(nil),                   // 14: pantherclaw.v1.ApprovalVariant
+	(*ApprovalEligibility)(nil),               // 15: pantherclaw.v1.ApprovalEligibility
+	(*ListApprovalRequestsRequest)(nil),       // 16: pantherclaw.v1.ListApprovalRequestsRequest
+	(*ListApprovalRequestsResponse)(nil),      // 17: pantherclaw.v1.ListApprovalRequestsResponse
+	(*GetApprovalRequestRequest)(nil),         // 18: pantherclaw.v1.GetApprovalRequestRequest
+	(*GetApprovalRequestResponse)(nil),        // 19: pantherclaw.v1.GetApprovalRequestResponse
+	(*DeclineApprovalRequestRequest)(nil),     // 20: pantherclaw.v1.DeclineApprovalRequestRequest
+	(*DeclineApprovalRequestResponse)(nil),    // 21: pantherclaw.v1.DeclineApprovalRequestResponse
+	(*RequestApprovalEvidenceRequest)(nil),    // 22: pantherclaw.v1.RequestApprovalEvidenceRequest
+	(*RequestApprovalEvidenceResponse)(nil),   // 23: pantherclaw.v1.RequestApprovalEvidenceResponse
+	(*ProposeNarrowerActionRequest)(nil),      // 24: pantherclaw.v1.ProposeNarrowerActionRequest
+	(*ProposeNarrowerActionResponse)(nil),     // 25: pantherclaw.v1.ProposeNarrowerActionResponse
+	(*SubmitApprovalEvidenceRequest)(nil),     // 26: pantherclaw.v1.SubmitApprovalEvidenceRequest
+	(*SubmitApprovalEvidenceResponse)(nil),    // 27: pantherclaw.v1.SubmitApprovalEvidenceResponse
+	(*DeclineApprovalBatchRequest)(nil),       // 28: pantherclaw.v1.DeclineApprovalBatchRequest
+	(*DeclineApprovalBatchResponse)(nil),      // 29: pantherclaw.v1.DeclineApprovalBatchResponse
+	(*FatigueFlag)(nil),                       // 30: pantherclaw.v1.FatigueFlag
+	(*DeciderFatigue)(nil),                    // 31: pantherclaw.v1.DeciderFatigue
+	(*GetApprovalFatigueRequest)(nil),         // 32: pantherclaw.v1.GetApprovalFatigueRequest
+	(*GetApprovalFatigueResponse)(nil),        // 33: pantherclaw.v1.GetApprovalFatigueResponse
+	(*SetApprovalFatigueRoutingRequest)(nil),  // 34: pantherclaw.v1.SetApprovalFatigueRoutingRequest
+	(*SetApprovalFatigueRoutingResponse)(nil), // 35: pantherclaw.v1.SetApprovalFatigueRoutingResponse
+	(*ApprovalDeputy)(nil),                    // 36: pantherclaw.v1.ApprovalDeputy
+	(*SetApprovalDeputyRequest)(nil),          // 37: pantherclaw.v1.SetApprovalDeputyRequest
+	(*SetApprovalDeputyResponse)(nil),         // 38: pantherclaw.v1.SetApprovalDeputyResponse
+	(*CancelApprovalDeputyRequest)(nil),       // 39: pantherclaw.v1.CancelApprovalDeputyRequest
+	(*CancelApprovalDeputyResponse)(nil),      // 40: pantherclaw.v1.CancelApprovalDeputyResponse
+	(*ListApprovalDeputiesRequest)(nil),       // 41: pantherclaw.v1.ListApprovalDeputiesRequest
+	(*ListApprovalDeputiesResponse)(nil),      // 42: pantherclaw.v1.ListApprovalDeputiesResponse
+	(*ApprovalGroup)(nil),                     // 43: pantherclaw.v1.ApprovalGroup
+	(*ListApprovalGroupsRequest)(nil),         // 44: pantherclaw.v1.ListApprovalGroupsRequest
+	(*ListApprovalGroupsResponse)(nil),        // 45: pantherclaw.v1.ListApprovalGroupsResponse
+	(*timestamppb.Timestamp)(nil),             // 46: google.protobuf.Timestamp
+	(Decision)(0),                             // 47: pantherclaw.v1.Decision
+	(*Reason)(nil),                            // 48: pantherclaw.v1.Reason
 }
 var file_pantherclaw_v1_approvals_proto_depIdxs = []int32{
 	1,  // 0: pantherclaw.v1.ApprovalRequest.subject_kind:type_name -> pantherclaw.v1.ApprovalSubjectKind
 	0,  // 1: pantherclaw.v1.ApprovalRequest.state:type_name -> pantherclaw.v1.ApprovalState
-	6,  // 2: pantherclaw.v1.ApprovalRequest.requirements:type_name -> pantherclaw.v1.ApprovalRequirement
-	26, // 3: pantherclaw.v1.ApprovalRequest.create_time:type_name -> google.protobuf.Timestamp
-	26, // 4: pantherclaw.v1.ApprovalRequest.deadline_time:type_name -> google.protobuf.Timestamp
-	26, // 5: pantherclaw.v1.ApprovalRequest.evidence_deadline_time:type_name -> google.protobuf.Timestamp
-	26, // 6: pantherclaw.v1.ApprovalRequest.approve_time:type_name -> google.protobuf.Timestamp
-	26, // 7: pantherclaw.v1.ApprovalRequest.consume_by_time:type_name -> google.protobuf.Timestamp
-	26, // 8: pantherclaw.v1.ApprovalRequest.consume_time:type_name -> google.protobuf.Timestamp
+	10, // 2: pantherclaw.v1.ApprovalRequest.requirements:type_name -> pantherclaw.v1.ApprovalRequirement
+	46, // 3: pantherclaw.v1.ApprovalRequest.create_time:type_name -> google.protobuf.Timestamp
+	46, // 4: pantherclaw.v1.ApprovalRequest.deadline_time:type_name -> google.protobuf.Timestamp
+	46, // 5: pantherclaw.v1.ApprovalRequest.evidence_deadline_time:type_name -> google.protobuf.Timestamp
+	46, // 6: pantherclaw.v1.ApprovalRequest.approve_time:type_name -> google.protobuf.Timestamp
+	46, // 7: pantherclaw.v1.ApprovalRequest.consume_by_time:type_name -> google.protobuf.Timestamp
+	46, // 8: pantherclaw.v1.ApprovalRequest.consume_time:type_name -> google.protobuf.Timestamp
 	2,  // 9: pantherclaw.v1.DeciderResponse.kind:type_name -> pantherclaw.v1.DeciderResponseKind
 	3,  // 10: pantherclaw.v1.DeciderResponse.decline_reason:type_name -> pantherclaw.v1.DeclineReason
 	4,  // 11: pantherclaw.v1.DeciderResponse.alternative:type_name -> pantherclaw.v1.SaferAlternative
 	5,  // 12: pantherclaw.v1.DeciderResponse.question:type_name -> pantherclaw.v1.EvidenceQuestion
-	26, // 13: pantherclaw.v1.DeciderResponse.create_time:type_name -> google.protobuf.Timestamp
-	26, // 14: pantherclaw.v1.DeciderResponse.void_time:type_name -> google.protobuf.Timestamp
-	26, // 15: pantherclaw.v1.ApprovalEvidence.create_time:type_name -> google.protobuf.Timestamp
+	46, // 13: pantherclaw.v1.DeciderResponse.create_time:type_name -> google.protobuf.Timestamp
+	46, // 14: pantherclaw.v1.DeciderResponse.void_time:type_name -> google.protobuf.Timestamp
+	46, // 15: pantherclaw.v1.ApprovalEvidence.create_time:type_name -> google.protobuf.Timestamp
 	0,  // 16: pantherclaw.v1.ApprovalVariant.state:type_name -> pantherclaw.v1.ApprovalState
-	26, // 17: pantherclaw.v1.ApprovalVariant.create_time:type_name -> google.protobuf.Timestamp
-	26, // 18: pantherclaw.v1.ApprovalEligibility.eligible_from:type_name -> google.protobuf.Timestamp
+	46, // 17: pantherclaw.v1.ApprovalVariant.create_time:type_name -> google.protobuf.Timestamp
+	46, // 18: pantherclaw.v1.ApprovalEligibility.eligible_from:type_name -> google.protobuf.Timestamp
 	0,  // 19: pantherclaw.v1.ListApprovalRequestsRequest.states:type_name -> pantherclaw.v1.ApprovalState
-	7,  // 20: pantherclaw.v1.ListApprovalRequestsResponse.requests:type_name -> pantherclaw.v1.ApprovalRequest
-	7,  // 21: pantherclaw.v1.GetApprovalRequestResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
-	9,  // 22: pantherclaw.v1.GetApprovalRequestResponse.evidence:type_name -> pantherclaw.v1.ApprovalEvidence
-	8,  // 23: pantherclaw.v1.GetApprovalRequestResponse.responses:type_name -> pantherclaw.v1.DeciderResponse
-	10, // 24: pantherclaw.v1.GetApprovalRequestResponse.variants:type_name -> pantherclaw.v1.ApprovalVariant
-	11, // 25: pantherclaw.v1.GetApprovalRequestResponse.eligibility:type_name -> pantherclaw.v1.ApprovalEligibility
+	11, // 20: pantherclaw.v1.ListApprovalRequestsResponse.requests:type_name -> pantherclaw.v1.ApprovalRequest
+	11, // 21: pantherclaw.v1.GetApprovalRequestResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
+	13, // 22: pantherclaw.v1.GetApprovalRequestResponse.evidence:type_name -> pantherclaw.v1.ApprovalEvidence
+	12, // 23: pantherclaw.v1.GetApprovalRequestResponse.responses:type_name -> pantherclaw.v1.DeciderResponse
+	14, // 24: pantherclaw.v1.GetApprovalRequestResponse.variants:type_name -> pantherclaw.v1.ApprovalVariant
+	15, // 25: pantherclaw.v1.GetApprovalRequestResponse.eligibility:type_name -> pantherclaw.v1.ApprovalEligibility
 	3,  // 26: pantherclaw.v1.DeclineApprovalRequestRequest.reason:type_name -> pantherclaw.v1.DeclineReason
 	4,  // 27: pantherclaw.v1.DeclineApprovalRequestRequest.alternative:type_name -> pantherclaw.v1.SaferAlternative
-	7,  // 28: pantherclaw.v1.DeclineApprovalRequestResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
+	11, // 28: pantherclaw.v1.DeclineApprovalRequestResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
 	5,  // 29: pantherclaw.v1.RequestApprovalEvidenceRequest.question:type_name -> pantherclaw.v1.EvidenceQuestion
-	26, // 30: pantherclaw.v1.RequestApprovalEvidenceRequest.evidence_deadline_time:type_name -> google.protobuf.Timestamp
-	7,  // 31: pantherclaw.v1.RequestApprovalEvidenceResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
-	7,  // 32: pantherclaw.v1.ProposeNarrowerActionResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
-	27, // 33: pantherclaw.v1.ProposeNarrowerActionResponse.simulated_decision:type_name -> pantherclaw.v1.Decision
-	28, // 34: pantherclaw.v1.ProposeNarrowerActionResponse.simulated_reasons:type_name -> pantherclaw.v1.Reason
-	9,  // 35: pantherclaw.v1.SubmitApprovalEvidenceResponse.evidence:type_name -> pantherclaw.v1.ApprovalEvidence
-	7,  // 36: pantherclaw.v1.SubmitApprovalEvidenceResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
+	46, // 30: pantherclaw.v1.RequestApprovalEvidenceRequest.evidence_deadline_time:type_name -> google.protobuf.Timestamp
+	11, // 31: pantherclaw.v1.RequestApprovalEvidenceResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
+	11, // 32: pantherclaw.v1.ProposeNarrowerActionResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
+	47, // 33: pantherclaw.v1.ProposeNarrowerActionResponse.simulated_decision:type_name -> pantherclaw.v1.Decision
+	48, // 34: pantherclaw.v1.ProposeNarrowerActionResponse.simulated_reasons:type_name -> pantherclaw.v1.Reason
+	13, // 35: pantherclaw.v1.SubmitApprovalEvidenceResponse.evidence:type_name -> pantherclaw.v1.ApprovalEvidence
+	11, // 36: pantherclaw.v1.SubmitApprovalEvidenceResponse.request:type_name -> pantherclaw.v1.ApprovalRequest
 	3,  // 37: pantherclaw.v1.DeclineApprovalBatchRequest.reason:type_name -> pantherclaw.v1.DeclineReason
-	7,  // 38: pantherclaw.v1.DeclineApprovalBatchResponse.requests:type_name -> pantherclaw.v1.ApprovalRequest
-	12, // 39: pantherclaw.v1.ApprovalService.ListApprovalRequests:input_type -> pantherclaw.v1.ListApprovalRequestsRequest
-	14, // 40: pantherclaw.v1.ApprovalService.GetApprovalRequest:input_type -> pantherclaw.v1.GetApprovalRequestRequest
-	16, // 41: pantherclaw.v1.ApprovalService.DeclineApprovalRequest:input_type -> pantherclaw.v1.DeclineApprovalRequestRequest
-	18, // 42: pantherclaw.v1.ApprovalService.RequestApprovalEvidence:input_type -> pantherclaw.v1.RequestApprovalEvidenceRequest
-	20, // 43: pantherclaw.v1.ApprovalService.ProposeNarrowerAction:input_type -> pantherclaw.v1.ProposeNarrowerActionRequest
-	22, // 44: pantherclaw.v1.ApprovalService.SubmitApprovalEvidence:input_type -> pantherclaw.v1.SubmitApprovalEvidenceRequest
-	24, // 45: pantherclaw.v1.ApprovalService.DeclineApprovalBatch:input_type -> pantherclaw.v1.DeclineApprovalBatchRequest
-	13, // 46: pantherclaw.v1.ApprovalService.ListApprovalRequests:output_type -> pantherclaw.v1.ListApprovalRequestsResponse
-	15, // 47: pantherclaw.v1.ApprovalService.GetApprovalRequest:output_type -> pantherclaw.v1.GetApprovalRequestResponse
-	17, // 48: pantherclaw.v1.ApprovalService.DeclineApprovalRequest:output_type -> pantherclaw.v1.DeclineApprovalRequestResponse
-	19, // 49: pantherclaw.v1.ApprovalService.RequestApprovalEvidence:output_type -> pantherclaw.v1.RequestApprovalEvidenceResponse
-	21, // 50: pantherclaw.v1.ApprovalService.ProposeNarrowerAction:output_type -> pantherclaw.v1.ProposeNarrowerActionResponse
-	23, // 51: pantherclaw.v1.ApprovalService.SubmitApprovalEvidence:output_type -> pantherclaw.v1.SubmitApprovalEvidenceResponse
-	25, // 52: pantherclaw.v1.ApprovalService.DeclineApprovalBatch:output_type -> pantherclaw.v1.DeclineApprovalBatchResponse
-	46, // [46:53] is the sub-list for method output_type
-	39, // [39:46] is the sub-list for method input_type
-	39, // [39:39] is the sub-list for extension type_name
-	39, // [39:39] is the sub-list for extension extendee
-	0,  // [0:39] is the sub-list for field type_name
+	11, // 38: pantherclaw.v1.DeclineApprovalBatchResponse.requests:type_name -> pantherclaw.v1.ApprovalRequest
+	46, // 39: pantherclaw.v1.FatigueFlag.flag_time:type_name -> google.protobuf.Timestamp
+	46, // 40: pantherclaw.v1.FatigueFlag.clear_time:type_name -> google.protobuf.Timestamp
+	30, // 41: pantherclaw.v1.DeciderFatigue.flags:type_name -> pantherclaw.v1.FatigueFlag
+	6,  // 42: pantherclaw.v1.GetApprovalFatigueRequest.window:type_name -> pantherclaw.v1.FatigueWindow
+	31, // 43: pantherclaw.v1.GetApprovalFatigueResponse.deciders:type_name -> pantherclaw.v1.DeciderFatigue
+	7,  // 44: pantherclaw.v1.GetApprovalFatigueResponse.routing:type_name -> pantherclaw.v1.FatigueRouting
+	46, // 45: pantherclaw.v1.GetApprovalFatigueResponse.start_time:type_name -> google.protobuf.Timestamp
+	7,  // 46: pantherclaw.v1.SetApprovalFatigueRoutingRequest.routing:type_name -> pantherclaw.v1.FatigueRouting
+	7,  // 47: pantherclaw.v1.SetApprovalFatigueRoutingResponse.routing:type_name -> pantherclaw.v1.FatigueRouting
+	46, // 48: pantherclaw.v1.ApprovalDeputy.start_time:type_name -> google.protobuf.Timestamp
+	46, // 49: pantherclaw.v1.ApprovalDeputy.end_time:type_name -> google.protobuf.Timestamp
+	8,  // 50: pantherclaw.v1.ApprovalDeputy.state:type_name -> pantherclaw.v1.ApprovalDeputyState
+	46, // 51: pantherclaw.v1.ApprovalDeputy.create_time:type_name -> google.protobuf.Timestamp
+	46, // 52: pantherclaw.v1.ApprovalDeputy.cancel_time:type_name -> google.protobuf.Timestamp
+	46, // 53: pantherclaw.v1.SetApprovalDeputyRequest.start_time:type_name -> google.protobuf.Timestamp
+	46, // 54: pantherclaw.v1.SetApprovalDeputyRequest.end_time:type_name -> google.protobuf.Timestamp
+	36, // 55: pantherclaw.v1.SetApprovalDeputyResponse.deputy:type_name -> pantherclaw.v1.ApprovalDeputy
+	36, // 56: pantherclaw.v1.CancelApprovalDeputyResponse.deputy:type_name -> pantherclaw.v1.ApprovalDeputy
+	36, // 57: pantherclaw.v1.ListApprovalDeputiesResponse.deputies:type_name -> pantherclaw.v1.ApprovalDeputy
+	9,  // 58: pantherclaw.v1.ListApprovalGroupsRequest.group_by:type_name -> pantherclaw.v1.ApprovalGroupBy
+	0,  // 59: pantherclaw.v1.ListApprovalGroupsRequest.states:type_name -> pantherclaw.v1.ApprovalState
+	43, // 60: pantherclaw.v1.ListApprovalGroupsResponse.groups:type_name -> pantherclaw.v1.ApprovalGroup
+	16, // 61: pantherclaw.v1.ApprovalService.ListApprovalRequests:input_type -> pantherclaw.v1.ListApprovalRequestsRequest
+	18, // 62: pantherclaw.v1.ApprovalService.GetApprovalRequest:input_type -> pantherclaw.v1.GetApprovalRequestRequest
+	20, // 63: pantherclaw.v1.ApprovalService.DeclineApprovalRequest:input_type -> pantherclaw.v1.DeclineApprovalRequestRequest
+	22, // 64: pantherclaw.v1.ApprovalService.RequestApprovalEvidence:input_type -> pantherclaw.v1.RequestApprovalEvidenceRequest
+	24, // 65: pantherclaw.v1.ApprovalService.ProposeNarrowerAction:input_type -> pantherclaw.v1.ProposeNarrowerActionRequest
+	26, // 66: pantherclaw.v1.ApprovalService.SubmitApprovalEvidence:input_type -> pantherclaw.v1.SubmitApprovalEvidenceRequest
+	28, // 67: pantherclaw.v1.ApprovalService.DeclineApprovalBatch:input_type -> pantherclaw.v1.DeclineApprovalBatchRequest
+	32, // 68: pantherclaw.v1.ApprovalService.GetApprovalFatigue:input_type -> pantherclaw.v1.GetApprovalFatigueRequest
+	34, // 69: pantherclaw.v1.ApprovalService.SetApprovalFatigueRouting:input_type -> pantherclaw.v1.SetApprovalFatigueRoutingRequest
+	37, // 70: pantherclaw.v1.ApprovalService.SetApprovalDeputy:input_type -> pantherclaw.v1.SetApprovalDeputyRequest
+	39, // 71: pantherclaw.v1.ApprovalService.CancelApprovalDeputy:input_type -> pantherclaw.v1.CancelApprovalDeputyRequest
+	41, // 72: pantherclaw.v1.ApprovalService.ListApprovalDeputies:input_type -> pantherclaw.v1.ListApprovalDeputiesRequest
+	44, // 73: pantherclaw.v1.ApprovalService.ListApprovalGroups:input_type -> pantherclaw.v1.ListApprovalGroupsRequest
+	17, // 74: pantherclaw.v1.ApprovalService.ListApprovalRequests:output_type -> pantherclaw.v1.ListApprovalRequestsResponse
+	19, // 75: pantherclaw.v1.ApprovalService.GetApprovalRequest:output_type -> pantherclaw.v1.GetApprovalRequestResponse
+	21, // 76: pantherclaw.v1.ApprovalService.DeclineApprovalRequest:output_type -> pantherclaw.v1.DeclineApprovalRequestResponse
+	23, // 77: pantherclaw.v1.ApprovalService.RequestApprovalEvidence:output_type -> pantherclaw.v1.RequestApprovalEvidenceResponse
+	25, // 78: pantherclaw.v1.ApprovalService.ProposeNarrowerAction:output_type -> pantherclaw.v1.ProposeNarrowerActionResponse
+	27, // 79: pantherclaw.v1.ApprovalService.SubmitApprovalEvidence:output_type -> pantherclaw.v1.SubmitApprovalEvidenceResponse
+	29, // 80: pantherclaw.v1.ApprovalService.DeclineApprovalBatch:output_type -> pantherclaw.v1.DeclineApprovalBatchResponse
+	33, // 81: pantherclaw.v1.ApprovalService.GetApprovalFatigue:output_type -> pantherclaw.v1.GetApprovalFatigueResponse
+	35, // 82: pantherclaw.v1.ApprovalService.SetApprovalFatigueRouting:output_type -> pantherclaw.v1.SetApprovalFatigueRoutingResponse
+	38, // 83: pantherclaw.v1.ApprovalService.SetApprovalDeputy:output_type -> pantherclaw.v1.SetApprovalDeputyResponse
+	40, // 84: pantherclaw.v1.ApprovalService.CancelApprovalDeputy:output_type -> pantherclaw.v1.CancelApprovalDeputyResponse
+	42, // 85: pantherclaw.v1.ApprovalService.ListApprovalDeputies:output_type -> pantherclaw.v1.ListApprovalDeputiesResponse
+	45, // 86: pantherclaw.v1.ApprovalService.ListApprovalGroups:output_type -> pantherclaw.v1.ListApprovalGroupsResponse
+	74, // [74:87] is the sub-list for method output_type
+	61, // [61:74] is the sub-list for method input_type
+	61, // [61:61] is the sub-list for extension type_name
+	61, // [61:61] is the sub-list for extension extendee
+	0,  // [0:61] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_approvals_proto_init() }
@@ -2380,13 +3761,16 @@ func file_pantherclaw_v1_approvals_proto_init() {
 	}
 	file_pantherclaw_v1_authority_proto_init()
 	file_pantherclaw_v1_approvals_proto_msgTypes[6].OneofWrappers = []any{}
+	file_pantherclaw_v1_approvals_proto_msgTypes[22].OneofWrappers = []any{}
+	file_pantherclaw_v1_approvals_proto_msgTypes[27].OneofWrappers = []any{}
+	file_pantherclaw_v1_approvals_proto_msgTypes[31].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_approvals_proto_rawDesc), len(file_pantherclaw_v1_approvals_proto_rawDesc)),
-			NumEnums:      6,
-			NumMessages:   20,
+			NumEnums:      10,
+			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -35,10 +35,11 @@ const (
 	PurposeA2ACard        Purpose = "a2a_card"        // A2A cards a gateway serves (G0 M24 D232)
 	PurposeMcpTokens      Purpose = "mcp_tokens"      // pap-mcp+jwt bearer tokens of standard MCP clients (G0 M26 D402); never published
 	PurposeGlobalLog      Purpose = "global_log"      // checkpoints of the deployment-wide root log that witnesses cosign (G0 M35 D1041)
-	// The anchors, checkpoints_pq and receipts_pq keys are not Ed25519 (AltKey).
+	// The anchors, checkpoints_pq, receipts_pq and web_push keys are not Ed25519 (AltKey).
 	PurposeAnchors       Purpose = "anchors"        // ECDSA P-256: the anchored global root (G0 M7, HR-195)
 	PurposeCheckpointsPQ Purpose = "checkpoints_pq" // ML-DSA-65: optional checkpoint and pack co-signatures
 	PurposeReceiptsPQ    Purpose = "receipts_pq"    // ML-DSA-65: optional receipt co-signatures, PAP-1 sigs[] (G0 M35 D1042)
+	PurposeWebPush       Purpose = "web_push"       // ECDSA P-256: the deployment's VAPID key (G0 M36 D1066); never evidence
 	// The webhooks key is per organization, never a platform key (G0 M20 D251).
 	PurposeWebhooks Purpose = "webhooks" // Ed25519: the `v1a,` signature of opted-in webhooks
 )
@@ -53,7 +54,7 @@ func Purposes() []Purpose {
 
 // AltPurposes lists the purposes whose keys use another algorithm.
 func AltPurposes() []Purpose {
-	return []Purpose{PurposeAnchors, PurposeCheckpointsPQ, PurposeReceiptsPQ}
+	return []Purpose{PurposeAnchors, PurposeCheckpointsPQ, PurposeReceiptsPQ, PurposeWebPush}
 }
 
 // OrgPurposes lists the Ed25519 purposes whose keys belong to each
@@ -90,7 +91,7 @@ const (
 
 // Algorithm returns the one algorithm of purpose p.
 func (p Purpose) Algorithm() Algorithm {
-	if p == PurposeAnchors {
+	if p == PurposeAnchors || p == PurposeWebPush {
 		return AlgES256
 	}
 	if p == PurposeCheckpointsPQ || p == PurposeReceiptsPQ {

@@ -250,6 +250,25 @@ message AuthorizeRequest {
     (buf.validate.field).string.uuid = true,
     (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
   ];
+  // The agent's W3C trace context, as the gateway read it from the request's
+  // traceparent and tracestate (G0 M36 D1060, HR-785): correlation metadata
+  // only. It is not part of the ActionIR, any digest, receipt or binding,
+  // and never changes a decision. Unset when the request carried none that
+  // parses.
+  TraceContext trace_context = 7;
+}
+
+// TraceContext is a W3C Trace Context (traceparent version 00) the agent
+// sent (G0 M36 D1060).
+message TraceContext {
+  // The 16-byte trace id; never all zero.
+  bytes trace_id = 1 [(buf.validate.field).bytes.len = 16];
+  // The 8-byte id of the agent's span the action belongs to.
+  bytes parent_span_id = 2 [(buf.validate.field).bytes.len = 8];
+  // The trace flags byte (01: sampled).
+  uint32 flags = 3 [(buf.validate.field).uint32.lte = 255];
+  // The tracestate header as sent, at most 512 bytes; empty when absent.
+  string tracestate = 4 [(buf.validate.field).string.max_bytes = 512];
 }
 
 // ContentFinding is one content flag: a kind and a location, never a value
