@@ -37,7 +37,13 @@ var globalTables = []string{
 	// by an identity digest with no account id or tenant data.
 	"account_deletions",
 	"identity_deletion_guards",
-	"anchors",              // the anchored global roots: blinded leaves only, no tenant data (G0 M7, HR-195)
+	"anchors", // the anchored global roots: blinded leaves only, no tenant data (G0 M7, HR-195)
+	// Deployment-wide append-only log of blinded anchor roots and witness
+	// signatures; no tenant data (G0 M35 D1041, HR-781, HR-782).
+	"global_log_leaves",
+	"global_log_tiles",
+	"global_checkpoints",
+	"global_checkpoint_cosignatures",
 	"cross_org_list_audit", // audit of the cross-org lister; no pc_app access
 	"goose_db_version",     // migration bookkeeping; no pc_app access
 	"licence_state",        // single global row: the installed licence (no tenant data)

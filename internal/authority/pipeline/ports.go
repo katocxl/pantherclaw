@@ -116,10 +116,13 @@ const (
 
 // Run is what the pipeline needs to know about a run (M3).
 type Run struct {
-	AgentID       ids.UUID
-	InstanceID    ids.UUID
-	Launcher      gdomain.Principal
-	Principal     gdomain.Principal
+	AgentID    ids.UUID
+	InstanceID ids.UUID
+	Launcher   gdomain.Principal
+	Principal  gdomain.Principal
+	// PeerOrgName is a federated run's peer org name from its trust row,
+	// read at hold time for the approval display (G0 M35 D1024a).
+	PeerOrgName   string
 	EnvironmentID ids.UUID
 	GrantID       gdomain.GrantID
 	Active        bool

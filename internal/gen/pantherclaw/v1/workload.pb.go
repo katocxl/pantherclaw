@@ -51,20 +51,29 @@ const (
 	// A Microsoft Entra Agent ID access token for the operator-pinned Entra
 	// app (identity.entra_apps).
 	AttestationKind_ATTESTATION_KIND_ENTRA_AGENT_ID AttestationKind = 8
+	// L3 (G0 M35 D1030): a compact JWS signed by an X.509-SVID's key, with the
+	// SVID chain in x5c and the payload
+	// pantherclaw-l3:v1:<org>:<nonce>:<jkt> (the request's nonce and key).
+	AttestationKind_ATTESTATION_KIND_SPIFFE_X509 AttestationKind = 9
+	// L3 (G0 M35 D1030): a GCE identity token (format=full) with audience
+	// pantherclaw:<org>:l3:<nonce>:<jkt> (the request's nonce and key).
+	AttestationKind_ATTESTATION_KIND_GCP_INSTANCE AttestationKind = 10
 )
 
 // Enum value maps for AttestationKind.
 var (
 	AttestationKind_name = map[int32]string{
-		0: "ATTESTATION_KIND_UNSPECIFIED",
-		1: "ATTESTATION_KIND_GITHUB_ACTIONS",
-		2: "ATTESTATION_KIND_KUBERNETES",
-		3: "ATTESTATION_KIND_GITLAB_CI",
-		4: "ATTESTATION_KIND_SPIFFE_JWT",
-		5: "ATTESTATION_KIND_GCP_WORKLOAD",
-		6: "ATTESTATION_KIND_AWS_IAM",
-		7: "ATTESTATION_KIND_AZURE_MI",
-		8: "ATTESTATION_KIND_ENTRA_AGENT_ID",
+		0:  "ATTESTATION_KIND_UNSPECIFIED",
+		1:  "ATTESTATION_KIND_GITHUB_ACTIONS",
+		2:  "ATTESTATION_KIND_KUBERNETES",
+		3:  "ATTESTATION_KIND_GITLAB_CI",
+		4:  "ATTESTATION_KIND_SPIFFE_JWT",
+		5:  "ATTESTATION_KIND_GCP_WORKLOAD",
+		6:  "ATTESTATION_KIND_AWS_IAM",
+		7:  "ATTESTATION_KIND_AZURE_MI",
+		8:  "ATTESTATION_KIND_ENTRA_AGENT_ID",
+		9:  "ATTESTATION_KIND_SPIFFE_X509",
+		10: "ATTESTATION_KIND_GCP_INSTANCE",
 	}
 	AttestationKind_value = map[string]int32{
 		"ATTESTATION_KIND_UNSPECIFIED":    0,
@@ -76,6 +85,8 @@ var (
 		"ATTESTATION_KIND_AWS_IAM":        6,
 		"ATTESTATION_KIND_AZURE_MI":       7,
 		"ATTESTATION_KIND_ENTRA_AGENT_ID": 8,
+		"ATTESTATION_KIND_SPIFFE_X509":    9,
+		"ATTESTATION_KIND_GCP_INSTANCE":   10,
 	}
 )
 
@@ -106,7 +117,7 @@ func (AttestationKind) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_workload_proto_rawDescGZIP(), []int{0}
 }
 
-// Attestation is a platform token offered as L2 evidence. It is verified,
+// Attestation is a platform token offered as L2 or L3 evidence. It is verified,
 // consumed (single use) and never stored or logged.
 type Attestation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -597,7 +608,7 @@ type DelegateGrantRequest struct {
 	Limits []byte `protobuf:"bytes,7,opt,name=limits,proto3" json:"limits,omitempty"`
 	// Delegation settings; depth below the parent's.
 	Delegation *GrantDelegation `protobuf:"bytes,8,opt,name=delegation,proto3" json:"delegation,omitempty"`
-	// Lowest attestation level (0-2); at least the parent's.
+	// Lowest attestation level (0-3; L3 since G0 M35 D1030); at least the parent's.
 	MinAttestationLevel int32 `protobuf:"varint,9,opt,name=min_attestation_level,json=minAttestationLevel,proto3" json:"min_attestation_level,omitempty"`
 	// Data flows allowed after a sensitive read (G0 M16 D75, D94); each must
 	// be covered by one of the parent grant's, and none allows no flow.
@@ -1184,7 +1195,7 @@ const file_pantherclaw_v1_workload_proto_rawDesc = "" +
 	"\n" +
 	"delegation\x18\b \x01(\v2\x1f.pantherclaw.v1.GrantDelegationR\n" +
 	"delegation\x12=\n" +
-	"\x15min_attestation_level\x18\t \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x02(\x00R\x13minAttestationLevel\x12=\n" +
+	"\x15min_attestation_level\x18\t \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x03(\x00R\x13minAttestationLevel\x12=\n" +
 	"\x05flows\x18\n" +
 	" \x03(\v2\x1d.pantherclaw.v1.FlowAllowanceB\b\xbaH\x05\x92\x01\x02\x10\x10R\x05flows\"D\n" +
 	"\x15DelegateGrantResponse\x12+\n" +
@@ -1214,7 +1225,7 @@ const file_pantherclaw_v1_workload_proto_rawDesc = "" +
 	"\xbaH\ar\x05\x10\x01(\x80 R\x04note\"\x82\x01\n" +
 	"$WorkloadServiceRequestAccessResponse\x12\x19\n" +
 	"\bentry_id\x18\x01 \x01(\tR\aentryId\x12?\n" +
-	"\rdeadline_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fdeadlineTime*\xbf\x02\n" +
+	"\rdeadline_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fdeadlineTime*\x84\x03\n" +
 	"\x0fAttestationKind\x12 \n" +
 	"\x1cATTESTATION_KIND_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fATTESTATION_KIND_GITHUB_ACTIONS\x10\x01\x12\x1f\n" +
@@ -1224,7 +1235,10 @@ const file_pantherclaw_v1_workload_proto_rawDesc = "" +
 	"\x1dATTESTATION_KIND_GCP_WORKLOAD\x10\x05\x12\x1c\n" +
 	"\x18ATTESTATION_KIND_AWS_IAM\x10\x06\x12\x1d\n" +
 	"\x19ATTESTATION_KIND_AZURE_MI\x10\a\x12#\n" +
-	"\x1fATTESTATION_KIND_ENTRA_AGENT_ID\x10\b2\x8b\x05\n" +
+	"\x1fATTESTATION_KIND_ENTRA_AGENT_ID\x10\b\x12 \n" +
+	"\x1cATTESTATION_KIND_SPIFFE_X509\x10\t\x12!\n" +
+	"\x1dATTESTATION_KIND_GCP_INSTANCE\x10\n" +
+	"2\x8b\x05\n" +
 	"\x0fWorkloadService\x12G\n" +
 	"\x06Enroll\x12\x1d.pantherclaw.v1.EnrollRequest\x1a\x1e.pantherclaw.v1.EnrollResponse\x12S\n" +
 	"\n" +

@@ -1,0 +1,492 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/grants.proto";
+
+// FederationService is cross-org federation (G0 M35 D1020..D1025; FD10,
+// FQ35-1, FQ35-2; HR-770..776; Enterprise). An org publishes a signed
+// federation document with its federation keys and its listed agents;
+// two orgs' admins set up a pairwise trust by comparing a safety code and
+// confirming with their security keys; a trusted peer org's agents may
+// then send A2A messages to the listed agents a cross-org grant names, and
+// every call is decided by this org's policy. Two orgs on one deployment
+// still federate over HTTPS through this protocol (D1021).
+service FederationService {
+  // GetFederationDocument returns the org's signed federation document, as
+  // GET /.well-known/pantherclaw/orgs/{org}/federation.json serves it, with
+  // the org's federation keys and endpoint.
+  // permission: federation.read
+  rpc GetFederationDocument(GetFederationDocumentRequest) returns (GetFederationDocumentResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SetFederationEndpoint sets the base URL of the org's gateway federation
+  // face, which the document names. Audited.
+  // permission: federation.manage
+  rpc SetFederationEndpoint(SetFederationEndpointRequest) returns (SetFederationEndpointResponse);
+  // RotateFederationKey makes a new ACTIVE federation key; the old one is
+  // RETIRING for 7 days and also signs the document meanwhile. It needs a
+  // step-up, so over the API it answers STEP_UP_REQUIRED. Audited
+  // (federation.key_rotated).
+  // permission: federation.manage
+  rpc RotateFederationKey(RotateFederationKeyRequest) returns (RotateFederationKeyResponse);
+  // ProposeFederationTrust fetches a peer org's federation document (https,
+  // no redirects), checks its signature with the keys it names, and records
+  // a PROPOSED trust pinning those keys, with the safety code both admins
+  // compare. Audited (federation.trust_proposed).
+  // permission: federation.manage
+  rpc ProposeFederationTrust(ProposeFederationTrustRequest) returns (ProposeFederationTrustResponse);
+  // ConfirmFederationTrust confirms a PROPOSED trust after the admins
+  // compared the safety code out of band. It needs a person and a fresh
+  // security-key step-up, so over the API it answers STEP_UP_REQUIRED. The
+  // trust is ACTIVE once the peer confirmed too. Audited
+  // (federation.trust_confirmed).
+  // permission: federation.manage
+  rpc ConfirmFederationTrust(ConfirmFederationTrustRequest) returns (ConfirmFederationTrustResponse);
+  // RefreshFederationTrust fetches the peer document again now, as the
+  // daily job does.
+  // permission: federation.manage
+  rpc RefreshFederationTrust(RefreshFederationTrustRequest) returns (RefreshFederationTrustResponse);
+  // RevokeFederationTrust ends a trust at once and tells the peer (best
+  // effort). Audited (federation.trust_revoked).
+  // permission: federation.manage
+  rpc RevokeFederationTrust(RevokeFederationTrustRequest) returns (RevokeFederationTrustResponse);
+  // ListFederationTrusts lists the org's trusts, newest first.
+  // permission: federation.read
+  rpc ListFederationTrusts(ListFederationTrustsRequest) returns (ListFederationTrustsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetFederationTrust returns one trust with its safety code.
+  // permission: federation.read
+  rpc GetFederationTrust(GetFederationTrustRequest) returns (GetFederationTrustResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // CreateFederationListing lists one of the org's agents for trusted
+  // peers. Audited (federation.listing_created).
+  // permission: federation.manage
+  rpc CreateFederationListing(CreateFederationListingRequest) returns (CreateFederationListingResponse);
+  // RetireFederationListing retires a listing. Audited
+  // (federation.listing_retired).
+  // permission: federation.manage
+  rpc RetireFederationListing(RetireFederationListingRequest) returns (RetireFederationListingResponse);
+  // ListFederationListings lists the org's listings.
+  // permission: federation.read
+  rpc ListFederationListings(ListFederationListingsRequest) returns (ListFederationListingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListFederatedPeerAgents lists the agents a peer org's document lists,
+  // each marked verified only when the trust is ACTIVE and the document and
+  // the agent's card verify with the pinned keys and the card's digest
+  // matches.
+  // permission: federation.read
+  rpc ListFederatedPeerAgents(ListFederatedPeerAgentsRequest) returns (ListFederatedPeerAgentsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // IssueCrossOrgGrant lets one agent of a trusted peer org send A2A
+  // messages to one listing, within limits. It needs a person holding
+  // grant.issue and federation.read, and an ACTIVE trust. Audited
+  // (federation.grant_issued).
+  // permission: grant.issue
+  rpc IssueCrossOrgGrant(IssueCrossOrgGrantRequest) returns (IssueCrossOrgGrantResponse);
+  // RevokeCrossOrgGrant revokes a cross-org grant at once. Audited
+  // (federation.grant_revoked).
+  // permission: grant.revoke
+  rpc RevokeCrossOrgGrant(RevokeCrossOrgGrantRequest) returns (RevokeCrossOrgGrantResponse);
+  // ListFederationReceipts lists the receipts exchanged with peer orgs,
+  // newest first.
+  // permission: federation.read
+  rpc ListFederationReceipts(ListFederationReceiptsRequest) returns (ListFederationReceiptsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SignListingCard returns a listing's agent card as the gateway's
+  // federation face serves it: the listing agent's pinned card rewritten
+  // for the face URL with the listing's skills only, signed with the org's
+  // federation key. Gateways only; they cache it for an hour.
+  // permission: gateway.authorize
+  rpc SignListingCard(SignListingCardRequest) returns (SignListingCardResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// FederationKey is one of the org's federation keys (public half only).
+message FederationKey {
+  // Key id ("fed-" and the JWK thumbprint).
+  string kid = 1;
+  // "ACTIVE", "RETIRING" or "RETIRED".
+  string state = 2;
+  // The Ed25519 public key, base64url without padding (the JWK "x").
+  string public_key = 3;
+  // Creation time.
+  google.protobuf.Timestamp create_time = 4;
+  // RETIRING keys: when it leaves the document.
+  google.protobuf.Timestamp retire_time = 5;
+}
+
+// GetFederationDocumentRequest is empty.
+message GetFederationDocumentRequest {}
+
+// GetFederationDocumentResponse is the document and what it is built from.
+message GetFederationDocumentResponse {
+  // The signed document (JWS JSON general serialization), as served.
+  bytes document = 1;
+  // Where it is published.
+  string document_url = 2;
+  // The org's federation endpoint; empty until one is set.
+  string federation_url = 3;
+  // The ACTIVE key first.
+  repeated FederationKey keys = 4;
+}
+
+// SetFederationEndpointRequest names the gateway federation face.
+message SetFederationEndpointRequest {
+  // The base URL of the org's gateway federation face (https).
+  string federation_url = 1 [(buf.validate.field).string = {
+    min_len: 9
+    max_len: 2048
+    pattern: "^https://"
+  }];
+}
+
+// SetFederationEndpointResponse is the endpoint set.
+message SetFederationEndpointResponse {
+  string federation_url = 1;
+}
+
+// RotateFederationKeyRequest is empty.
+message RotateFederationKeyRequest {}
+
+// RotateFederationKeyResponse names the new and the retiring key.
+message RotateFederationKeyResponse {
+  // The new ACTIVE key.
+  FederationKey key = 1;
+  // The key that is now RETIRING (empty when the org had none).
+  string retiring_kid = 2;
+}
+
+// FederationTrustState is where a pairwise trust stands (D1021).
+enum FederationTrustState {
+  FEDERATION_TRUST_STATE_UNSPECIFIED = 0;
+  // Proposed here; not confirmed by a person of this org yet.
+  FEDERATION_TRUST_STATE_PROPOSED = 1;
+  // Confirmed here; the peer's confirmation has not arrived.
+  FEDERATION_TRUST_STATE_CONFIRMED_LOCAL = 2;
+  // Confirmed by both orgs: the peer's agents may be decided on.
+  FEDERATION_TRUST_STATE_ACTIVE = 3;
+  // The peer document expired or could not be fetched: every call is
+  // refused until a refresh succeeds.
+  FEDERATION_TRUST_STATE_STALE = 4;
+  // Revoked by either org.
+  FEDERATION_TRUST_STATE_REVOKED = 5;
+}
+
+// FederationTrust is one pairwise trust with a peer org.
+message FederationTrust {
+  string id = 1;
+  // The peer org's id, as its document states it.
+  string peer_org_id = 2;
+  // UNTRUSTED: the peer org's name, as its document states it.
+  string peer_name = 3;
+  // Where the peer document is fetched.
+  string peer_doc_url = 4;
+  // The peer deployment's public URL.
+  string peer_server_url = 5;
+  // The peer's gateway federation face.
+  string peer_federation_url = 6;
+  FederationTrustState state = 7;
+  // The safety code, 5 groups of 4 characters; the same on both sides.
+  string safety_code = 8;
+  // The pinned peer keys' ids.
+  repeated string pinned_kids = 9;
+  // SHA-256 of the sorted pinned JWK thumbprints, hex.
+  string pinned_keys_digest = 10;
+  google.protobuf.Timestamp create_time = 11;
+  string created_by = 12;
+  // The person who confirmed it here.
+  string confirmed_by = 13;
+  google.protobuf.Timestamp confirm_time = 14;
+  google.protobuf.Timestamp peer_confirm_time = 15;
+  google.protobuf.Timestamp last_refresh_time = 16;
+  // When the pinned peer document expires.
+  google.protobuf.Timestamp peer_document_expire_time = 17;
+  google.protobuf.Timestamp revoke_time = 18;
+}
+
+// ProposeFederationTrustRequest names the peer document.
+message ProposeFederationTrustRequest {
+  // The peer's /.well-known/pantherclaw/orgs/{org}/federation.json (https).
+  string peer_doc_url = 1 [(buf.validate.field).string = {
+    min_len: 9
+    max_len: 2048
+    pattern: "^https://"
+  }];
+}
+
+// ProposeFederationTrustResponse is the PROPOSED trust.
+message ProposeFederationTrustResponse {
+  FederationTrust trust = 1;
+}
+
+// ConfirmFederationTrustRequest names the trust.
+message ConfirmFederationTrustRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ConfirmFederationTrustResponse is the confirmed trust.
+message ConfirmFederationTrustResponse {
+  FederationTrust trust = 1;
+}
+
+// RefreshFederationTrustRequest names the trust.
+message RefreshFederationTrustRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RefreshFederationTrustResponse is the refreshed trust.
+message RefreshFederationTrustResponse {
+  FederationTrust trust = 1;
+}
+
+// RevokeFederationTrustRequest names the trust.
+message RevokeFederationTrustRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RevokeFederationTrustResponse is the revoked trust.
+message RevokeFederationTrustResponse {
+  FederationTrust trust = 1;
+}
+
+// ListFederationTrustsRequest filters the list.
+message ListFederationTrustsRequest {
+  // Include REVOKED trusts.
+  bool include_revoked = 1;
+}
+
+// ListFederationTrustsResponse lists the trusts.
+message ListFederationTrustsResponse {
+  repeated FederationTrust trusts = 1;
+}
+
+// GetFederationTrustRequest names the trust.
+message GetFederationTrustRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetFederationTrustResponse is the trust.
+message GetFederationTrustResponse {
+  FederationTrust trust = 1;
+}
+
+// FederationListing is one of the org's agents listed for trusted peers.
+message FederationListing {
+  string id = 1;
+  // The listing's name, in the face URL /fed/a2a/{name}.
+  string name = 2;
+  // The listed agent.
+  string agent_id = 3;
+  // The a2a connection the gateway forwards through; its peer is the agent.
+  string connection_id = 4;
+  // The skills offered, a subset of the agent's card's.
+  repeated string skills = 5;
+  // "ACTIVE" or "RETIRED".
+  string state = 6;
+  google.protobuf.Timestamp create_time = 7;
+  string created_by = 8;
+  // The card URL the federation document names; empty without an endpoint.
+  string card_url = 9;
+}
+
+// CreateFederationListingRequest lists an agent.
+message CreateFederationListingRequest {
+  string name = 1 [(buf.validate.field).string.pattern = "^[a-z0-9-]{1,63}$"];
+  string agent_id = 2 [(buf.validate.field).string.uuid = true];
+  string connection_id = 3 [(buf.validate.field).string.uuid = true];
+  repeated string skills = 4 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 64
+    unique: true
+    items: {
+      string: {
+        min_len: 1
+        max_len: 128
+      }
+    }
+  }];
+}
+
+// CreateFederationListingResponse is the listing.
+message CreateFederationListingResponse {
+  FederationListing listing = 1;
+}
+
+// RetireFederationListingRequest names the listing.
+message RetireFederationListingRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RetireFederationListingResponse is the retired listing.
+message RetireFederationListingResponse {
+  FederationListing listing = 1;
+}
+
+// ListFederationListingsRequest filters the list.
+message ListFederationListingsRequest {
+  // Include RETIRED listings.
+  bool include_retired = 1;
+}
+
+// ListFederationListingsResponse lists the listings.
+message ListFederationListingsResponse {
+  repeated FederationListing listings = 1;
+}
+
+// FederatedPeerAgent is an agent a peer org lists.
+message FederatedPeerAgent {
+  // The peer's listing name.
+  string listing = 1;
+  // UNTRUSTED: the agent's name, as the peer document states it.
+  string agent_name = 2;
+  string card_url = 3;
+  // The card digest the document states (sha256:<hex>).
+  string card_digest = 4;
+  // True only when the trust is ACTIVE, the document verifies with the
+  // pinned keys, and the fetched card's digest matches and its signature
+  // verifies with the pinned keys.
+  bool verified = 5;
+  // Why it is not verified; empty when it is.
+  string reason = 6;
+}
+
+// ListFederatedPeerAgentsRequest names the trust.
+message ListFederatedPeerAgentsRequest {
+  string trust_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ListFederatedPeerAgentsResponse lists the peer's agents.
+message ListFederatedPeerAgentsResponse {
+  repeated FederatedPeerAgent agents = 1;
+}
+
+// IssueCrossOrgGrantRequest issues a cross-org grant (D1024).
+message IssueCrossOrgGrantRequest {
+  string trust_id = 1 [(buf.validate.field).string.uuid = true];
+  // The peer agent: its PAP subject, pc:org/<peer org>/agent/<a>/inst/<i>
+  // or pc:org/<peer org>/agent/<a> for any instance.
+  string peer_agent = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 512
+    pattern: "^pc:org/[0-9a-f-]{36}/agent/[0-9a-f-]{36}(/inst/[0-9a-f-]{36})?$"
+  }];
+  // The listing it may message.
+  string listing = 3 [(buf.validate.field).string.pattern = "^[a-z0-9-]{1,63}$"];
+  // pc.federation operations it may use.
+  repeated string operations = 4 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 3
+    unique: true
+    items: {
+      string: {
+        in: [
+          "federation.message.receive",
+          "federation.task.read",
+          "federation.task.cancel"
+        ]
+      }
+    }
+  }];
+  // Limits (grant limits v1, JSON); empty for none.
+  bytes limits = 5 [(buf.validate.field).bytes.max_len = 65536];
+  // Lowest attestation level the peer claims for its agent (0-2).
+  int32 min_attestation_level = 6 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 2
+  }];
+  // Valid until; at most 90 days.
+  google.protobuf.Timestamp expire_time = 7 [(buf.validate.field).required = true];
+}
+
+// IssueCrossOrgGrantResponse is the grant.
+message IssueCrossOrgGrantResponse {
+  Grant grant = 1;
+}
+
+// RevokeCrossOrgGrantRequest names the grant.
+message RevokeCrossOrgGrantRequest {
+  string grant_id = 1 [(buf.validate.field).string.uuid = true];
+  // Why (UNTRUSTED text).
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 256
+  }];
+}
+
+// RevokeCrossOrgGrantResponse is empty.
+message RevokeCrossOrgGrantResponse {}
+
+// FederationReceipt is a receipt exchanged with a peer org (D1023, D1024).
+message FederationReceipt {
+  string id = 1;
+  // "OUT" (a peer's receipt for our message) or "IN" (a peer's token our
+  // decision was made on).
+  string direction = 2;
+  string trust_id = 3;
+  string peer_org_id = 4;
+  // Our action.
+  string action_id = 5;
+  // The peer's action.
+  string peer_action_id = 6;
+  // "ALLOW", "DENY" or "HELD".
+  string decision = 7;
+  // "VALID", "MISSING" or "INVALID".
+  string state = 8;
+  // The JWS as received.
+  string receipt_jws = 9;
+  google.protobuf.Timestamp receive_time = 10;
+}
+
+// ListFederationReceiptsRequest filters the list.
+message ListFederationReceiptsRequest {
+  // One trust only.
+  string trust_id = 1 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  // One action only.
+  string action_id = 2 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  // At most this many (default 50, at most 200).
+  int32 page_size = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Opaque cursor from a previous page.
+  string page_token = 4 [(buf.validate.field).string.max_len = 256];
+}
+
+// ListFederationReceiptsResponse is one page.
+message ListFederationReceiptsResponse {
+  repeated FederationReceipt receipts = 1;
+  string next_page_token = 2;
+}
+
+// SignListingCardRequest names the listing.
+message SignListingCardRequest {
+  string listing = 1 [(buf.validate.field).string.pattern = "^[a-z0-9-]{1,63}$"];
+}
+
+// SignListingCardResponse is the signed card.
+message SignListingCardResponse {
+  // The card JSON with its signature.
+  bytes card = 1;
+  // SHA-256 of the card's JCS form (sha256:<hex>), as the document states.
+  string card_digest = 2;
+  // The gateway serves it until then.
+  google.protobuf.Timestamp expire_time = 3;
+}

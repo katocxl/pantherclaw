@@ -18,6 +18,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 )
 
@@ -103,13 +104,32 @@ func (h *Handler) Authorize(ctx context.Context, req *pantherclawv1.AuthorizeReq
 	for _, f := range req.GetPayloadFindings() {
 		findings = append(findings, pipeline.PayloadFinding{Kind: f.GetKind(), Location: f.GetLocation()})
 	}
-	res, err := h.svc.authorizeContent(ctx, gw, req.GetActionIr(), creds, contentOf(req.GetContentFindings()), scanOf(req.GetContentScan()), findings...)
+	var res Result
+	var fedReceipt string
+	switch {
+	case req.GetFederationCallId() != "":
+		// G0 M35 D1024c, D1024d: a federation call instead of credentials.
+		res, fedReceipt, err = h.svc.authorizeFederated(ctx, gw, req.GetActionIr(), req.GetFederationCallId(), creds,
+			contentOf(req.GetContentFindings()), scanOf(req.GetContentScan()), findings...)
+		if err == nil {
+			telemetry.Decision(ctx, string(res.Decision))
+		}
+	case federationChannel(req.GetActionIr()):
+		// A federation action is decided only for its federation call.
+		res = Result{Decision: domain.CannotAuthorize, Reasons: []domain.Reason{{
+			Code: ReasonFederationTokenInvalid, Check: "identity", Decisive: true,
+			Detail: "a federation action is decided only for its federation call",
+		}}}
+	default:
+		res, err = h.svc.authorizeContent(ctx, gw, req.GetActionIr(), creds, contentOf(req.GetContentFindings()), scanOf(req.GetContentScan()), findings...)
+	}
 	if err != nil {
 		return nil, err
 	}
 	out := &pantherclawv1.AuthorizeResponse{
 		Decision: decisionToProto[res.Decision], ActionHash: res.ActionHash,
 		Permit: res.Permit, Epoch: res.Epoch, Receipt: res.Receipt, Nonce: res.Nonce,
+		FederationReceipt: fedReceipt,
 	}
 	if !res.TransactionID.IsZero() {
 		out.TransactionId = res.TransactionID.String()

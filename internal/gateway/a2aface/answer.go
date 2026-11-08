@@ -115,6 +115,11 @@ func refusal(res dispatch.Result) *faceError {
 	if res.Code != "" {
 		msg += " (" + res.Code + ")"
 	}
+	if res.SafeDetail != "" {
+		// The Authority's agent-safe sentence, such as a peer org's hold or
+		// refusal of a federated message (G0 M35 D1023).
+		msg = res.SafeDetail
+	}
 	e := &faceError{status: http.StatusForbidden, rpc: codeRefused, reason: reasonRefused, message: msg, facts: facts}
 	switch res.Class {
 	case dispatch.Held:

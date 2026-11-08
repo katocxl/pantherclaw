@@ -209,6 +209,24 @@ func TestM7B_DownMigrationRunsAndUpAgain(t *testing.T) {
 	}
 	m := d.Pool(t, d.Migrator)
 	ctx := context.Background()
+	// The M35 global log depends on anchors. Roll it back first, as a real
+	// migration rollback does, and restore it after testing 00065.
+	later := []string{"00397_witness_cosignatures.sql", "00396_global_log.sql"}
+	laterUp := make([]string, 0, len(later))
+	for _, name := range later {
+		src, err := fs.ReadFile(migrations.FS, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		upPart, downPart, ok := strings.Cut(string(src), "-- +goose Down")
+		if !ok {
+			t.Fatalf("%s has no Down section", name)
+		}
+		if _, err := m.Pgx().Exec(ctx, downPart); err != nil {
+			t.Fatalf("%s Down: %v", name, err)
+		}
+		laterUp = append(laterUp, upPart)
+	}
 	if _, err := m.Pgx().Exec(ctx, down); err != nil {
 		t.Fatalf("Down: %v", err)
 	}
@@ -221,6 +239,11 @@ func TestM7B_DownMigrationRunsAndUpAgain(t *testing.T) {
 	}
 	if _, err := m.Pgx().Exec(ctx, up); err != nil {
 		t.Fatalf("Up again: %v", err)
+	}
+	for i := len(laterUp) - 1; i >= 0; i-- {
+		if _, err := m.Pgx().Exec(ctx, laterUp[i]); err != nil {
+			t.Fatalf("%s Up again: %v", later[i], err)
+		}
 	}
 	if _, err := p.CrossOrgList(ctx, db.ListCheckpointsDue, 10); err != nil {
 		t.Errorf("checkpoints_due after Up again: %v", err)

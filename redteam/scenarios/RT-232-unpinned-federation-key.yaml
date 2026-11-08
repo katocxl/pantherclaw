@@ -1,0 +1,16 @@
+apiVersion: pantherclaw.range/v1
+id: RT-232
+title: A federation token signed by a key this org has not pinned is refused
+category: boundary
+suite: platform
+tier: business
+attacker: A9
+threats: [T-352]
+rules: [HR-772, HR-774]
+techniques_none: "Tests PantherClaw's federation face: a pap-fed+jwt signed by an unpinned key is refused."
+harness_only: true
+steps:
+  - id: unpinned
+    do: federation.probe
+    with: {attack: unpinned_token}
+    expect: {outcome: REFUSED, reason: PANTHERCLAW_AUTHENTICATION, decisive_control: HR-774}

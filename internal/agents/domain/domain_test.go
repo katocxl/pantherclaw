@@ -77,10 +77,11 @@ func TestHR148_DiscoveredAgentsHoldNoAuthority(t *testing.T) {
 }
 
 // TestHR092_DesktopAgentsCappedAtL1: desktop instances never exceed L1,
-// whatever attestation they present (ADR-0013).
+// whatever attestation they present (ADR-0013). Other contexts reach L3
+// with an infrastructure attestation (G0 M35 D1030).
 func TestHR092_DesktopAgentsCappedAtL1(t *testing.T) {
 	for c, want := range map[domain.ExecutionContext]int{
-		domain.ContextDesktop: 1, domain.ContextCI: 2, domain.ContextKubernetes: 2, domain.ContextService: 2,
+		domain.ContextDesktop: 1, domain.ContextCI: 3, domain.ContextKubernetes: 3, domain.ContextService: 3,
 	} {
 		if got := c.MaxAttestationLevel(); got != want {
 			t.Errorf("%s: max level %d, want %d", c, got, want)

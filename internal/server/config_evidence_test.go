@@ -5,6 +5,7 @@ package server
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -49,7 +50,7 @@ func truncateForTest(s string) string {
 
 // TestMLDSACosignIsEnterpriseOnly: co-signing is refused at start without
 // an Enterprise licence (G0 M7 decision 6), and only then is the
-// checkpoints_pq key asked for.
+// post-quantum signing keys asked for.
 func TestMLDSACosignIsEnterpriseOnly(t *testing.T) {
 	c := Config{Evidence: EvidenceConfig{MLDSACosign: true}}
 	for _, e := range []domain.Edition{domain.Community, domain.Team, domain.Business} {
@@ -60,7 +61,7 @@ func TestMLDSACosignIsEnterpriseOnly(t *testing.T) {
 	if err := c.checkEvidenceEdition(domain.Entitlements{Edition: domain.Enterprise}); err != nil {
 		t.Fatal(err)
 	}
-	if got := c.evidenceKeyPurposes(); len(got) != 1 || got[0] != keys.PurposeCheckpointsPQ {
+	if got := c.evidenceKeyPurposes(); !slices.Equal(got, []keys.Purpose{keys.PurposeCheckpointsPQ, keys.PurposeReceiptsPQ}) {
 		t.Fatalf("key purposes with co-signing = %v", got)
 	}
 	off := Config{}

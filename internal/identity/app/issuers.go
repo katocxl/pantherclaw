@@ -47,7 +47,7 @@ var (
 	ErrUnknownIssuer = pcerr.New(pcerr.InvalidArgument, "ISSUER_NOT_CONFIGURED",
 		"the issuer is not configured for this organization (identity.gitlab_issuers, identity.spiffe_trust_domains, identity.entra_apps)")
 	ErrEdition = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED",
-		"the GitLab CI, SPIFFE, GCP, AWS, Azure managed identity and Entra Agent ID presets need the Enterprise edition")
+		"the GitLab CI, SPIFFE, GCP, AWS, Azure managed identity, Entra Agent ID and L3 presets need the Enterprise edition")
 	ErrConfirmReusable = pcerr.New(pcerr.FailedPrecondition, "CONFIRM_REUSABLE_REFS",
 		"confirm that every reusable workflow ref is a protected branch or tag of its repository")
 )
@@ -99,16 +99,21 @@ type Binding struct {
 	AWS        *issuers.AWSBinding        `json:"aws,omitzero"`
 	AzureMI    *issuers.AzureMIBinding    `json:"azure_mi,omitzero"`
 	EntraAgent *issuers.EntraAgentBinding `json:"entra_agent,omitzero"`
+	// The L3 presets (G0 M35 D1030).
+	SPIFFEX509  *issuers.SPIFFEBinding      `json:"spiffe_x509,omitzero"`
+	GCPInstance *issuers.GCPInstanceBinding `json:"gcp_instance,omitzero"`
 }
 
 // presetContext is the execution context each preset attests (D119-D121).
 var presetContext = map[issuers.Kind]adomain.ExecutionContext{
 	issuers.KindGitHub: adomain.ContextCI, issuers.KindKubernetes: adomain.ContextKubernetes, issuers.KindGitLab: adomain.ContextCI,
-	issuers.KindSPIFFE:     adomain.ContextService,
-	issuers.KindGCP:        adomain.ContextService,
-	issuers.KindAWS:        adomain.ContextService,
-	issuers.KindAzureMI:    adomain.ContextService,
-	issuers.KindEntraAgent: adomain.ContextService,
+	issuers.KindSPIFFE:      adomain.ContextService,
+	issuers.KindGCP:         adomain.ContextService,
+	issuers.KindAWS:         adomain.ContextService,
+	issuers.KindAzureMI:     adomain.ContextService,
+	issuers.KindEntraAgent:  adomain.ContextService,
+	issuers.KindSPIFFEX509:  adomain.ContextService,
+	issuers.KindGCPInstance: adomain.ContextService,
 }
 
 // kinds lists the kind of every field that is set.
@@ -116,11 +121,13 @@ func (b Binding) kinds() []issuers.Kind {
 	var out []issuers.Kind
 	for k, set := range map[issuers.Kind]bool{
 		issuers.KindGitHub: b.GitHub != nil, issuers.KindKubernetes: b.Kubernetes != nil, issuers.KindGitLab: b.GitLab != nil,
-		issuers.KindSPIFFE:     b.SPIFFE != nil,
-		issuers.KindGCP:        b.GCP != nil,
-		issuers.KindAWS:        b.AWS != nil,
-		issuers.KindAzureMI:    b.AzureMI != nil,
-		issuers.KindEntraAgent: b.EntraAgent != nil,
+		issuers.KindSPIFFE:      b.SPIFFE != nil,
+		issuers.KindGCP:         b.GCP != nil,
+		issuers.KindAWS:         b.AWS != nil,
+		issuers.KindAzureMI:     b.AzureMI != nil,
+		issuers.KindEntraAgent:  b.EntraAgent != nil,
+		issuers.KindSPIFFEX509:  b.SPIFFEX509 != nil,
+		issuers.KindGCPInstance: b.GCPInstance != nil,
 	} {
 		if set {
 			out = append(out, k)
@@ -155,6 +162,10 @@ func (b Binding) validate() error {
 		err = b.AzureMI.Validate()
 	case issuers.KindEntraAgent:
 		err = b.EntraAgent.Validate()
+	case issuers.KindSPIFFEX509:
+		err = b.SPIFFEX509.Validate()
+	case issuers.KindGCPInstance:
+		err = b.GCPInstance.Validate()
 	default:
 		return pcerr.New(pcerr.InvalidArgument, "ISSUER_BINDING", "exactly one preset binding is required")
 	}
@@ -180,6 +191,10 @@ func (b Binding) issuer() string {
 		return issuers.AzureIssuer(b.AzureMI.TenantID)
 	case issuers.KindEntraAgent:
 		return issuers.AzureIssuer(b.EntraAgent.TenantID)
+	case issuers.KindSPIFFEX509:
+		return b.SPIFFEX509.Issuer()
+	case issuers.KindGCPInstance:
+		return issuers.GCPIssuer
 	case issuers.KindKubernetes:
 		return b.Kubernetes.Issuer()
 	}
@@ -213,6 +228,10 @@ func (b Binding) algorithms() []string {
 		return issuers.AWSAlgorithms
 	case issuers.KindAzureMI, issuers.KindEntraAgent:
 		return issuers.AzureAlgorithms
+	case issuers.KindSPIFFEX509:
+		return issuers.SPIFFEX509Algorithms
+	case issuers.KindGCPInstance:
+		return issuers.GCPAlgorithms
 	case issuers.KindKubernetes:
 		return []string{"TokenReview"}
 	}
@@ -241,6 +260,10 @@ func (b Binding) widening(prev *Binding) []string {
 		return b.AzureMI.Widening(prev.AzureMI)
 	case b.EntraAgent != nil:
 		return b.EntraAgent.Widening(prev.EntraAgent)
+	case b.SPIFFEX509 != nil:
+		return b.SPIFFEX509.Widening(prev.SPIFFEX509)
+	case b.GCPInstance != nil:
+		return b.GCPInstance.Widening(prev.GCPInstance)
 	default:
 		return b.Kubernetes.Widening(prev.Kubernetes)
 	}
@@ -371,10 +394,10 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 	// A run grant starts a pod's run (G0 M32 D973) or a cloud agent
 	// runtime's run (G0 M34 D992).
 	runs := in.Binding.Kubernetes != nil || in.Binding.GCP != nil || in.Binding.AWS != nil || in.Binding.AzureMI != nil ||
-		in.Binding.EntraAgent != nil
+		in.Binding.EntraAgent != nil || in.Binding.SPIFFEX509 != nil || in.Binding.GCPInstance != nil
 	if in.RunGrantID != nil && (!runs || in.RunGrantID.IsZero()) {
 		return Revision{}, pcerr.New(pcerr.InvalidArgument, "ISSUER_RUN_GRANT",
-			"a run grant is only for a kubernetes, gcp, aws, azure_mi or entra_agent binding")
+			"a run grant is only for a kubernetes, gcp, aws, azure_mi, entra_agent, spiffe_x509 or gcp_instance binding")
 	}
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
@@ -390,6 +413,9 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 		return Revision{}, ErrUnknownIssuer
 	}
 	if sp := in.Binding.SPIFFE; sp != nil && (s.att.SPIFFE == nil || !s.att.SPIFFE.Allowed(sp.TrustDomain, c.Org)) {
+		return Revision{}, ErrUnknownIssuer
+	}
+	if sx := in.Binding.SPIFFEX509; sx != nil && (s.att.SPIFFEX509 == nil || !s.att.SPIFFEX509.Allowed(sx.TrustDomain, c.Org)) {
 		return Revision{}, ErrUnknownIssuer
 	}
 	if az := in.Binding.AzureMI; az != nil && (s.att.Entra == nil || !s.att.Entra.Allowed(az.TenantID, az.AppID, c.Org)) {

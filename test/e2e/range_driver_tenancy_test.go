@@ -68,6 +68,9 @@ func (d *rangeDriver) uiStep(st domain.Step) (domain.Observation, bool, error) {
 	case "runtime.probe":
 		obs, err := d.runtimeProbe(st)
 		return obs, true, err
+	case "federation.probe":
+		obs, err := d.federationProbe(st)
+		return obs, true, err
 	case "saas.probe":
 		obs, err := d.saasProbe(st)
 		return obs, true, err

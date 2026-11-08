@@ -22,6 +22,7 @@ import (
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
+	"github.com/katocxl/pantherclaw/internal/evidence/receiptsig"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -479,6 +480,11 @@ func appendEffect(ctx context.Context, tx db.TenantTx, q *dbq.Queries, e app.Eff
 		LevelAchieved: achieved, Basis: e.Basis, ReceiptJws: signed.JWS, LedgerEntryID: entry.ID,
 	}); err != nil {
 		return err
+	}
+	if signed.Sigs != nil { // G0 M35 D1042: the receipt's sigs[], beside it
+		if err := q.InsertReceiptSignatures(ctx, e.Org, receiptsig.Digest(signed.JWS), signed.Sigs); err != nil {
+			return err
+		}
 	}
 	state := string(e.State)
 	if err := q.SetEffectState(ctx, dbq.SetEffectStateParams{State: &state, Achieved: achieved, OrgID: e.Org, ID: e.Transaction}); err != nil {

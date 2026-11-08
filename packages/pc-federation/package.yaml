@@ -1,0 +1,145 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for messages a trusted peer organization's agent
+# sends to one of this organization's listed agents (G0 M35 D1024; FQ35-1;
+# HR-773..775). The peer's agent reaches the gateway's federation face
+# (/fed/a2a/{listing}) with a pap-fed+jwt its own organization signed; the
+# server checks it against the pinned keys of an ACTIVE trust, and every
+# call is decided here under a cross-org grant, like any other action. The
+# target is the listing (its name), never a tool or data: after an allow
+# the gateway forwards the exact body to the listed agent through the
+# listing's a2a connection and returns its answer. Holds wait for this
+# organization's people. A peer's message is untrusted data (HR-327).
+# Only the three JSON-RPC methods below are decided; any other is refused.
+format: 1
+name: pc.federation
+version: 1.0.0
+publisher: pantherclaw
+summary: Messages from trusted peer organizations' agents to listed agents
+
+definitions:
+  - operation: federation.message.receive
+    summary: Receive a message from a trusted peer organization's agent
+    access: write
+    target:
+      type: federation_listing
+      id_pattern: '^[a-z0-9-]{1,63}$'
+      account: none
+    params:
+      message:
+        type: content
+        material: true
+        required: true
+        max_length: 8192
+      context_id:
+        type: identifier
+        material: true
+        pattern: '^[A-Za-z0-9._~+=@-]{1,256}$'
+      task_id:
+        type: identifier
+        material: true
+        pattern: '^[A-Za-z0-9._~+=@-]{1,256}$'
+    effects:
+      - kind: agent.message.receive
+        description: A listed agent receives a peer organization's message; what it does is decided again
+    reversibility: irreversible
+    dedupe_key: [target.id, params.message]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: A peer organization's agent messages {target.id}
+      fields: [target.id]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-05
+    dispatch:
+      a2a:
+        method: SendMessage
+    mappings:
+      - channel: federation
+        method: SendMessage
+        route: federation-send
+        extract:
+          target_id: path.listing
+          params:
+            message: input.message.parts[0].text
+            context_id: input.message.?contextId
+            task_id: input.message.?taskId
+
+  - operation: federation.task.read
+    summary: Read a task the listed agent answered to the peer
+    access: read
+    target:
+      type: federation_listing
+      id_pattern: '^[a-z0-9-]{1,63}$'
+      account: none
+    params:
+      task_id:
+        type: identifier
+        required: true
+        pattern: '^[A-Za-z0-9._~+=@-]{1,256}$'
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-05
+    dispatch:
+      a2a:
+        method: GetTask
+    mappings:
+      - channel: federation
+        method: GetTask
+        route: federation-task-get
+        extract:
+          target_id: path.listing
+          params:
+            task_id: input.id
+
+  - operation: federation.task.cancel
+    summary: Cancel a task the listed agent answered to the peer
+    access: write
+    target:
+      type: federation_listing
+      id_pattern: '^[a-z0-9-]{1,63}$'
+      account: none
+    params:
+      task_id:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z0-9._~+=@-]{1,256}$'
+    effects:
+      - kind: request.cancel
+        description: Asks the listed agent to stop a task
+    reversibility: irreversible
+    dedupe_key: [target.id, params.task_id]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: A peer organization's agent cancels task {params.task_id} of {target.id}
+      fields: [target.id, params.task_id]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-05
+    dispatch:
+      a2a:
+        method: CancelTask
+    mappings:
+      - channel: federation
+        method: CancelTask
+        route: federation-task-cancel
+        extract:
+          target_id: path.listing
+          params:
+            task_id: input.id

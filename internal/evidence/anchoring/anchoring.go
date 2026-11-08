@@ -115,6 +115,10 @@ type Service struct {
 	Log   *slog.Logger
 	// MaxOrgs is the page size of the cross-org listing (0: MaxOrgs).
 	MaxOrgs int
+	// TUF, when set, supplies the Rekor log key and the TSA chain from
+	// Sigstore's TUF-verified trusted root instead of configured files
+	// (G0 M35 D1040). Without loaded material nothing is submitted.
+	TUF *TUFTrust
 }
 
 func (s *Service) now() time.Time {
@@ -483,6 +487,14 @@ func expectOne(n int64, err error) error {
 func (s *Service) Tick(ctx context.Context) error {
 	if _, err := s.Create(ctx, s.Period(s.now())); err != nil {
 		s.log().ErrorContext(ctx, "evidence.anchor_create_failed", slog.String("error", err.Error()))
+	}
+	if s.TUF != nil {
+		if !s.TUF.load(ctx) {
+			s.log().WarnContext(ctx, "evidence.anchor_submit_waiting", slog.String("cause", ErrNoTUFTrust.Error()))
+			return nil
+		}
+		l, v, _ := s.TUF.current()
+		s.Rekor.Log, s.TSA.Verifier = l, v // only this tick reads them
 	}
 	var due []ids.UUID
 	err := s.Pool.InGlobalTx(ctx, db.GlobalAnchors, func(ctx context.Context, tx db.GlobalTx) error {

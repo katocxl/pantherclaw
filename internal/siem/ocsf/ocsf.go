@@ -517,6 +517,20 @@ var agentIdentityKinds = map[string]identityEvent{
 	// enroll by (G0 M32 D968; D1206 M32-1).
 	auditkind.GatewayKubernetesBindingSet:     {class: classEntityMgmt, activity: entityCreate, activityName: "Create", entity: "kubernetes_binding"},
 	auditkind.GatewayKubernetesBindingCleared: {class: classEntityMgmt, activity: entityDelete, activityName: "Delete", entity: "kubernetes_binding"},
+	// The federation key and trust ceremony are agent identity protection
+	// (D1205, D1206 M35-1). Cross-org grants, listings and the endpoint stay
+	// API Activity: they mediate messages.
+	auditkind.FederationKeyRotated:             {class: classEntityMgmt, activity: entityUpdate, activityName: "Update", entity: "federation_key"},
+	auditkind.FederationKeyRetired:             {class: classEntityMgmt, activity: entityDelete, activityName: "Delete", entity: "federation_key"},
+	auditkind.FederationKeyRewrapped:           {class: classEntityMgmt, activity: entityUpdate, activityName: "Update", entity: "federation_key"},
+	auditkind.FederationTrustProposed:          {class: classEntityMgmt, activity: entityCreate, activityName: "Create", entity: "federation_trust"},
+	auditkind.FederationTrustConfirmed:         {class: classEntityMgmt, activity: entityUpdate, activityName: "Update", entity: "federation_trust"},
+	auditkind.FederationTrustPeerConfirmed:     {class: classEntityMgmt, activity: entityUpdate, activityName: "Update", entity: "federation_trust"},
+	auditkind.FederationTrustActive:            {class: classEntityMgmt, activity: entityActivate, activityName: "Activate", entity: "federation_trust"},
+	auditkind.FederationTrustRefreshed:         {class: classEntityMgmt, activity: entityUpdate, activityName: "Update", entity: "federation_trust"},
+	auditkind.FederationTrustStale:             {class: classEntityMgmt, activity: entityDeactivate, activityName: "Deactivate", entity: "federation_trust"},
+	auditkind.FederationTrustRevoked:           {class: classEntityMgmt, activity: entityDelete, activityName: "Delete", entity: "federation_trust"},
+	auditkind.FederationPeerRotationUnverified: {class: classAuthentication, activity: activityOther, activityName: "Other", refused: true},
 }
 
 func isAgentIdentity(kind string) bool {

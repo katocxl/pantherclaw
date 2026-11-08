@@ -1,0 +1,16 @@
+apiVersion: pantherclaw.range/v1
+id: RT-231
+title: A federation token id is accepted once and refused the second time
+category: boundary
+suite: platform
+tier: business
+attacker: A4
+threats: [T-351]
+rules: [HR-775]
+techniques_none: "Tests PantherClaw's federation replay store: one jti from a peer is recorded once."
+harness_only: true
+steps:
+  - id: replay
+    do: federation.probe
+    with: {attack: replay}
+    expect: {outcome: REFUSED, reason: FEDERATION_REPLAY, decisive_control: HR-775}

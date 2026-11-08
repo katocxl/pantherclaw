@@ -25,6 +25,11 @@ import (
 // instance (G0 M26 D408.1): its key is held by no one.
 const EnrolledMcpClient = "mcp_client"
 
+// EnrolledFederation is the enrolled_via of a federated peer agent's
+// instance (G0 M35 D1024c): it has no key, and Identify refuses it for
+// PAP/1 explicitly; it acts only through a federation call.
+const EnrolledFederation = "federation"
+
 // OAuthRoute reports whether a request URL is on a gateway's OAuth route
 // (/mcp-oauth/), where only a pap-mcp+jwt is accepted (HR-626).
 func OAuthRoute(raw string) bool {

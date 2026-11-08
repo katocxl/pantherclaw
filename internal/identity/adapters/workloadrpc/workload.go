@@ -182,7 +182,7 @@ func (s *Workload) Enroll(ctx context.Context, req *pantherclawv1.EnrollRequest)
 		State: pantherclawv1.InstanceState_INSTANCE_STATE_PENDING_ADMISSION, Fingerprint: e.Fingerprint,
 	}
 	if e.State == "ADMITTED" {
-		resp.State, resp.AttestationLevel = pantherclawv1.InstanceState_INSTANCE_STATE_ADMITTED, int32(e.Level) //nolint:gosec // G115: 1 or 2
+		resp.State, resp.AttestationLevel = pantherclawv1.InstanceState_INSTANCE_STATE_ADMITTED, int32(e.Level) //nolint:gosec // G115: 1 to 3
 	}
 	return resp, nil
 }
@@ -209,7 +209,7 @@ func (s *Workload) IssueToken(ctx context.Context, req *pantherclawv1.IssueToken
 	}
 	s.setNonce(ctx, info, org)
 	return &pantherclawv1.IssueTokenResponse{
-		WorkloadToken: iss.Token, ExpireTime: ts(iss.ExpiresAt), AttestationLevel: int32(iss.Level), //nolint:gosec // G115: 1 or 2
+		WorkloadToken: iss.Token, ExpireTime: ts(iss.ExpiresAt), AttestationLevel: int32(iss.Level), //nolint:gosec // G115: 1 to 3
 	}, nil
 }
 
@@ -310,6 +310,10 @@ func attestation(a *pantherclawv1.Attestation) *app.Attestation {
 		kind = issuers.KindAzureMI
 	case pantherclawv1.AttestationKind_ATTESTATION_KIND_ENTRA_AGENT_ID:
 		kind = issuers.KindEntraAgent
+	case pantherclawv1.AttestationKind_ATTESTATION_KIND_SPIFFE_X509:
+		kind = issuers.KindSPIFFEX509
+	case pantherclawv1.AttestationKind_ATTESTATION_KIND_GCP_INSTANCE:
+		kind = issuers.KindGCPInstance
 	}
 	return &app.Attestation{Kind: kind, Token: a.GetToken()}
 }

@@ -1,0 +1,16 @@
+apiVersion: pantherclaw.range/v1
+id: RT-230
+title: A forged federation token is refused before a peer message is decided
+category: boundary
+suite: platform
+tier: business
+attacker: A9
+threats: [T-350]
+rules: [HR-770, HR-775]
+techniques_none: "Tests PantherClaw's federation face: a token that is not a pap-fed+jwt is refused."
+harness_only: true
+steps:
+  - id: forged
+    do: federation.probe
+    with: {attack: forged_token}
+    expect: {outcome: REFUSED, reason: PANTHERCLAW_AUTHENTICATION, decisive_control: HR-775}

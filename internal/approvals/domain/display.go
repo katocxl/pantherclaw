@@ -173,7 +173,13 @@ type ActionInput struct {
 	Bound []BoundFact
 	Run   RunLine
 	// TaskLabel is the run's UNTRUSTED task label.
-	TaskLabel    string
+	TaskLabel string
+	// PeerOrg is a federated run's peer org name from its trust row at
+	// hold time (G0 M35 D1024a). The peer chose it, so it is shown in the
+	// untrusted block; Run.Principal names the peer org id and the peer
+	// agent. Both are in the display hash, so the binding covers them
+	// (HR-030).
+	PeerOrg      string
 	Requirements []Requirement
 	Deadline     time.Time
 	Variants     []VariantLine
@@ -241,6 +247,9 @@ func RenderAction(in ActionInput) (Display, error) {
 	var untrusted []Untrusted
 	if in.TaskLabel != "" {
 		untrusted = append(untrusted, Clean("task_label", in.TaskLabel, 0))
+	}
+	if in.PeerOrg != "" {
+		untrusted = append(untrusted, Clean("peer_org", in.PeerOrg, 0))
 	}
 	for _, name := range slices.Sorted(maps.Keys(in.Requested)) {
 		if v := in.Requested[name]; (v.Type == defs.TypeText || v.Type == defs.TypeContent) && v.Str != "" {

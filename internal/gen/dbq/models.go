@@ -53,6 +53,8 @@ type PcA2aPin struct {
 	DriftedAt           *time.Time
 	ObservedDigest      []byte
 	PublicUrl           *string
+	FederationTrustID   *ids.UUID
+	FederationListing   *string
 }
 
 type PcAccount struct {
@@ -2290,6 +2292,121 @@ type PcFactProvider struct {
 	Builtin          bool
 }
 
+type PcFederationAgent struct {
+	OrgID      ids.OrgID
+	TrustID    ids.UUID
+	PeerAgent  string
+	AgentID    ids.UUID
+	InstanceID ids.UUID
+	CreatedBy  string
+	CreatedAt  time.Time
+}
+
+type PcFederationCall struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	TrustID      ids.UUID
+	PeerAgent    string
+	RunID        ids.UUID
+	AgentID      ids.UUID
+	InstanceID   ids.UUID
+	Listing      string
+	Htu          string
+	BodySha256   []byte
+	ReceiptID    ids.UUID
+	PeerActionID string
+	PeerToken    string
+	PeerAttLvl   int16
+	CreatedAt    time.Time
+	ExpiresAt    time.Time
+	UsedAt       *time.Time
+	ActionID     *ids.UUID
+}
+
+type PcFederationKey struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	Kid               string
+	PublicKey         []byte
+	PublicJwk         []byte
+	WrappedPrivateKey []byte
+	KekID             string
+	State             string
+	CreatedAt         time.Time
+	CreatedBy         string
+	RotatedAt         *time.Time
+	RetiredAt         *time.Time
+}
+
+type PcFederationListing struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	Name         string
+	AgentID      ids.UUID
+	ConnectionID ids.UUID
+	Skills       []string
+	State        string
+	CreatedBy    string
+	CreatedAt    time.Time
+	RetiredBy    *string
+	RetiredAt    *time.Time
+}
+
+type PcFederationReceipt struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	Direction    string
+	TrustID      ids.UUID
+	PeerOrgID    ids.UUID
+	ActionID     *ids.UUID
+	PeerActionID *string
+	Decision     *string
+	ReceiptJws   *string
+	State        string
+	ReceivedAt   time.Time
+}
+
+type PcFederationReplay struct {
+	OrgID     ids.OrgID
+	PeerOrgID ids.UUID
+	Kind      string
+	Jti       string
+	ExpiresAt time.Time
+	CreatedAt time.Time
+}
+
+type PcFederationSetting struct {
+	OrgID         ids.OrgID
+	FederationUrl string
+	UpdatedBy     string
+	UpdatedAt     time.Time
+}
+
+type PcFederationTrust struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	PeerOrgID           ids.UUID
+	PeerName            string
+	PeerDocUrl          string
+	PeerServerUrl       string
+	PeerFederationUrl   *string
+	PinnedJwks          []byte
+	PinnedKeysDigest    []byte
+	PeerDocument        []byte
+	PeerDocExpiresAt    time.Time
+	SafetyCode          string
+	State               string
+	CreatedBy           string
+	CreatedAt           time.Time
+	ConfirmedBy         *ids.UUID
+	ConfirmedCredential *ids.UUID
+	ConfirmedAt         *time.Time
+	PeerConfirmedAt     *time.Time
+	LastRefreshedAt     *time.Time
+	RevokedBy           *string
+	RevokedAt           *time.Time
+}
+
 type PcFleetCohort struct {
 	OrgID       ids.OrgID
 	ID          ids.UUID
@@ -2451,6 +2568,38 @@ type PcGithubScanRun struct {
 	FinishedAt     *time.Time
 }
 
+type PcGlobalCheckpoint struct {
+	TreeSize  int64
+	RootHash  []byte
+	Note      []byte
+	Kid       string
+	CreatedAt time.Time
+}
+
+type PcGlobalCheckpointCosignature struct {
+	TreeSize  int64
+	Witness   string
+	KeyID     int64
+	SignedAt  time.Time
+	Line      string
+	CreatedAt time.Time
+}
+
+type PcGlobalLogLeafe struct {
+	LeafIndex int64
+	AnchorID  ids.UUID
+	Root      []byte
+	CreatedAt time.Time
+}
+
+type PcGlobalLogTile struct {
+	Level     int16
+	TileIndex int64
+	Width     int16
+	Hashes    []byte
+	CreatedAt time.Time
+}
+
 type PcGrant struct {
 	OrgID                 ids.OrgID
 	ID                    ids.UUID
@@ -2472,6 +2621,8 @@ type PcGrant struct {
 	RevokeReason          *string
 	CeilingID             *ids.UUID
 	AutomationExecutionID *ids.UUID
+	PeerOrgID             *ids.UUID
+	PeerAgent             *string
 }
 
 type PcGrantLineage struct {
@@ -3753,6 +3904,13 @@ type PcRateCounter struct {
 	Count       int32
 }
 
+type PcReceiptSignature struct {
+	OrgID         ids.OrgID
+	ReceiptSha256 []byte
+	Sigs          []byte
+	CreatedAt     time.Time
+}
+
 type PcRecommendationDismissal struct {
 	OrgID            ids.OrgID
 	RecommendationID string
@@ -3996,6 +4154,10 @@ type PcRun struct {
 	MaxTokens             pgtype.Int8
 	TokenCapRunID         *ids.UUID
 	LauncherIssuerID      *ids.UUID
+	FederationTrustID     *ids.UUID
+	PeerOrgID             *ids.UUID
+	PeerAgent             *string
+	FederationDay         pgtype.Date
 }
 
 type PcSaasScanRun struct {

@@ -28,6 +28,6 @@ func applyFIPSMode(ctx context.Context, cfg *Config, log *slog.Logger) {
 	if cfg.Evidence.MLDSACosign {
 		cfg.Evidence.MLDSACosign = false
 		log.WarnContext(ctx, "fips.mldsa_cosign_off",
-			slog.String("reason", "ML-DSA is not in the validated FIPS 140-3 module; checkpoints and evidence packs are signed with Ed25519 only"))
+			slog.String("reason", "ML-DSA is not in the validated FIPS 140-3 module; checkpoints, evidence packs and receipts are signed with Ed25519 only"))
 	}
 }

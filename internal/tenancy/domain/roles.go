@@ -64,9 +64,14 @@ type Role struct {
 // Has reports whether the role contains p.
 func (r Role) Has(p Permission) bool { return slices.Contains(r.Permissions, p) }
 
-// HumanOnly reports whether the role contains a human-only permission; such
-// a role can never be bound to a service account.
-func (r Role) HumanOnly() bool { return slices.ContainsFunc(r.Permissions, Permission.HumanOnly) }
+// HumanOnly reports whether the role must be bound only to people. Org Admin
+// remains bindable to service accounts; federation management is still
+// restricted to people by Subject.eligible, including for existing bindings.
+func (r Role) HumanOnly() bool {
+	return slices.ContainsFunc(r.Permissions, func(p Permission) bool {
+		return p.HumanOnly() && (r.Name != RoleOrgAdmin || p != PermFederationManage)
+	})
+}
 
 // BindableAt reports whether the role may be bound at scope type t.
 func (r Role) BindableAt(t ScopeType) bool { return slices.Contains(r.Scopes, t) }

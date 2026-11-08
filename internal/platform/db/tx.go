@@ -96,11 +96,14 @@ const (
 	// GlobalHosting is the shared hosting hosts and their host agents'
 	// certificates (G0 M19 D203, HR-500): operator-level, no tenant data.
 	GlobalHosting GlobalPurpose = "hosting"
+	// GlobalLog is the deployment-wide root log and its witness cosignatures
+	// (G0 M35 D1041): global roots and witness lines only, no tenant data.
+	GlobalLog GlobalPurpose = "global_log"
 )
 
 var globalPurposes = []GlobalPurpose{
 	GlobalLicence, GlobalJobs, GlobalCrossOrgList, GlobalHealth, GlobalAnchors, GlobalAccounts, GlobalRateLimit,
-	GlobalFailover, GlobalHosting,
+	GlobalFailover, GlobalHosting, GlobalLog,
 }
 
 // TxOption customizes a transaction.

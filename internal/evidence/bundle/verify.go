@@ -20,6 +20,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/merkle"
 	"github.com/katocxl/pantherclaw/internal/evidence/note"
+	"github.com/katocxl/pantherclaw/internal/evidence/witness"
 	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -33,6 +34,11 @@ type Options struct {
 	Sigstore *SigstoreRoot
 	// Previous is a checkpoint note the user saved earlier (a witness).
 	Previous []byte
+	// Witnesses are the cosignature/v1 keys of the witnesses the user
+	// trusts, and WitnessThreshold how many of them must have cosigned the
+	// root log's checkpoint (at least 1) (G0 M35 D1041).
+	Witnesses        []*witness.Verifier
+	WitnessThreshold int
 }
 
 // receiptTypes are the JOSE types of receipts (PAP-1 §9.1–9.3).
@@ -94,6 +100,7 @@ func Verify(b *Bundle, o Options) *Report {
 	v.receipts()
 	v.closures()
 	v.anchor()
+	v.globalLog() // G0 M35 D1041
 	return r
 }
 
@@ -385,6 +392,7 @@ func (v *verifier) receipts() {
 			v.r.add("receipt.ledger", subject, NotAvailable, "no verified entry in this bundle records it")
 		}
 		v.coverage(subject, payload, seq, recorded)
+		v.receiptCosignature(subject, compact) // G0 M35 D1042
 	}
 }
 

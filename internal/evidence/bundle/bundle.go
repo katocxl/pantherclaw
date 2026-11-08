@@ -63,6 +63,11 @@ type Bundle struct {
 	// ProbeReports are the signed probe reports the bundle's sandbox.closure
 	// entries name (HR-227).
 	ProbeReports []ProbeReport `json:"probe_reports,omitzero"`
+	// Global proves the anchor is in the deployment-wide root log, with the
+	// witnesses' cosignatures (G0 M35 D1041).
+	Global *GlobalLog `json:"global,omitzero"`
+	// ReceiptSigs are the receipts' PAP-1 §9.4 sigs[] (G0 M35 D1042).
+	ReceiptSigs []ReceiptSigs `json:"receipt_sigs,omitzero"`
 }
 
 // Entry is a ledger entry in its chained form. Body is absent when
@@ -204,7 +209,7 @@ func (b *Bundle) check() error {
 			return invalid("malformed anchor")
 		}
 	}
-	return nil
+	return b.checkTrail()
 }
 
 func (e Entry) check() error {
