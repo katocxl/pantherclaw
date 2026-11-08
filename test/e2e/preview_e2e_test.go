@@ -123,7 +123,7 @@ func previewVerified(t *testing.T, p *proof, ctx context.Context, name, sigstore
 		for _, c := range r.Checks {
 			optional := c.Name == "checkpoint.cosignature" || c.Name == "witness.previous" ||
 				c.Name == "receipt.cosignature" || c.Name == "global.checkpoint"
-			if c.Status != bundle.Passed && !(optional && c.Status == bundle.NotAvailable) {
+			if c.Status != bundle.Passed && (!optional || c.Status != bundle.NotAvailable) {
 				notPassed = append(notPassed, c.Name+" "+string(c.Status))
 			}
 		}
