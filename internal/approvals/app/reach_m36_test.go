@@ -9,11 +9,26 @@ import (
 	"testing"
 	"time"
 
+	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
+
+type failedReachEntitlements struct{ err error }
+
+func (f failedReachEntitlements) Current(context.Context) (billing.Entitlements, error) {
+	return billing.Entitlements{}, f.err
+}
+
+func TestFatigueReportsEntitlementReadFailure(t *testing.T) {
+	want := errors.New("entitlements unavailable")
+	s := &Service{Ents: failedReachEntitlements{err: want}}
+	if _, err := s.FlagFatigue(context.Background(), ids.New[ids.Org]()); !errors.Is(err, want) {
+		t.Fatalf("FlagFatigue error = %v, want %v", err, want)
+	}
+}
 
 // TestHR789_ReachPathsDoNotApprove: fatigue flagging without a Team
 // licence writes nothing, and an unknown group is refused before any read

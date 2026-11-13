@@ -8,7 +8,7 @@ package auditkind
 // None of them records an approval: nothing these features do approves
 // anything (HR-789).
 const (
-	ApprovalDeputyCancelled   = "approval.deputy_cancelled"
+	ApprovalDeputyCancelled   = "approval.deputy_cancelled" //nolint:misspell // the published audit kind
 	ApprovalDeputyNotEligible = "approval.deputy_not_eligible"
 	ApprovalDeputySet         = "approval.deputy_set"
 	ApprovalFatigueFlagged    = "approval.fatigue_flagged"

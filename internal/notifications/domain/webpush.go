@@ -157,7 +157,8 @@ func EncryptPush(plaintext, uaPublic, authSecret []byte) ([]byte, error) {
 	header := make([]byte, 0, 16+4+1+len(asPublic))
 	header = append(header, salt...)
 	header = binary.BigEndian.AppendUint32(header, pushRecordSize)
-	header = append(header, byte(len(asPublic)))
+	// An uncompressed P-256 public key is always 65 bytes.
+	header = append(header, 65)
 	header = append(header, asPublic...)
 	return gcm.Seal(header, nonce, record, nil), nil
 }

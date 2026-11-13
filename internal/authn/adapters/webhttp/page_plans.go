@@ -10,6 +10,7 @@ import (
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	"github.com/katocxl/pantherclaw/internal/changes"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	"github.com/katocxl/pantherclaw/internal/otlpexport"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
@@ -110,6 +111,7 @@ var pagePlans = map[string]PagePlan{
 	ExportDestinationsPath + "/new":             on(pantherclawv1connect.ExportDestinationServiceCreateExportDestinationProcedure),
 	ExportDestinationsPath + "/{id}/credential": on(pantherclawv1connect.ExportDestinationServiceReplaceExportDestinationCredentialProcedure),
 	ExportDestinationsPath + "/{id}/confirm":    on(pantherclawv1connect.ExportDestinationServiceSetExportDestinationStateProcedure),
+	otlpexport.ConfirmPath + "/{id}/confirm":    on(pantherclawv1connect.OTLPDestinationServiceActivateOTLPDestinationProcedure),
 	IdentityProvidersPath + "/new":              on(pantherclawv1connect.IdentityProviderServiceCreateIdentityProviderProcedure),
 
 	CredentialRotationsPath + "/{id}/activate": on(pantherclawv1connect.CredentialRotationServiceActivateRotationProcedure),

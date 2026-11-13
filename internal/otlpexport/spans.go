@@ -253,5 +253,5 @@ func unixNano(t time.Time) uint64 {
 	if t.IsZero() || t.UnixNano() < 0 {
 		return 0
 	}
-	return uint64(t.UnixNano()) //nolint:gosec // G115: checked non-negative
+	return uint64(t.UnixNano())
 }

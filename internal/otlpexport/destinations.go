@@ -347,7 +347,7 @@ func (s *Service) Create(ctx context.Context, in NewDestination) (Destination, e
 	sealed := make([]sealedHeader, 0, len(in.Headers))
 	for _, h := range in.Headers {
 		names = append(names, h.Name)
-		sealed = append(sealed, sealedHeader{Name: h.Name, Value: h.Value})
+		sealed = append(sealed, sealedHeader(h))
 	}
 	var out Destination
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {

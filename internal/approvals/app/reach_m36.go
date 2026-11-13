@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -249,8 +250,11 @@ func fatigueReasons(hour, day *dbq.ApprovalFatigueRow) map[string]int64 {
 // one live flag per person and reason. Outside the Team edition it does
 // nothing. A flag only changes routing order; it never decides.
 func (s *Service) FlagFatigue(ctx context.Context, org ids.OrgID) (int, error) {
-	if s.teamFatigue(ctx) != nil {
-		return 0, nil
+	if err := s.teamFatigue(ctx); err != nil {
+		if errors.Is(err, ErrFatigueEdition) {
+			return 0, nil
+		}
+		return 0, err
 	}
 	n := 0
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
@@ -672,8 +676,14 @@ func (s *Service) ListGroups(ctx context.Context, by string, states []apdomain.S
 // batchable by its own requirements, reversibility and value (HR-175,
 // HR-176, Team edition). It reads only; the approval page checks again.
 func (s *Service) markBatchable(ctx context.Context, groups []Group, members map[string][]Request) error {
-	if s.teamWaitlist(ctx) != nil || s.Defs == nil {
+	if s.Defs == nil {
 		return nil
+	}
+	if err := s.teamWaitlist(ctx); err != nil {
+		if errors.Is(err, ErrEditionRequired) {
+			return nil
+		}
+		return err
 	}
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
@@ -717,7 +727,7 @@ func (s *Service) groupBatchable(ctx context.Context, tx db.TenantTx, q *dbq.Que
 		}
 		var a actionir.ActionIR
 		if json.Unmarshal(r.ActionIr, &a) != nil {
-			return false, nil
+			return false, nil //nolint:nilerr // malformed actions are reviewed alone
 		}
 		d, _, err := s.Defs.PinnedInTx(ctx, tx, org, a.Definition)
 		if err != nil {

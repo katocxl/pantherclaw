@@ -115,6 +115,8 @@ ALTER TABLE pc.otlp_destinations FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON pc.otlp_destinations
     USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
     WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
+CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.otlp_destinations
+    FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
 
 GRANT SELECT, INSERT ON pc.otlp_destinations TO pc_app;
 GRANT UPDATE (state, activated_by, activated_credential, activated_at, disabled_at, updated_at, cursor_seq, last_success_at,
@@ -122,6 +124,13 @@ GRANT UPDATE (state, activated_by, activated_credential, activated_at, disabled_
 GRANT SELECT (org_id, id, name, url, header_names, state, created_by, created_at, activated_by, activated_credential,
     activated_at, disabled_at, updated_at, cursor_seq, last_success_at, failure_count, failing_since, last_failure_code,
     next_attempt_at) ON pc.otlp_destinations TO pc_audit_ro;
+-- +goose StatementBegin
+DO $$ BEGIN
+    IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_deleter') THEN
+        GRANT SELECT, DELETE ON pc.otlp_destinations TO pc_deleter;
+    END IF;
+END $$;
+-- +goose StatementEnd
 
 -- +goose Down
 DROP TABLE pc.otlp_destinations;

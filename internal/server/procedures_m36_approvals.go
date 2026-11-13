@@ -31,7 +31,7 @@ var m36ApprovalProcedures = map[string]td.Permission{
 }
 
 // m36ApprovalClasses are their plan-gate classes: a lapsed org keeps
-// reading, cancelling a deputy and removing a push subscription, which
+// reading, canceling a deputy and removing a push subscription, which
 // only narrow who is told; the rest are changes.
 var m36ApprovalClasses = map[string]entitlements.Class{
 	pantherclawv1connect.ApprovalServiceGetApprovalFatigueProcedure:               entitlements.ClassRead,
