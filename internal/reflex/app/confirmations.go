@@ -84,6 +84,11 @@ func (s *Detections) RequestCustomRuleConfirmation(ctx context.Context, ruleID s
 		case row.Version != version || !intact(row):
 			return ErrNotPublishedVersion
 		}
+		if revoked, err := bundleRevoked(ctx, q, c.Org, row.ID); err != nil {
+			return err
+		} else if revoked {
+			return ErrBundleRevoked // D1083a
+		}
 		open, err := q.OpenCustomRuleConfirmation(ctx, c.Org, ruleID)
 		switch {
 		case err == nil && applies(&open, row):
@@ -145,6 +150,11 @@ func (s *Detections) ApplyConfirmation(ctx context.Context, tx db.TenantTx, auth
 		return err
 	case row.Version != p.Version || hex.EncodeToString(row.ContentDigest) != p.Digest || !intact(row):
 		return ErrRuleChanged
+	}
+	if revoked, err := bundleRevoked(ctx, q, org, row.ID); err != nil {
+		return err
+	} else if revoked {
+		return ErrBundleRevoked // D1083a
 	}
 	switch _, err := q.OpenCustomRuleConfirmation(ctx, org, p.RuleID); {
 	case err == nil:

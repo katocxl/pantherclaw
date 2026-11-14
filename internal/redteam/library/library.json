@@ -1427,6 +1427,31 @@
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own Web Push: the payload is a title and a link, on an allowed host."
   },
+  "RT-240": {
+    "digest": "0acdf97f3718bf47668335c8b7b0c7b47792e787d60ba4a0a7d06d31e34bfa94",
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's bundle decoder: a script in a publisher bundle is refused."
+  },
+  "RT-241": {
+    "digest": "009fc821a1a9096b3471648a93de582a150f5ef21b1637f774583fe3a7069906",
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's publisher pins: a signature from an unpinned key is refused."
+  },
+  "RT-242": {
+    "digest": "677287d4840f247fd797487810b740fe9c174ae38c09559a059522b4314c5dd0",
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's bundle versions: an older bundle is refused after a newer install."
+  },
+  "RT-243": {
+    "digest": "7137461a399138862b1db017408786e98e498aec6029f0d9522dfc40c626988b",
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's bundle names: an item outside ext.<publisher> is refused."
+  },
+  "RT-244": {
+    "digest": "bac5e15e0711c792588548c93caa07f4833c466f077f52c1b505926740a399d4",
+    "tier": "business",
+    "techniques_none": "Tests the marketplace build: a listing whose homepage is not https is refused."
+  },
   "RT-260": {
     "digest": "c917e88f00ab7079bb682ed8910c4fc428f9679cdc487522fa9c7a1d2a957105",
     "tier": "community",

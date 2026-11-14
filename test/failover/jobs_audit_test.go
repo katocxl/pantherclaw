@@ -33,6 +33,8 @@ var twoWorkerAudit = map[string]string{
 	"approvals.janitor_dispatch":                 "fan-out",
 	"approvals.janitor_org":                      "unique",
 	"behavior.rollup_dispatch":                   "fan-out",
+	"bundles.revocations_fetch_dispatch":         "fan-out",
+	"bundles.revocations_fetch_org":              "unique",
 	"behavior.rollup_org":                        "unique; the cursor moves by compare-and-set, profiles upsert",
 	"authn.janitor_dispatch":                     "fan-out",
 	"authn.janitor_org":                          "unique",

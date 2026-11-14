@@ -1,0 +1,39 @@
+{
+  "spec": "pc-bundle/1",
+  "publisher": "example",
+  "name": "ext.example.starter",
+  "version": "1.0.0",
+  "title": "Example starter bundle",
+  "summary": "One OpenAPI tool package for a made-up ticket API, one detection rule and one playbook. An example for publishers; not for production use.",
+  "items": [
+    {
+      "kind": "tool_package",
+      "name": "ext.example.tickets",
+      "path": "items/tool_package/tickets.yaml",
+      "sha256": "",
+      "size": 0,
+      "simulator": {"kind": "openapi", "spec": "items/openapi_spec/tickets.yaml"}
+    },
+    {
+      "kind": "openapi_spec",
+      "name": "ext.example.tickets-openapi",
+      "path": "items/openapi_spec/tickets.yaml",
+      "sha256": "",
+      "size": 0
+    },
+    {
+      "kind": "detection_rule",
+      "name": "ext.example.comment_refusals",
+      "path": "items/detection_rule/comment_refusals.yaml",
+      "sha256": "",
+      "size": 0
+    },
+    {
+      "kind": "playbook",
+      "name": "ext.example.review-refusals",
+      "path": "items/playbook/review_refusals.yaml",
+      "sha256": "",
+      "size": 0
+    }
+  ]
+}

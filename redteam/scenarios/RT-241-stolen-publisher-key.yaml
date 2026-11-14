@@ -1,0 +1,19 @@
+apiVersion: pantherclaw.range/v1
+id: RT-241
+title: A bundle signed by a key the org did not pin is refused
+category: boundary
+suite: platform
+tier: business
+attacker: A4
+threats: [T-361]
+rules: [HR-795, HR-796]
+techniques_none: "Tests PantherClaw's publisher pins: a signature from an unpinned key is refused."
+harness_only: true
+steps:
+  - id: unpinned-key
+    do: bundle.probe
+    with: {attack: stolen_key}
+    expect:
+      outcome: REFUSED
+      reason: PUBLISHER_NOT_PINNED
+      decisive_control: HR-796

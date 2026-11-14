@@ -1,0 +1,47 @@
+openapi: 3.0.3
+info:
+  title: Example Tickets API
+  version: 1.0.0
+  description: A made-up ticket service for the example bundle ext.example.starter.
+servers:
+  - url: https://tickets.example.com/api
+paths:
+  /tickets/{ticket_id}:
+    get:
+      operationId: getTicket
+      summary: Read one ticket
+      parameters:
+        - name: ticket_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^T-[0-9]{1,10}$"
+      responses:
+        "200":
+          description: The ticket
+  /tickets/{ticket_id}/comments:
+    post:
+      operationId: addTicketComment
+      summary: Add a comment to a ticket
+      parameters:
+        - name: ticket_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^T-[0-9]{1,10}$"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body:
+                  type: string
+                  maxLength: 2000
+      responses:
+        "201":
+          description: The comment was added

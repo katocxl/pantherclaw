@@ -268,6 +268,9 @@ func (s *Detections) CreateCustomRule(ctx context.Context, content string) (Rule
 	if err != nil {
 		return Rule{}, err
 	}
+	if _, ext := rules.ExtensionPublisher(cr.Rule.ID); ext {
+		return Rule{}, errExtensionRule // G0 M37 D1080: only a bundle install stores ext. rules
+	}
 	sum := sha256.Sum256([]byte(content))
 	var out Rule
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
@@ -347,6 +350,11 @@ func (s *Detections) PublishCustomRule(ctx context.Context, id ids.UUID) (Rule, 
 	var results []engine.TestResult
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		if revoked, err := bundleRevoked(ctx, q, c.Org, id); err != nil {
+			return err
+		} else if revoked {
+			return ErrBundleRevoked // D1083a
+		}
 		// One publish at a time per org, so the cap holds (D59 L3).
 		if err := q.LockCustomRulePublishing(ctx, c.Org.UUID()); err != nil {
 			return err

@@ -696,6 +696,10 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			consoleBaseURL(cfg.Auth.PublicURL, ext), log); err != nil { // G0 M36 D1061
 			return err
 		}
+		if evidenceJobs, err = registerM37BundlesJobs(evidenceJobs, jreg, pool, bill, cfg.CEL, autos, m5.notifications,
+			cfg.Auth.PublicURL, log); err != nil { // G0 M37 D1083
+			return err
+		}
 		if evidenceJobs, err = registerM20WebhookJobs(evidenceJobs, jreg, pool, kp, log); err != nil {
 			return err
 		}
@@ -1021,6 +1025,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	mountM37Bundles := registerM37Bundles(rs, d, autos) // G0 M37 D1081–D1083
 	if err := registerAutomationTemplates(rs, d, autos); err != nil {
 		return nil, err
 	}
@@ -1073,6 +1078,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	mountM35Federation(mux, federation, d)
 	if mountM36OTel != nil {
 		mountM36OTel(mux)
+	}
+	if mountM37Bundles != nil {
+		mountM37Bundles(mux)
 	}
 	mux.HandleFunc("GET /livez", livez(pool))
 	mux.Handle("GET /readyz", readiness{pool: pool, workers: d.workers, held: d.hold, log: log})

@@ -73,6 +73,11 @@ tasks:
     cmds:
       - go -C tools run ./docsite -root .. -out ../dist/docs
 
+  marketplace:build:
+    desc: Build the static, listing-only marketplace into a new dist/marketplace directory from marketplace/listings and, with HUB=DIR, a Hub build directory (G0 M37 D1085, HR-802)
+    cmds:
+      - go -C tools run ./marketplace -root .. -out ../dist/marketplace -hub "{{.HUB}}"
+
   docs:mitre:
     desc: Regenerate docs/security/MITRE_MAPPING.md from the declared MITRE technique mappings (G0 M28; checked in task check)
     cmds:

@@ -77,6 +77,9 @@ func (d *rangeDriver) uiStep(st domain.Step) (domain.Observation, bool, error) {
 	case "reach.probe":
 		obs, err := d.reachProbe(st)
 		return obs, true, err
+	case "bundle.probe":
+		obs, err := d.bundleProbe(st)
+		return obs, true, err
 	}
 	return domain.Observation{}, false, nil
 }

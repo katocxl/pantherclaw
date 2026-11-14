@@ -56,11 +56,15 @@ const (
 	// PurposeDevHub is the development Hub key. It is not a root: only a
 	// server or a source on loopback trusts it (D101).
 	PurposeDevHub Purpose = "hub-dev"
+	// PurposePublisher is a bundle publisher's signing key (G0 M37 D1084a),
+	// created by pclaw on the publisher's machine. It is not a PantherClaw
+	// root: the key id a bundle names is format.KID(publisher, key).
+	PurposePublisher Purpose = "publisher"
 )
 
 // Valid reports whether p is a known purpose.
 func (p Purpose) Valid() bool {
-	return slices.Contains([]Purpose{PurposeLicence, PurposePackages, PurposeOrgPackages, PurposeDevPackages, PurposeHub, PurposeDevHub}, p)
+	return slices.Contains([]Purpose{PurposeLicence, PurposePackages, PurposeOrgPackages, PurposeDevPackages, PurposeHub, PurposeDevHub, PurposePublisher}, p)
 }
 
 // Root reports whether p is one of PantherClaw's offline roots.
@@ -83,7 +87,7 @@ var ErrKeyFile = errors.New("rootkey: invalid key file")
 // key (equal to trust.DevKID) and "hub-dev-<thumbprint>" for the development
 // Hub key.
 func KID(p Purpose, pub ed25519.PublicKey) string {
-	if p == PurposeOrgPackages || p == PurposeDevPackages || p == PurposeDevHub {
+	if p == PurposeOrgPackages || p == PurposeDevPackages || p == PurposeDevHub || p == PurposePublisher {
 		return string(p) + "-" + jws.Thumbprint(pub)[:22]
 	}
 	return string(p) + "-root-" + jws.Thumbprint(pub)[:22]

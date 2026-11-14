@@ -1,0 +1,19 @@
+apiVersion: pantherclaw.range/v1
+id: RT-242
+title: An older publisher bundle is refused after a newer one is installed
+category: boundary
+suite: platform
+tier: business
+attacker: A9
+threats: [T-362]
+rules: [HR-796]
+techniques_none: "Tests PantherClaw's bundle versions: an older bundle is refused after a newer install."
+harness_only: true
+steps:
+  - id: older-version
+    do: bundle.probe
+    with: {attack: rollback}
+    expect:
+      outcome: REFUSED
+      reason: ROLLBACK
+      decisive_control: HR-796

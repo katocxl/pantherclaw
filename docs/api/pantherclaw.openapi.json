@@ -6378,6 +6378,546 @@
         }
       }
     },
+    "/pantherclaw.v1.BundleService/PinPublisherKey": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "PinPublisherKey",
+        "description": "PinPublisherKey records a PENDING pin of a publisher's key (a person\n only). It trusts nothing until activated on its page.\n permission: publisher.manage",
+        "operationId": "pantherclaw.v1.BundleService.PinPublisherKey",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.PinPublisherKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.PinPublisherKeyResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BundleService/ListPublisherPins": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "ListPublisherPins",
+        "description": "ListPublisherPins lists the org's publisher pins.\n permission: bundle.read",
+        "operationId": "pantherclaw.v1.BundleService.ListPublisherPins",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListPublisherPinsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListPublisherPinsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BundleService/GetPublisherPin": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "GetPublisherPin",
+        "description": "GetPublisherPin returns one pin.\n permission: bundle.read",
+        "operationId": "pantherclaw.v1.BundleService.GetPublisherPin",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetPublisherPinRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetPublisherPinResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BundleService/ActivatePublisherPin": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "ActivatePublisherPin",
+        "description": "ActivatePublisherPin is refused over the API (STEP_UP_REQUIRED): a\n person activates a pin on its page with a security key.\n permission: publisher.manage",
+        "operationId": "pantherclaw.v1.BundleService.ActivatePublisherPin",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ActivatePublisherPinRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ActivatePublisherPinResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BundleService/RevokePublisherPin": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "RevokePublisherPin",
+        "description": "RevokePublisherPin revokes a pin (a person only). COMPROMISED also\n revokes every install the key signed, at once.\n permission: publisher.manage",
+        "operationId": "pantherclaw.v1.BundleService.RevokePublisherPin",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RevokePublisherPinRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RevokePublisherPinResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BundleService/InstallBundle": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "InstallBundle",
+        "description": "InstallBundle verifies a .pcbundle file and drafts its items (a person\n signed in as themselves). Nothing is activated.\n permission: bundle.install",
+        "operationId": "pantherclaw.v1.BundleService.InstallBundle",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.InstallBundleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.InstallBundleResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BundleService/ListBundleInstalls": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "ListBundleInstalls",
+        "description": "ListBundleInstalls lists the org's bundle installs by id.\n permission: bundle.read",
+        "operationId": "pantherclaw.v1.BundleService.ListBundleInstalls",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListBundleInstallsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListBundleInstallsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BundleService/GetBundleInstall": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "GetBundleInstall",
+        "description": "GetBundleInstall returns one install and its items.\n permission: bundle.read",
+        "operationId": "pantherclaw.v1.BundleService.GetBundleInstall",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetBundleInstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetBundleInstallResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BundleService/RevokeBundleInstall": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "RevokeBundleInstall",
+        "description": "RevokeBundleInstall revokes an install and every version of its bundle\n up to it (a person only).\n permission: bundle.install",
+        "operationId": "pantherclaw.v1.BundleService.RevokeBundleInstall",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RevokeBundleInstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RevokeBundleInstallResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BundleService/SubmitRevocation": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "SubmitRevocation",
+        "description": "SubmitRevocation applies a publisher-signed revocation statement,\n accepted only from a key the org has pinned for that publisher.\n permission: bundle.install",
+        "operationId": "pantherclaw.v1.BundleService.SubmitRevocation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SubmitRevocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SubmitRevocationResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.CaseService/OpenCase": {
       "post": {
         "tags": [
@@ -51846,6 +52386,655 @@
         "title": "RemoveBrowserSiteResponse",
         "additionalProperties": false,
         "description": "RemoveBrowserSiteResponse is empty."
+      },
+      "pantherclaw.v1.ActivatePublisherPinRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Pin id."
+          }
+        },
+        "title": "ActivatePublisherPinRequest",
+        "additionalProperties": false,
+        "description": "ActivatePublisherPinRequest names a pin.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.ActivatePublisherPinResponse": {
+        "type": "object",
+        "properties": {
+          "pin": {
+            "title": "pin",
+            "description": "The pin.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PublisherPin"
+          }
+        },
+        "title": "ActivatePublisherPinResponse",
+        "additionalProperties": false,
+        "description": "ActivatePublisherPinResponse returns it."
+      },
+      "pantherclaw.v1.BundleInstall": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Install id."
+          },
+          "publisher": {
+            "type": "string",
+            "title": "publisher",
+            "description": "The publisher id."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "The bundle name, ext.\u003cpublisher\u003e.\u003cslug\u003e."
+          },
+          "version": {
+            "type": "string",
+            "title": "version",
+            "description": "The bundle version."
+          },
+          "bundleSha256": {
+            "type": "string",
+            "title": "bundle_sha256",
+            "description": "The hex SHA-256 of the .pcbundle file."
+          },
+          "pinId": {
+            "type": "string",
+            "title": "pin_id",
+            "description": "The pin whose key verified it."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"PENDING\", \"INSTALLED\", \"FAILED\" or \"REVOKED\"."
+          },
+          "installedBy": {
+            "type": "string",
+            "title": "installed_by",
+            "description": "Who installed it."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When the install started.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "finishTime": {
+            "title": "finish_time",
+            "description": "When it finished.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "failureCode": {
+            "type": "string",
+            "title": "failure_code",
+            "description": "The refusal's code when FAILED."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.BundleItem"
+            },
+            "title": "items",
+            "description": "The items (GetBundleInstall only)."
+          }
+        },
+        "title": "BundleInstall",
+        "additionalProperties": false,
+        "description": "BundleInstall is one install."
+      },
+      "pantherclaw.v1.BundleItem": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "\"tool_package\", \"openapi_spec\", \"detection_rule\", \"playbook\",\n \"facts_declaration\" or \"channel_template\"."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "ext.\u003cpublisher\u003e.\u003cname\u003e."
+          },
+          "sha256": {
+            "type": "string",
+            "title": "sha256",
+            "description": "The hex SHA-256 of the item file."
+          },
+          "targetType": {
+            "type": "string",
+            "title": "target_type",
+            "description": "What the item became: \"package_draft\", \"custom_rule\", \"automation\" or\n \"template\"."
+          },
+          "targetId": {
+            "type": "string",
+            "title": "target_id",
+            "description": "Its id (a custom rule or automation id, or name@version of a package\n draft)."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"DRAFTED\", \"TEMPLATE\" or \"REVOKED\"."
+          }
+        },
+        "title": "BundleItem",
+        "additionalProperties": false,
+        "description": "BundleItem is one item of an install."
+      },
+      "pantherclaw.v1.GetBundleInstallRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Install id."
+          }
+        },
+        "title": "GetBundleInstallRequest",
+        "additionalProperties": false,
+        "description": "GetBundleInstallRequest names an install.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetBundleInstallResponse": {
+        "type": "object",
+        "properties": {
+          "install": {
+            "title": "install",
+            "description": "The install and its items.",
+            "$ref": "#/components/schemas/pantherclaw.v1.BundleInstall"
+          }
+        },
+        "title": "GetBundleInstallResponse",
+        "additionalProperties": false,
+        "description": "GetBundleInstallResponse returns it."
+      },
+      "pantherclaw.v1.GetPublisherPinRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Pin id."
+          }
+        },
+        "title": "GetPublisherPinRequest",
+        "additionalProperties": false,
+        "description": "GetPublisherPinRequest names a pin.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetPublisherPinResponse": {
+        "type": "object",
+        "properties": {
+          "pin": {
+            "title": "pin",
+            "description": "The pin.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PublisherPin"
+          }
+        },
+        "title": "GetPublisherPinResponse",
+        "additionalProperties": false,
+        "description": "GetPublisherPinResponse returns it."
+      },
+      "pantherclaw.v1.InstallBundleRequest": {
+        "type": "object",
+        "properties": {
+          "bundle": {
+            "type": "string",
+            "title": "bundle",
+            "maxLength": 983040,
+            "minLength": 1,
+            "format": "byte",
+            "description": "The .pcbundle file (a zip), at most 960 KiB so that it fits one\n request."
+          }
+        },
+        "title": "InstallBundleRequest",
+        "additionalProperties": false,
+        "description": "InstallBundleRequest carries a .pcbundle file.",
+        "required": [
+          "bundle"
+        ]
+      },
+      "pantherclaw.v1.InstallBundleResponse": {
+        "type": "object",
+        "properties": {
+          "install": {
+            "title": "install",
+            "description": "The install, INSTALLED, with its items.",
+            "$ref": "#/components/schemas/pantherclaw.v1.BundleInstall"
+          }
+        },
+        "title": "InstallBundleResponse",
+        "additionalProperties": false,
+        "description": "InstallBundleResponse returns the install."
+      },
+      "pantherclaw.v1.ListBundleInstallsRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default and at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 64,
+            "description": "Token from a previous response.",
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ListBundleInstallsRequest",
+        "additionalProperties": false,
+        "description": "ListBundleInstallsRequest pages installs."
+      },
+      "pantherclaw.v1.ListBundleInstallsResponse": {
+        "type": "object",
+        "properties": {
+          "installs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.BundleInstall"
+            },
+            "title": "installs",
+            "description": "Installs, by id."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Token for the next page; empty at the end."
+          }
+        },
+        "title": "ListBundleInstallsResponse",
+        "additionalProperties": false,
+        "description": "ListBundleInstallsResponse is one page."
+      },
+      "pantherclaw.v1.ListPublisherPinsRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default and at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 64,
+            "description": "Token from a previous response.",
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ListPublisherPinsRequest",
+        "additionalProperties": false,
+        "description": "ListPublisherPinsRequest pages pins."
+      },
+      "pantherclaw.v1.ListPublisherPinsResponse": {
+        "type": "object",
+        "properties": {
+          "pins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PublisherPin"
+            },
+            "title": "pins",
+            "description": "Pins, by id."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Token for the next page; empty at the end."
+          }
+        },
+        "title": "ListPublisherPinsResponse",
+        "additionalProperties": false,
+        "description": "ListPublisherPinsResponse is one page."
+      },
+      "pantherclaw.v1.PinPublisherKeyRequest": {
+        "type": "object",
+        "properties": {
+          "publisher": {
+            "type": "string",
+            "title": "publisher",
+            "pattern": "^[a-z][a-z0-9-]{2,31}$",
+            "description": "The publisher id."
+          },
+          "publicKey": {
+            "type": "string",
+            "title": "public_key",
+            "maxLength": 32,
+            "minLength": 32,
+            "format": "byte",
+            "description": "The raw Ed25519 public key (32 bytes)."
+          },
+          "allowedKinds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "maxItems": 6,
+              "uniqueItems": true,
+              "enum": [
+                "tool_package",
+                "openapi_spec",
+                "detection_rule",
+                "playbook",
+                "facts_declaration",
+                "channel_template"
+              ]
+            },
+            "title": "allowed_kinds",
+            "maxItems": 6,
+            "uniqueItems": true,
+            "description": "The item kinds the pin allows; empty allows every kind."
+          },
+          "revocationsUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "revocations_url",
+            "maxLength": 2048,
+            "description": "An https URL of the publisher's revocation statements; optional.",
+            "anyOf": [
+              {
+                "pattern": "^(https://.+)?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "expectedFingerprint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "expected_fingerprint",
+            "description": "Optional: the hex SHA-256 of public_key as the publisher gave it. The\n server computes the fingerprint and kid itself and refuses a mismatch.",
+            "anyOf": [
+              {
+                "pattern": "^([0-9a-f]{64})?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "PinPublisherKeyRequest",
+        "additionalProperties": false,
+        "description": "PinPublisherKeyRequest names a publisher key.",
+        "required": [
+          "publisher",
+          "publicKey"
+        ]
+      },
+      "pantherclaw.v1.PinPublisherKeyResponse": {
+        "type": "object",
+        "properties": {
+          "pin": {
+            "title": "pin",
+            "description": "The pin, PENDING.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PublisherPin"
+          }
+        },
+        "title": "PinPublisherKeyResponse",
+        "additionalProperties": false,
+        "description": "PinPublisherKeyResponse returns the pin."
+      },
+      "pantherclaw.v1.PublisherPin": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Pin id."
+          },
+          "publisher": {
+            "type": "string",
+            "title": "publisher",
+            "description": "The publisher id."
+          },
+          "kid": {
+            "type": "string",
+            "title": "kid",
+            "description": "The key id, publisher-\u003cpublisher\u003e-\u003cthumb22\u003e."
+          },
+          "fingerprint": {
+            "type": "string",
+            "title": "fingerprint",
+            "description": "The hex SHA-256 of the raw Ed25519 public key."
+          },
+          "allowedKinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "allowed_kinds",
+            "description": "The item kinds the pin allows; empty allows every kind."
+          },
+          "revocationsUrl": {
+            "type": "string",
+            "title": "revocations_url",
+            "description": "Where the daily job fetches the publisher's revocation statements;\n empty when none."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"PENDING\", \"ACTIVE\" or \"REVOKED\"."
+          },
+          "revokeReason": {
+            "type": "string",
+            "title": "revoke_reason",
+            "description": "\"UNPINNED\", \"COMPROMISED\" or \"PUBLISHER_REVOKED\" once revoked."
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by",
+            "description": "Who pinned it."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was pinned.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "activatedBy": {
+            "type": "string",
+            "title": "activated_by",
+            "description": "Who activated it with a security key."
+          },
+          "activateTime": {
+            "title": "activate_time",
+            "description": "When it was activated.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "revokeTime": {
+            "title": "revoke_time",
+            "description": "When it was revoked.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "confirmUrl": {
+            "type": "string",
+            "title": "confirm_url",
+            "description": "The page where a person activates it."
+          }
+        },
+        "title": "PublisherPin",
+        "additionalProperties": false,
+        "description": "PublisherPin is one pinned publisher key."
+      },
+      "pantherclaw.v1.RevokeBundleInstallRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Install id."
+          }
+        },
+        "title": "RevokeBundleInstallRequest",
+        "additionalProperties": false,
+        "description": "RevokeBundleInstallRequest names an install.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RevokeBundleInstallResponse": {
+        "type": "object",
+        "properties": {
+          "revokedInstalls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "revoked_installs",
+            "description": "The installs revoked."
+          }
+        },
+        "title": "RevokeBundleInstallResponse",
+        "additionalProperties": false,
+        "description": "RevokeBundleInstallResponse returns what was revoked."
+      },
+      "pantherclaw.v1.RevokePublisherPinRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Pin id."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "enum": [
+              "UNPINNED",
+              "COMPROMISED"
+            ],
+            "description": "\"UNPINNED\" (no longer trusted for new installs) or \"COMPROMISED\"\n (someone else may hold the key: every install it signed is revoked)."
+          }
+        },
+        "title": "RevokePublisherPinRequest",
+        "additionalProperties": false,
+        "description": "RevokePublisherPinRequest names a pin and why.",
+        "required": [
+          "id",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.RevokePublisherPinResponse": {
+        "type": "object",
+        "properties": {
+          "pin": {
+            "title": "pin",
+            "description": "The pin, REVOKED.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PublisherPin"
+          },
+          "revokedInstalls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "revoked_installs",
+            "description": "The installs revoked with it."
+          }
+        },
+        "title": "RevokePublisherPinResponse",
+        "additionalProperties": false,
+        "description": "RevokePublisherPinResponse returns the pin and what was revoked."
+      },
+      "pantherclaw.v1.SubmitRevocationRequest": {
+        "type": "object",
+        "properties": {
+          "statement": {
+            "type": "string",
+            "title": "statement",
+            "maxLength": 65536,
+            "minLength": 16,
+            "description": "The compact JWS, typ pc-bundle-revocation+jwt."
+          }
+        },
+        "title": "SubmitRevocationRequest",
+        "additionalProperties": false,
+        "description": "SubmitRevocationRequest carries a statement.",
+        "required": [
+          "statement"
+        ]
+      },
+      "pantherclaw.v1.SubmitRevocationResponse": {
+        "type": "object",
+        "properties": {
+          "revokedInstalls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "revoked_installs",
+            "description": "The installs revoked."
+          },
+          "revokedPins": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "revoked_pins",
+            "description": "The pins revoked (a KEY statement)."
+          },
+          "alreadyApplied": {
+            "type": "boolean",
+            "title": "already_applied",
+            "description": "True when the same statement was applied before."
+          }
+        },
+        "title": "SubmitRevocationResponse",
+        "additionalProperties": false,
+        "description": "SubmitRevocationResponse returns what was revoked."
       },
       "pantherclaw.v1.AppendCaseEntryRequest": {
         "type": "object",
@@ -110648,6 +111837,10 @@
     {
       "name": "pantherclaw.v1.BrowserService",
       "description": "BrowserService is the org's list of browser sites for its agents'\n managed browsers (G0 M33 D976, D977; HR-745, HR-749).\n\n A pc.browser action whose target host matches no site holds for a person\n (SITE_NOT_LISTED), and an empty list holds every site. Adding a site\n loosens that hold, so it files a protected change that applies only when\n a second person confirms it with a security key. Removing one applies at\n once. At most 500 sites per org."
+    },
+    {
+      "name": "pantherclaw.v1.BundleService",
+      "description": "BundleService pins publisher keys and installs, lists and revokes\n publisher bundles (G0 M37 D1081–D1083; FQ37-1..3; HR-795..801; every\n edition, each item kind keeps its own edition gate). A bundle is data\n only: tool packages, OpenAPI specs, detection rules, playbooks, fact\n declarations and channel templates, never code. A publisher key is\n trusted only once a person activates its pin on its page (confirm_url)\n with a security key. Installing verifies the bundle against the org's\n ACTIVE pins and creates drafts only: nothing is activated, published or\n enabled. A revoked publisher key or bundle stops being used at once."
     },
     {
       "name": "pantherclaw.v1.CaseService",

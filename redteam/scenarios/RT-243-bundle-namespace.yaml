@@ -1,0 +1,19 @@
+apiVersion: pantherclaw.range/v1
+id: RT-243
+title: A bundle that names another publisher's namespace is refused
+category: boundary
+suite: platform
+tier: business
+attacker: A10
+threats: [T-363]
+rules: [HR-796]
+techniques_none: "Tests PantherClaw's bundle names: an item outside ext.<publisher> is refused."
+harness_only: true
+steps:
+  - id: other-namespace
+    do: bundle.probe
+    with: {attack: namespace}
+    expect:
+      outcome: REFUSED
+      reason: BUNDLE_NAMESPACE
+      decisive_control: HR-796
