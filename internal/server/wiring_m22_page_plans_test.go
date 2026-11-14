@@ -70,6 +70,7 @@ func allPages(t *testing.T, h *webhttp.Handler, mux *http.ServeMux) {
 	h.MountBreakGlass(mux, plainSessions{})
 	h.MountEnforcementPoints(mux, struct{ webhttp.EnforcementPoints }{})
 	h.MountExternalChecks(mux, struct{ webhttp.ExternalChecks }{})
+	h.MountOTLPDestinations(mux, struct{ webhttp.OTLPDestinations }{})
 	h.MountPostgresManifests(mux, struct{ webhttp.PostgresManifests }{})
 	h.MountSupportAccess(mux, struct{ webhttp.SupportAccess }{})
 }

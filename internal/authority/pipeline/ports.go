@@ -65,6 +65,18 @@ type Request struct {
 	// (G0 M27 D533): csdomain.ScanScanned, ScanOff, ScanFaceNotScanned, or
 	// empty from a gateway before M27.
 	ContentScan string
+	// Trace is the agent's W3C trace context the gateway read (G0 M36
+	// D1060, HR-785): stored on a new transaction for correlation only. No
+	// check reads it, and it is never part of a digest, receipt, recording
+	// or binding. Nil when the request carried none.
+	Trace *TraceContext
+}
+
+// TraceContext is an agent's W3C trace context (traceparent version 00).
+type TraceContext struct {
+	TraceID      [16]byte
+	ParentSpanID [8]byte
+	Flags        uint8
 }
 
 // PayloadFinding is one credential-shaped value in an action's payload: its

@@ -117,6 +117,7 @@ func TestPackCoversD11(t *testing.T) {
 		"pc.identity.workload_proof_refused",
 		"pc.agent.config_changed", // G0 M30 D941, D947b
 		"pc.browser.cloaking",     // G0 M33 D986
+		"pc.approvals.fatigue",    // G0 M36 D1063
 	}
 	business := []string{
 		"pc.probing.denial_burst", "pc.sequence.read_then_disclose", "pc.budget.splitting", "pc.delegation.depth_anomaly",

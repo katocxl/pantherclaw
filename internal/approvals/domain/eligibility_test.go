@@ -90,6 +90,33 @@ func TestHR170_IndependentExcludesOwnersAndTheGrantIssuer(t *testing.T) {
 	wantCode(t, "the grant's issuer, independent", ok, code, domain.IneligibleGrantIssuer)
 }
 
+// TestHR790_ADisabledPersonIsNotEligibleToDeputize: a deputy is added only
+// when Check accepts them. A disabled person is skipped, with a zero
+// credential, which is the check the routing path uses.
+// Covers: HR-790
+func TestHR790_ADisabledPersonIsNotEligibleToDeputize(t *testing.T) {
+	p := veteran()
+	ok, code := domain.Check(approver(1, false), p, ctx(), ids.UUID{})
+	wantCode(t, "an enabled approver", ok, code, "")
+	p.Enabled = false
+	ok, code = domain.Check(approver(1, false), p, ctx(), ids.UUID{})
+	wantCode(t, "a disabled deputy", ok, code, domain.IneligibleDisabled)
+}
+
+// TestT358_ADeputyDoesNotWidenWhoMayApprove: dropping the role, or marking
+// the person compromised, keeps Check from accepting them.
+// Covers: T-358
+func TestT358_ADeputyDoesNotWidenWhoMayApprove(t *testing.T) {
+	p := veteran()
+	p.Bindings = nil
+	ok, code := domain.Check(approver(1, false), p, ctx(), ids.UUID{})
+	wantCode(t, "no role", ok, code, domain.IneligibleNoRole)
+	p = veteran()
+	p.Compromised = true
+	ok, code = domain.Check(approver(1, false), p, ctx(), ids.UUID{})
+	wantCode(t, "compromised", ok, code, domain.IneligibleCompromised)
+}
+
 // TestHR170_RoleCredentialAndStateDecideEligibility: a disabled person, a
 // person without the role on the agent's scope path, or without an active
 // credential, never counts; nor does an assertion with a credential that

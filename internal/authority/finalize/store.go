@@ -158,6 +158,9 @@ type Write struct {
 	// consumes the approval; a DENY whose Hold.Expire is set records the
 	// expiry.
 	HoldRequest ids.UUID
+	// Trace is the agent's trace context, stored on a new transaction for
+	// correlation only (G0 M36 D1060, HR-785); nil when there is none.
+	Trace *pipeline.TraceContext
 }
 
 // Receipt is a signed decision receipt and the canonical body that the

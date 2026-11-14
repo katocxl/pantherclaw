@@ -296,6 +296,14 @@ export interface ClientConfig {
   /** Milliseconds for one decision or token request (default 15 s); past it PantherClaw cannot decide. */
   timeoutMs?: number;
   fetch?: typeof fetch;
+  /**
+   * Returns the caller's W3C trace context to forward with each call, so
+   * PantherClaw's spans join the agent's trace (G0 M36 D1060). With
+   * OpenTelemetry, inject the active context into a carrier with
+   * `propagation.inject` and return its traceparent and tracestate.
+   * Undefined, or a value without a version 00 traceparent, forwards none.
+   */
+  traceContext?: () => { traceparent: string; tracestate?: string } | undefined;
 }
 
 interface Sent {
@@ -358,6 +366,15 @@ export class Client {
     this.token = token;
     this.expiry = claims.exp;
     return token;
+  }
+
+  /** The caller's traceparent and tracestate to forward, if any (G0 M36 D1060). */
+  private traceHeaders(): Record<string, string> {
+    const tc = this.cfg.traceContext?.();
+    if (!tc || tc.traceparent.length !== 55 || !tc.traceparent.startsWith("00-")) return {};
+    const out: Record<string, string> = { traceparent: tc.traceparent };
+    if (tc.tracestate && tc.tracestate.length <= 512) out.tracestate = tc.tracestate;
+    return out;
   }
 
   /** Sends with the workload token; a token_expired or invalid_token refusal renews it once. */
@@ -436,6 +453,7 @@ export class Client {
         "Content-Type": "application/json",
         "PAP-Run-Id": this.cfg.runId,
         "PC-Action-Id": actionId,
+        ...this.traceHeaders(),
       });
       return evaluate(res.status, res.body, cls, actionId, firstHash);
     } catch (e) {
@@ -462,6 +480,7 @@ export class Client {
       res = await this.do("POST", `${this.cfg.gateway}/hook/${encodeURIComponent(connection)}`, body, {
         "Content-Type": "application/json",
         "PAP-Run-Id": this.cfg.runId,
+        ...this.traceHeaders(),
       });
     } catch (e) {
       return no(`PantherClaw cannot decide: ${e instanceof Error ? e.message : String(e)}`);
@@ -505,6 +524,7 @@ export class Client {
       res = await this.do("POST", `${this.cfg.gateway}/hook/${encodeURIComponent(connection)}`, body, {
         "Content-Type": "application/json",
         "PAP-Run-Id": this.cfg.runId,
+        ...this.traceHeaders(),
       });
     } catch (e) {
       return no(`PantherClaw cannot decide: ${e instanceof Error ? e.message : String(e)}`);

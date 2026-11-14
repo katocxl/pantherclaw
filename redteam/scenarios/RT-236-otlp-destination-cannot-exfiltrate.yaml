@@ -1,0 +1,19 @@
+apiVersion: pantherclaw.range/v1
+id: RT-236
+title: An OTLP destination cannot be a private host or a Team-edition export
+category: boundary
+suite: platform
+tier: business
+attacker: A8
+threats: [T-356]
+rules: [HR-786, HR-787]
+techniques_none: "Tests PantherClaw's own OTLP destinations: a private URL is refused and Team cannot export."
+harness_only: true
+steps:
+  - id: otlp-exfil
+    do: reach.probe
+    with: {attack: otlp_exfil}
+    expect:
+      outcome: REFUSED
+      reason: DESTINATION_REFUSED
+      decisive_control: HR-786

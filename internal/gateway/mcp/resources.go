@@ -158,7 +158,7 @@ func (h *Handler) readResource(w http.ResponseWriter, r *http.Request, conn *con
 			}
 		}
 	}
-	res := h.engine.Dispatch(ctx, dispatch.Call{Connection: conn, Action: parsed, Workload: in.Creds})
+	res := h.engine.Dispatch(ctx, dispatch.Call{Connection: conn, Action: parsed, Workload: in.Creds, Trace: in.Trace})
 	if res.Class == dispatch.AuthenticationFailed {
 		h.refusePAP(w, r, req.ID, res.PAPError, res.Nonce)
 		return res, false

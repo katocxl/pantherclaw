@@ -124,7 +124,10 @@ func (r *Router) step(ctx context.Context, tx db.TenantTx, org ids.OrgID, id ids
 	}
 	stepNo := int16(i) //nolint:gosec // < MaxSteps
 	health := wdomain.HealthOK
-	reached := wdomain.Reach(s, ds)
+	reached, err := fatigueLast(ctx, q, org, wdomain.Reach(s, ds), i == len(chain)-1)
+	if err != nil {
+		return err
+	}
 	if len(ds) == 0 {
 		health = wdomain.HealthNoDecider
 		if err := r.unroutable(ctx, tx, q, org, e, base, fam, stepNo); err != nil {
@@ -138,6 +141,11 @@ func (r *Router) step(ctx context.Context, tx db.TenantTx, org ids.OrgID, id ids
 			fresh = append(fresh, c.User)
 		}
 	}
+	deputies, err := deputiesOf(ctx, tx, q, org, e, fresh, told)
+	if err != nil {
+		return err
+	}
+	fresh = append(fresh, deputies...)
 	if len(fresh) > 0 || (s.NotifyChannels && len(ds) > 0) {
 		m := base
 		m.Personal, m.PersonalOnly, m.Deciders = fresh, !s.NotifyChannels, true

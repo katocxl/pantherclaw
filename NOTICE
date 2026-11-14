@@ -30,6 +30,7 @@ their own agents and target systems:
   integrations/mcp/        MCP TypeScript SDK integration
   integrations/openai-agents/ OpenAI Agents SDK integration (Python)
   integrations/vercel-ai/  Vercel AI SDK integration (TypeScript)
+  integrations/vscode-extension/ VS Code extension (read only, through pclaw)
   integrations/github-action/ GitHub Action for offline policy checks
   integrations/gitlab/     GitLab CI component for offline policy checks
   integrations/siem/       SIEM content packs (data, no code)

@@ -399,6 +399,7 @@ func (c *Client) authorize(ctx context.Context, connection string, call ToolCall
 		return cannot("the tool call is larger than the /sdk face takes", nil)
 	}
 	h := http.Header{"Content-Type": {"application/json"}, "PAP-Run-Id": {c.cfg.RunID}, "PC-Action-Id": {actionID}}
+	c.traceHeaders(ctx, h)
 	r, err := c.do(ctx, http.MethodPost, c.cfg.Gateway+"/sdk/"+connection, body, h, 0)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {

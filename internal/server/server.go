@@ -312,7 +312,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		return err
 	}
 	reg := keys.NewRegistry()
-	if err := keystore.LoadSigningKeys(ctx, pool, kp, reg, cfg.evidenceKeyPurposes()...); err != nil {
+	if err := keystore.LoadSigningKeys(ctx, pool, kp, reg, append(cfg.evidenceKeyPurposes(), keys.PurposeWebPush)...); err != nil { // G0 M36 D1066
 		return err
 	}
 
@@ -375,6 +375,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	wireM36Approvals(cfg, reg, m5.notifications) // G0 M36 D1066
 	tickets := newTicketSync(pool, kp, bill)
 	verification, err := newVerification(pool, reg, m5.notifications, tickets)
 	if err != nil {
@@ -691,6 +692,10 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if evidenceJobs, err = registerM35FederationJobs(evidenceJobs, jreg, pool, kp, cfg.Auth.PublicURL, log); err != nil {
 			return err
 		}
+		if evidenceJobs, err = registerM36OTelJobs(evidenceJobs, jreg, pool, kp, bill, cfg.Auth.PublicURL,
+			consoleBaseURL(cfg.Auth.PublicURL, ext), log); err != nil { // G0 M36 D1061
+			return err
+		}
 		if evidenceJobs, err = registerM20WebhookJobs(evidenceJobs, jreg, pool, kp, log); err != nil {
 			return err
 		}
@@ -718,6 +723,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		if evidenceJobs, err = registerM34DiscoveryJobs(evidenceJobs, jreg, pool, bill, log); err != nil { // G0 M34 D997
+			return err
+		}
+		if evidenceJobs, err = registerM36ApprovalJobs(evidenceJobs, jreg, m5p2.approvals, m5.notifications, log); err != nil { // G0 M36 D1063, D1065
 			return err
 		}
 		rewrapJobs, closeKeystore, err := registerKeyRewrap(ctx, jreg, cfg, pool, kp, log)
@@ -1009,6 +1017,10 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	registerM34Runtimes(rs, d, workload, runs)
 	federation := registerM35Federation(rs, d, grants)
+	mountM36OTel, err := registerM36OTel(rs, d) // G0 M36 D1061
+	if err != nil {
+		return nil, err
+	}
 	if err := registerAutomationTemplates(rs, d, autos); err != nil {
 		return nil, err
 	}
@@ -1059,6 +1071,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	mountM16External(mux, d)
 	mountWebhookJWKS(mux, webhookJWKSOf(d), d.clientIP, log)
 	mountM35Federation(mux, federation, d)
+	if mountM36OTel != nil {
+		mountM36OTel(mux)
+	}
 	mux.HandleFunc("GET /livez", livez(pool))
 	mux.Handle("GET /readyz", readiness{pool: pool, workers: d.workers, held: d.hold, log: log})
 	mux.HandleFunc("GET /.well-known/pantherclaw/jwks.json", func(w http.ResponseWriter, _ *http.Request) {

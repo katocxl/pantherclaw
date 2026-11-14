@@ -295,6 +295,11 @@ func (e Entitlements) PostureTrends() bool { return e.businessPlus() }
 // Business and above.
 func (e Entitlements) SIEMExport() bool { return e.businessPlus() }
 
+// OTLPExport reports whether the edition sends agent spans to the org's
+// own collectors (G0 M36 F1061): Business and above, the same line as
+// SIEM export.
+func (e Entitlements) OTLPExport() bool { return e.businessPlus() }
+
 // SOAR reports whether the edition accepts SOAR response requests (F541):
 // Business and above.
 func (e Entitlements) SOAR() bool { return e.businessPlus() }

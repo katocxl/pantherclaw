@@ -1,0 +1,19 @@
+apiVersion: pantherclaw.range/v1
+id: RT-238
+title: A deputy who is not eligible is skipped and cannot approve
+category: boundary
+suite: platform
+tier: business
+attacker: A8
+threats: [T-358]
+rules: [HR-790]
+techniques_none: "Tests PantherClaw's own deputies: an ineligible or self deputy is refused."
+harness_only: true
+steps:
+  - id: deputy-widen
+    do: reach.probe
+    with: {attack: deputy_widen}
+    expect:
+      outcome: REFUSED
+      reason: DEPUTY_NOT_ELIGIBLE
+      decisive_control: HR-790
