@@ -1,0 +1,19 @@
+apiVersion: pantherclaw.range/v1
+id: RT-240
+title: A malicious publisher bundle that carries a script is refused
+category: boundary
+suite: platform
+tier: business
+attacker: A10
+threats: [T-360]
+rules: [HR-797, HR-803]
+techniques_none: "Tests PantherClaw's bundle decoder: a script in a publisher bundle is refused."
+harness_only: true
+steps:
+  - id: script-item
+    do: bundle.probe
+    with: {attack: executable}
+    expect:
+      outcome: REFUSED
+      reason: BUNDLE_EXECUTABLE
+      decisive_control: HR-797

@@ -1,0 +1,18 @@
+{{define "head"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>{{.}} · PantherClaw marketplace</title>
+{{end}}
+{{define "notice"}}<aside class="notice" role="note">
+<p><strong>A listing is not an endorsement.</strong> PantherClaw lists what publishers submit and vouches for nobody. Installing a publisher's bundle requires your org to pin that publisher's key first: an org admin pins it, then confirms it with a security key. Each install is checked against the pinned key and lands as drafts that your org reviews and signs.</p>
+<p>This site takes no payment and installs nothing. Copy a command, check the digests and fingerprints yourself, and run it with <code>pclaw</code>.</p>
+</aside>
+{{end}}
+{{define "foot"}}<footer><p>Static pages built by <code>task marketplace:build</code>. Digests are SHA-256 in lowercase hex.</p></footer>
+</body>
+</html>
+{{end}}

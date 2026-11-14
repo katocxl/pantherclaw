@@ -1,0 +1,30 @@
+id: ext.example.comment_refusals
+version: "1"
+title: Burst of refused ticket comments in a run
+description: >-
+  One run had three or more ticket comments refused within ten minutes. An
+  agent retrying a comment it may not post looks like this.
+severity: MEDIUM
+attention: ALERT
+basis: INFERRED
+owasp: [ASI02]
+edition: business
+on: [receipt.decision]
+match: event.decision in ["DENY", "CANNOT_AUTHORIZE"] && event.operation == "ext.example.tickets.add_ticket_comment"
+window:
+  duration: 10m
+  group_by: [subjects.run]
+  count: 3
+group: run
+tests:
+  - name: three refusals
+    fires: true
+    events:
+      - {kind: receipt.decision, decision: DENY, operation: ext.example.tickets.add_ticket_comment, subjects: {run: r1}}
+      - {kind: receipt.decision, decision: DENY, operation: ext.example.tickets.add_ticket_comment, subjects: {run: r1}, at: 1m}
+      - {kind: receipt.decision, decision: CANNOT_AUTHORIZE, operation: ext.example.tickets.add_ticket_comment, subjects: {run: r1}, at: 2m}
+  - name: two refusals
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: DENY, operation: ext.example.tickets.add_ticket_comment, subjects: {run: r1}}
+      - {kind: receipt.decision, decision: DENY, operation: ext.example.tickets.add_ticket_comment, subjects: {run: r1}, at: 1m}

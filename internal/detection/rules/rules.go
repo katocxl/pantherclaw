@@ -173,17 +173,31 @@ var (
 	subjectFld = regexp.MustCompile(`^subjects\.([a-z_]+)$`)
 	testNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9 _.-]{0,79}$`)
 	attrKeyRe  = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+	// extensionID is a publisher bundle's rule id, ext.<publisher>.<name>
+	// (G0 M37 D1080). Only a bundle install stores one.
+	extensionID = regexp.MustCompile(`^ext\.([a-z][a-z0-9-]{2,31})\.[a-z][a-z0-9_]{0,62}(\.[a-z0-9_]{1,63}){0,2}$`)
 )
 
 // Builtin reports whether the rule id is a built-in one (pc.*).
 func (r *Rule) Builtin() bool { return strings.HasPrefix(r.ID, "pc.") }
 
+// ExtensionPublisher returns the publisher of a bundle rule id
+// (ext.<publisher>.<name>, G0 M37 D1080) and whether id is one.
+func ExtensionPublisher(id string) (string, bool) {
+	m := extensionID.FindStringSubmatch(id)
+	if m == nil {
+		return "", false
+	}
+	return m[1], true
+}
+
 // Validate checks the rule against D9.
 func (r *Rule) Validate() error {
 	id := r.ID
 	switch {
-	case len(id) > reflexdomain.MaxRuleIDSize || (!builtinID.MatchString(id) && !customID.MatchString(id)):
-		return invalid("", "id %q must be pc.<area>.<name> or org.<slug>", id)
+	case len(id) > reflexdomain.MaxRuleIDSize ||
+		(!builtinID.MatchString(id) && !customID.MatchString(id) && !extensionID.MatchString(id)):
+		return invalid("", "id %q must be pc.<area>.<name>, org.<slug> or ext.<publisher>.<name>", id)
 	case !versionRe.MatchString(r.Version):
 		return invalid(id, "version must be a positive integer")
 	case r.Title == "" || len(r.Title) > reflexdomain.MaxTitle:

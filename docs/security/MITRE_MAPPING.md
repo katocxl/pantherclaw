@@ -11,7 +11,7 @@ Every technique of both matrices has exactly one place:
 - **Outside PantherClaw:** the technique needs something PantherClaw does not see; the kind of tool that covers it is named.
 - **No PantherClaw control yet:** the technique is within an agent platform's reach and PantherClaw ships no control for it; why is given.
 
-Mapping digest: `cd68a3bbdc410344a48fcc47c3817adea443b3300728a8716d61ccf76d5e9270`.
+Mapping digest: `26947f5bd7da76f33afbeeba6b3e950c337767bedd7bced21a0128fab87d9353`.
 
 | Framework | Catalogue version | Catalogue digest |
 |---|---|---|
@@ -78,7 +78,7 @@ Mapping digest: `cd68a3bbdc410344a48fcc47c3817adea443b3300728a8716d61ccf76d5e927
 | [AML.T0132](https://atlas.mitre.org/techniques/AML.T0132) | Misconfigured or Publicly Exposed AI Services | Outside PantherClaw: covered by cloud security | It needs cloud infrastructure. |
 | [AML.T0052](https://atlas.mitre.org/techniques/AML.T0052) | Phishing | Outside PantherClaw: covered by email security | It needs a mailbox. |
 | [AML.T0093](https://atlas.mitre.org/techniques/AML.T0093) | Prompt Infiltration via Public-Facing Application | Mapped | prevent `prevent.content_hold`; scenarios `RT-154` |
-| [AML.T0010](https://atlas.mitre.org/techniques/AML.T0010) | Supply Chain Compromise | Mapped (partly) | AML.T0010.005: prevent `prevent.mcp_catalog`, `prevent.tool_package_review`; rules `pc.tools.drift`; Hub playbooks `pc.playbook.poisoned-mcp-server`, `pc.playbook.poisoned-mcp-server-contain`<br>AML.T0010.000 not covered<br>AML.T0010.001 not covered<br>AML.T0010.002 not covered<br>AML.T0010.003 not covered<br>AML.T0010.004 not covered |
+| [AML.T0010](https://atlas.mitre.org/techniques/AML.T0010) | Supply Chain Compromise | Mapped (partly) | rules `pc.bundles.revoked`<br>AML.T0010.005: prevent `prevent.mcp_catalog`, `prevent.tool_package_review`; rules `pc.tools.drift`; Hub playbooks `pc.playbook.poisoned-mcp-server`, `pc.playbook.poisoned-mcp-server-contain`<br>AML.T0010.000 not covered<br>AML.T0010.001 not covered<br>AML.T0010.002 not covered<br>AML.T0010.003 not covered<br>AML.T0010.004 not covered |
 | [AML.T0012](https://atlas.mitre.org/techniques/AML.T0012) | Valid Accounts | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
 
 ### AI Model Access (AML.TA0000)
@@ -286,7 +286,7 @@ Mapping digest: `cd68a3bbdc410344a48fcc47c3817adea443b3300728a8716d61ccf76d5e927
 | [T1200](https://attack.mitre.org/techniques/T1200) | Hardware Additions | Outside PantherClaw: covered by physical security | It needs physical access. |
 | [T1566](https://attack.mitre.org/techniques/T1566) | Phishing | Outside PantherClaw: covered by email security | It needs a mailbox. |
 | [T1091](https://attack.mitre.org/techniques/T1091) | Replication Through Removable Media | Outside PantherClaw: covered by physical security | It needs physical access. |
-| [T1195](https://attack.mitre.org/techniques/T1195) | Supply Chain Compromise | Mapped (partly) | T1195.001: prevent `prevent.tool_package_review`<br>T1195.002 not covered<br>T1195.003 not covered |
+| [T1195](https://attack.mitre.org/techniques/T1195) | Supply Chain Compromise | Mapped (partly) | T1195.001: prevent `prevent.tool_package_review`<br>T1195.002: rules `pc.bundles.revoked`<br>T1195.003 not covered |
 | [T1199](https://attack.mitre.org/techniques/T1199) | Trusted Relationship | Mapped | scenarios `RT-217` |
 | [T1078](https://attack.mitre.org/techniques/T1078) | Valid Accounts | Mapped (partly) | T1078.001: scenarios `RT-216`<br>T1078.002 not covered<br>T1078.003 not covered<br>T1078.004 not covered |
 | [T1669](https://attack.mitre.org/techniques/T1669) | Wi-Fi Networks | Outside PantherClaw: covered by network security | It needs a network. |

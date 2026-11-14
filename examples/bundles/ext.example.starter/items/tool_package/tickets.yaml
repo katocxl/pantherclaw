@@ -1,0 +1,91 @@
+# Example tool package for the made-up Example Tickets API (bundle
+# ext.example.starter). Drafted with pclaw package draft openapi from
+# items/openapi_spec/tickets.yaml, then reviewed: review_required removed and
+# the comment body made a content param. An org that installs the bundle gets
+# it as a DRAFT package to review and sign with its own org package key.
+format: 1
+name: ext.example.tickets
+version: 1.0.0
+publisher: example
+summary: Read tickets and add comments on the made-up Example Tickets API
+definitions:
+  - operation: ext.example.tickets.get_ticket
+    summary: Read one ticket
+    access: read
+    target:
+      type: ext.example.tickets.tickets
+      id_pattern: ^T-[0-9]{1,10}$
+      account: none
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: declared
+      reviewed_by:
+        - example
+      valid_until: "2027-11-05"
+    mappings:
+      - channel: http
+        method: GET
+        path: /tickets/{ticket_id}
+        route: ext-example-tickets-get-ticket
+        extract:
+          target_id: path.ticket_id
+          params: {}
+    dispatch:
+      http:
+        method: GET
+        path: /tickets/{target.id}
+  - operation: ext.example.tickets.add_ticket_comment
+    summary: Add a comment to a ticket
+    access: write
+    target:
+      type: ext.example.tickets.tickets
+      id_pattern: ^T-[0-9]{1,10}$
+      account: none
+    params:
+      body:
+        type: content
+        material: true
+        required: true
+        max_length: 2000
+        # The comment leaves PantherClaw for everyone who can read the
+        # ticket: a disclosure param.
+        disclosure: true
+        max_bytes: 2000
+    effects:
+      - kind: api.write
+        description: Calls POST /tickets/{ticket_id}/comments on the API
+    reversibility: compensatable
+    dedupe_key: [target.id, params.body]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Add a comment to a ticket on {target.id}
+      fields: [target.id]
+    assurance:
+      basis: declared
+      reviewed_by:
+        - example
+      valid_until: "2027-11-05"
+    mappings:
+      - channel: http
+        method: POST
+        path: /tickets/{ticket_id}/comments
+        route: ext-example-tickets-add-ticket-comment
+        extract:
+          target_id: path.ticket_id
+          params:
+            body: input.body
+    dispatch:
+      http:
+        method: POST
+        path: /tickets/{target.id}/comments
+        body:
+          body: params.body

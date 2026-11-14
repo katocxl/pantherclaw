@@ -1,0 +1,19 @@
+apiVersion: pantherclaw.range/v1
+id: RT-244
+title: A marketplace listing that is not https is refused
+category: boundary
+suite: platform
+tier: business
+attacker: A9
+threats: [T-364]
+rules: [HR-802]
+techniques_none: "Tests the marketplace build: a listing whose homepage is not https is refused."
+harness_only: true
+steps:
+  - id: http-listing
+    do: bundle.probe
+    with: {attack: spoofed_listing}
+    expect:
+      outcome: REFUSED
+      reason: LISTING_REFUSED
+      decisive_control: HR-802
