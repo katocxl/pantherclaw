@@ -2,7 +2,7 @@ module github.com/katocxl/pantherclaw/tools/pins/kubeconform
 
 go 1.27
 
-toolchain go1.27.3
+toolchain go1.27.4
 
 tool github.com/yannh/kubeconform/cmd/kubeconform
 

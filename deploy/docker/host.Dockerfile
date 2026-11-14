@@ -13,7 +13,7 @@
 #     -f deploy/docker/host.Dockerfile --output type=local,dest=bin/host .
 #
 # A release build of it is a CI change for the founder (G0 M19, out of scope).
-FROM --platform=$BUILDPLATFORM golang:1.27.3-bookworm@sha256:21ade014faf952365b9ecbd8dbdb87176fbacb82fac9fb132d9f2a7b8cc3f132 AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea AS build
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION=dev

@@ -2,7 +2,7 @@ module github.com/katocxl/pantherclaw/tools/pins/connect-openapi
 
 go 1.27
 
-toolchain go1.27.3
+toolchain go1.27.4
 
 tool github.com/sudorandom/protoc-gen-connect-openapi
 

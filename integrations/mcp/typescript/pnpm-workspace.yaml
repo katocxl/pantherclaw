@@ -21,5 +21,10 @@ minimumReleaseAgeExclude:
 overrides:
   body-parser: 2.4.0
   fast-uri: 3.1.9
+  # Exception EX-012 (docs/security/GATES_AND_REVIEW.md §4, founder decision
+  # 2026-11-13): hono 4.13.16 and @hono/node-server 2.1.6 fix the advisories
+  # osv-scanner reported. Both releases are already outside the 7-day age.
+  hono: 4.13.16
+  "@hono/node-server": 2.1.6
   ip-address: 10.7.4
   qs: 6.16.1
